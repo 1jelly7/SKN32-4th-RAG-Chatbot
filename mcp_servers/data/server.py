@@ -1,1 +1,9 @@
-# TODO: create MCP server and register query_business_data tool and schema resource.
+from typing import Any
+
+
+def create_server() -> Any:
+    ...
+
+
+def main() -> None:
+    ...

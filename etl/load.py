@@ -1,4 +1,15 @@
 import pandas as pd
-def upsert(frame: pd.DataFrame, table: str) -> int:
-    # TODO: use ETL-only MySQL credentials, transaction and ON DUPLICATE KEY UPDATE.
-    return len(frame)
+
+from etl.types import LoadResult
+
+
+class ETLMySQLClient:
+    def __init__(self, host: str, user: str, password: str, database: str) -> None:
+        ...
+
+    def upsert(self, frame: pd.DataFrame, table: str) -> LoadResult:
+        ...
+
+
+def upsert(frame: pd.DataFrame, table: str) -> LoadResult:
+    ...

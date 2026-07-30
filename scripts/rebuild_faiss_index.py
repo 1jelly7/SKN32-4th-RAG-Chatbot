@@ -1,1 +1,6 @@
-# TODO: rebuild all FAISS artifacts from data/raw/documents.
+def main() -> None:
+    ...
+
+
+if __name__ == "__main__":
+    main()

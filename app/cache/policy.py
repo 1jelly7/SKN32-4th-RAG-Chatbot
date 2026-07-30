@@ -1,1 +1,9 @@
-TTL_SECONDS = {"DOCUMENT": 3600, "DATABASE": 300, "BOTH": 300, "GENERAL": 86400}
+from app.agent.state import GraphState, Route
+
+
+def get_cache_ttl(route: Route) -> int:
+    ...
+
+
+def should_cache(state: GraphState) -> bool:
+    ...

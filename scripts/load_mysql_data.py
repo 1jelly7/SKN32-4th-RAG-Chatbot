@@ -1,2 +1,6 @@
-from etl.pipeline import run_csv_pipeline
-# TODO: parse CLI args and run ETL.
+def main() -> None:
+    ...
+
+
+if __name__ == "__main__":
+    main()

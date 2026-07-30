@@ -1,6 +1,40 @@
-async def document_search(query: str, user_context: dict) -> list[dict]:
-    # TODO: invoke Document MCP tool through an MCP session.
-    return []
-async def data_query(query: str, user_context: dict) -> list[dict]:
-    # TODO: invoke Data MCP tool through an MCP session.
-    return []
+from __future__ import annotations
+
+from typing import Any
+
+from app.core.security import UserContext
+
+
+class MCPClient:
+    def __init__(self, document_mcp_url: str, data_mcp_url: str) -> None:
+        ...
+
+    async def document_search(
+        self,
+        query: str,
+        user_context: UserContext,
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        ...
+
+    async def data_query(
+        self,
+        question: str,
+        user_context: UserContext,
+    ) -> list[dict[str, Any]]:
+        ...
+
+
+async def document_search(
+    query: str,
+    user_context: UserContext,
+    top_k: int = 5,
+) -> list[dict[str, Any]]:
+    ...
+
+
+async def data_query(
+    question: str,
+    user_context: UserContext,
+) -> list[dict[str, Any]]:
+    ...

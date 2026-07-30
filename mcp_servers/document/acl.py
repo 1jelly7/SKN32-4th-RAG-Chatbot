@@ -1,3 +1,12 @@
-def filter_allowed(documents: list[dict], user_context: dict) -> list[dict]:
-    role = user_context.get("role", "user")
-    return [d for d in documents if role in d.get("allowed_roles", [role])]
+from __future__ import annotations
+
+from typing import Any
+
+from app.core.security import UserContext
+
+
+def filter_allowed(
+    documents: list[dict[str, Any]],
+    user_context: UserContext,
+) -> list[dict[str, Any]]:
+    ...

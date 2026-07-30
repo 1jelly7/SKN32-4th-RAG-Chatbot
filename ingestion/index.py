@@ -1,3 +1,15 @@
-def build_index(documents: list[dict], output_path: str):
-    # TODO: persist vectors and metadata to FAISS.
-    pass
+from pathlib import Path
+
+from ingestion.types import DocumentChunk, IndexBuildResult
+
+
+def build_index(
+    chunks: list[DocumentChunk],
+    vectors: list[list[float]],
+    output_path: Path,
+) -> IndexBuildResult:
+    ...
+
+
+def get_index_version(index_path: Path) -> str:
+    ...

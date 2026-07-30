@@ -1,3 +1,5 @@
-async def retrieve(query: str, top_k: int = 5) -> list[dict]:
-    # TODO: embed query and retrieve candidates from FAISS.
-    return []
+from mcp_servers.document.types import DocumentChunk
+
+
+async def retrieve(query: str, top_k: int) -> list[DocumentChunk]:
+    ...

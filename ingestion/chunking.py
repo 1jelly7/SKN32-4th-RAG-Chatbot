@@ -1,3 +1,9 @@
-def chunk_document(document: dict, size: int = 800) -> list[dict]:
-    # TODO: split text while preserving metadata.
-    return []
+from ingestion.types import DocumentChunk, RawDocument
+
+
+def chunk_document(
+    document: RawDocument,
+    chunk_size: int,
+    chunk_overlap: int,
+) -> list[DocumentChunk]:
+    ...

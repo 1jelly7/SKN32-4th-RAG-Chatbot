@@ -1,4 +1,13 @@
+from __future__ import annotations
+
+from typing import Any
+
 import pandas as pd
-def transform(frame: pd.DataFrame) -> pd.DataFrame:
-    # TODO: normalize columns/types, handle nulls and duplicates.
-    return frame.drop_duplicates().copy()
+
+
+def transform(
+    frame: pd.DataFrame,
+    column_mapping: dict[str, str] | None = None,
+    type_mapping: dict[str, Any] | None = None,
+) -> pd.DataFrame:
+    ...
