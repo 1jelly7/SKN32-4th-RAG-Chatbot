@@ -21,6 +21,3 @@ data/qdrant/*
 # 운영체제 임시 파일
 .DS_Store
 Thumbs.db
-
-# 데이터
-docs

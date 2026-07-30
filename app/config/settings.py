@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     # MySQL 기능을 활성화할지 정의합니다.
     mysql_enabled: bool = False
 
+    # RAG가 문서 목록을 어디서 가져올지 선택합니다.
+    # filesystem: docs 폴더를 직접 스캔 (기존 방식)
+    # mysql: MySQL documents 테이블에 등록된 file_path 목록을 사용 (실무 방식 모방)
+    document_source: str = "filesystem"
+
     # RAG 검색에서 반환할 기본 문서 수를 정의합니다.
     rag_top_k: int = 4
 

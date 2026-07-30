@@ -82,16 +82,33 @@ class DocumentService:
         return text
 
     # 모든 문서를 읽어 청크 목록으로 변환합니다.
-    def load_chunks(self) -> list[dict]:
-        """docs 폴더의 전체 문서를 검색용 청크로 반환합니다."""
+    def load_chunks(self, document_records: list[dict] | None = None) -> list[dict]:
+        """문서를 검색용 청크로 반환합니다.
+
+        document_records가 주어지면(=MySQL에서 조회한 경로 목록) 그 목록을 사용하고,
+        주어지지 않으면 기존 방식대로 docs 폴더를 직접 스캔합니다.
+        document_records의 각 항목은 최소한 {"filename": ..., "file_path": ...}를 가져야 하며,
+        department/category/version_date 같은 추가 메타데이터가 있으면 청크에 그대로 붙습니다.
+        """
 
         # 모든 청크를 저장할 목록을 생성합니다.
         chunks: list[dict] = []
 
-        # 지원 문서 파일명을 순회합니다.
-        for filename in self.list_files():
-            # 문서의 전체 경로를 만듭니다.
-            path = self.settings.docs_dir / filename
+        # MySQL에서 받은 문서 목록이 있으면 그것을, 없으면 폴더 스캔 결과를 사용합니다.
+        if document_records is not None:
+            records = document_records
+        else:
+            records = [{"filename": name, "file_path": str(self.settings.docs_dir / name)} for name in self.list_files()]
+
+        # 문서 레코드를 순회합니다.
+        for record in records:
+            # DB/폴더 스캔 어느 쪽이든 공통으로 파일명과 경로를 꺼냅니다.
+            filename = record["filename"]
+            path = Path(record["file_path"])
+
+            # 경로가 존재하지 않으면(예: DB에는 있는데 파일이 삭제된 경우) 건너뜁니다.
+            if not path.exists():
+                continue
 
             # 확장자에 맞는 방식으로 문서를 읽습니다.
             text = self._read_file(path)
@@ -99,13 +116,17 @@ class DocumentService:
             # 문서를 중첩 청크로 분할합니다.
             split_texts = self._split_text(text)
 
-            # 각 청크에 출처와 순번 메타데이터를 붙입니다.
+            # 각 청크에 출처와 순번, (있다면) 부가 메타데이터를 붙입니다.
             for chunk_index, chunk_text in enumerate(split_texts):
                 chunks.append(
                     {
                         "content": chunk_text,
                         "source": filename,
                         "chunk_index": chunk_index,
+                        "department": record.get("department"),
+                        "category": record.get("category"),
+                        "version_date": str(record.get("version_date")) if record.get("version_date") else None,
+                        "allowed_departments": record.get("allowed_departments"),
                     }
                 )
 

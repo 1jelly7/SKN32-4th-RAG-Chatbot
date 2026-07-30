@@ -76,6 +76,8 @@ class Container:
             vector_store=self.vector_store,
             openai_service=self.openai_service,
             prompt_service=self.prompt_service,
+            mysql_service=self.mysql_service,
+            document_source=self.settings.document_source,
         )
 
 

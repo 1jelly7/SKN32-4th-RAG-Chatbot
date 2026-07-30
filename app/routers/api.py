@@ -12,6 +12,7 @@ from app.routers.schemas import (
     KnowledgeCreateRequest,
     RagRequest,
     SearchRequest,
+    SummarizeRequest,
 )
 
 # 서비스 Container를 가져옵니다.
@@ -79,12 +80,14 @@ def rebuild_rag_index() -> dict:
 # Vector Search API를 정의합니다.
 @router.post("/rag/search")
 def search_documents(request: SearchRequest) -> dict:
-    """질문과 유사한 문서 청크를 반환합니다."""
+    """질문과 유사한 문서 청크를 반환합니다. department가 있으면 접근 권한을 적용합니다."""
 
     # 오류를 HTTP 응답으로 변환하기 위해 try 블록을 사용합니다.
     try:
-        # 유사 문서를 검색합니다.
-        results = get_container().rag_service.search(request.query, request.top_k)
+        # 유사 문서를 검색합니다. (부서 접근 제어 적용)
+        results = get_container().rag_service.search(
+            request.query, request.top_k, requester_department=request.department
+        )
 
         # 검색 결과 수와 결과 목록을 반환합니다.
         return {"count": len(results), "results": results}
@@ -96,14 +99,29 @@ def search_documents(request: SearchRequest) -> dict:
 # RAG 질의응답 API를 정의합니다.
 @router.post("/rag/ask")
 def ask_rag(request: RagRequest) -> dict:
-    """검색된 문서를 근거로 GPT 답변을 생성합니다."""
+    """검색된 문서를 근거로 GPT 답변을 생성합니다. department가 있으면 접근 권한을 적용합니다."""
 
     # 오류를 HTTP 응답으로 변환하기 위해 try 블록을 사용합니다.
     try:
-        # RAG 답변을 생성하여 반환합니다.
-        return get_container().rag_service.ask(request.question, request.top_k)
+        # RAG 답변을 생성하여 반환합니다. (부서 접근 제어 적용)
+        return get_container().rag_service.ask(
+            request.question, request.top_k, requester_department=request.department
+        )
     except Exception as exc:
         # RAG 처리 오류를 HTTP 500으로 반환합니다.
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# 문서 1건 전체 요약 API를 정의합니다.
+@router.post("/documents/summarize")
+def summarize_document(request: SummarizeRequest) -> dict:
+    """지정한 문서 전체를 요약합니다. (map-reduce 방식, 긴 문서도 처리 가능)"""
+
+    try:
+        return get_container().rag_service.summarize_document(request.filename)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -201,4 +219,28 @@ def create_mysql_item(request: KnowledgeCreateRequest) -> dict:
         return get_container().mysql_service.add_item(request.title, request.content)
     except Exception as exc:
         # 연결 또는 SQL 오류를 HTTP 500으로 반환합니다.
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# RAG가 실제로 참조하는 문서 목록(경로/부서/버전일자)을 조회하는 API를 정의합니다.
+@router.get("/documents")
+def list_documents() -> dict:
+    """MySQL documents 테이블에 등록된 문서 메타데이터를 조회합니다.
+
+    출처 카드 UI에서 부서/카테고리/버전일자를 보여줄 때 사용합니다.
+    document_source=filesystem이면 MySQL 대신 docs 폴더 스캔 결과를 반환합니다.
+    """
+
+    container = get_container()
+
+    # mysql 모드가 아니면 파일시스템 스캔 결과를 간단한 형태로 반환합니다.
+    if container.settings.document_source.lower() != "mysql":
+        files = container.document_service.list_files()
+        return {"source": "filesystem", "count": len(files), "documents": [{"filename": f} for f in files]}
+
+    # mysql 모드면 DB 오류를 HTTP 응답으로 변환합니다.
+    try:
+        documents = container.mysql_service.list_documents(active_only=True)
+        return {"source": "mysql", "count": len(documents), "documents": documents}
+    except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

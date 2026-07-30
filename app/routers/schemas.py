@@ -24,6 +24,9 @@ class SearchRequest(BaseModel):
     # 1에서 20 사이의 검색 결과 개수를 정의합니다.
     top_k: int = Field(default=4, ge=1, le=20)
 
+    # 요청자의 소속 부서(선택). 지정하면 접근 권한이 없는 문서는 결과에서 제외됩니다.
+    department: str | None = Field(default=None, description="요청자 소속 부서 (부서별 접근 제어용)")
+
 
 # RAG 질문 요청 모델을 정의합니다.
 class RagRequest(BaseModel):
@@ -34,6 +37,17 @@ class RagRequest(BaseModel):
 
     # 검색에 사용할 문서 개수를 정의합니다.
     top_k: int = Field(default=4, ge=1, le=20)
+
+    # 요청자의 소속 부서(선택). 지정하면 접근 권한이 없는 문서는 결과에서 제외됩니다.
+    department: str | None = Field(default=None, description="요청자 소속 부서 (부서별 접근 제어용)")
+
+
+# 문서 요약 요청 모델을 정의합니다.
+class SummarizeRequest(BaseModel):
+    """특정 문서 전체 요약 요청입니다."""
+
+    # 요약할 문서의 파일명을 정의합니다.
+    filename: str = Field(min_length=1)
 
 
 # 파일 읽기 요청 모델을 정의합니다.
