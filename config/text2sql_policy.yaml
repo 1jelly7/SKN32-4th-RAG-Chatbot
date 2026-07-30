@@ -1,0 +1,4 @@
+allowed_tables: []
+allowed_columns: {}
+default_limit: 100
+forbidden_keywords: [insert, update, delete, drop, alter, create]
