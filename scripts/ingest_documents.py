@@ -1,4 +1,8 @@
 def main() -> None:
+    # CLI는 API 요청 경로가 아니라 배치로만 문서 인덱싱을 실행해야 한다. 입력 디렉터리,
+    # 출력 인덱스 경로, chunk 설정을 파싱한 뒤 load → chunk/metadata/ACL → embed →
+    # build_index 순서로 호출하고, 성공한 index_version·chunk_count만 요약 출력한다.
+    # 부분 생성물은 원자적 index 교체가 끝나기 전 공개하지 않으며 원문/비밀값을 출력하지 않는다.
     ...
 
 
