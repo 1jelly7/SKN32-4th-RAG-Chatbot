@@ -1,0 +1,26 @@
+# Python 캐시
+__pycache__/
+*.py[cod]
+
+# 가상환경
+.venv/
+venv/
+
+# PyCharm 개인 설정
+.idea/
+
+# 비밀 환경변수
+.env
+
+# 생성된 벡터 데이터
+data/faiss/*
+data/qdrant/*
+!data/faiss/.gitkeep
+!data/qdrant/.gitkeep
+
+# 운영체제 임시 파일
+.DS_Store
+Thumbs.db
+
+# 데이터
+docs

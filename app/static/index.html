@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>RAG Assistant - 테스트 GUI</title>
+<style>
+  :root {
+    --ink: #14213D; --ink-soft: #5B6478; --border: #E3E7ED; --bg: #F2F4F7;
+    --accent: #285E45; --accent-soft: #E3EEE8;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", "Malgun Gothic", sans-serif; background: var(--bg); color: var(--ink); margin: 0; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: var(--ink-soft); font-size: 13px; margin-bottom: 20px; }
+  .row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .row select, .row input[type=number] { padding: 8px; border-radius: 6px; border: 1px solid var(--border); }
+  .card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  textarea { width: 100%; min-height: 70px; padding: 10px; border-radius: 8px; border: 1px solid var(--border); font-family: inherit; font-size: 14px; resize: vertical; }
+  button { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px 18px; font-size: 13.5px; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.secondary { background: #fff; color: var(--ink); border: 1px solid var(--border); }
+  .actions { display: flex; gap: 8px; margin-top: 10px; }
+  .answer { white-space: pre-wrap; line-height: 1.7; font-size: 14px; }
+  .source-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-top: 8px; }
+  .source-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .source-name { font-weight: 600; font-size: 13px; }
+  .score { font-size: 11px; background: var(--accent-soft); color: var(--accent); padding: 2px 8px; border-radius: 20px; }
+  .snippet { font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; }
+  .status { font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
+  .files { font-size: 12.5px; color: var(--ink-soft); }
+  .files span { display: inline-block; background: var(--accent-soft); color: var(--accent); padding: 3px 9px; border-radius: 20px; margin: 3px 6px 0 0; }
+  .loading { color: var(--ink-soft); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>RAG Assistant · 테스트 GUI</h1>
+  <div class="sub">사내규정 PDF 기반 질의응답 (임시 테스트 화면)</div>
+
+  <div class="card">
+    <div class="row">
+      <button id="btnRebuild">문서 인덱스 재구축</button>
+      <button id="btnFiles" class="secondary">docs 폴더 파일 목록</button>
+      <span id="healthBadge" class="status"></span>
+    </div>
+    <div id="filesBox" class="files"></div>
+  </div>
+
+  <div class="card">
+    <textarea id="question" placeholder="예: 법인카드 사용 기준이 뭐야?"></textarea>
+    <div class="row" style="margin-top:10px;">
+      <label style="font-size:13px; align-self:center;">Top K</label>
+      <input id="topK" type="number" value="4" min="1" max="10" style="width:70px;">
+      <button id="btnAsk">질문하기</button>
+      <button id="btnSearchOnly" class="secondary">검색만(빠름)</button>
+    </div>
+  </div>
+
+  <div id="result"></div>
+</div>
+
+<script>
+const API = "/api";
+
+async function callApi(path, options = {}) {
+  const res = await fetch(API + path, options);
+  if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+  return res.json();
+}
+
+document.getElementById("btnRebuild").onclick = async () => {
+  const btn = document.getElementById("btnRebuild");
+  btn.disabled = true;
+  document.getElementById("healthBadge").textContent = "인덱싱 중... (문서 수에 따라 수십 초 소요)";
+  try {
+    const r = await callApi("/rag/rebuild", { method: "POST" });
+    document.getElementById("healthBadge").textContent = `완료: ${r.indexed_chunks}개 청크 인덱싱됨`;
+  } catch (e) {
+    document.getElementById("healthBadge").textContent = "오류: " + e.message;
+  }
+  btn.disabled = false;
+};
+
+document.getElementById("btnFiles").onclick = async () => {
+  const r = await callApi("/files");
+  document.getElementById("filesBox").innerHTML =
+    r.files.map(f => `<span>${f}</span>`).join("") || "docs 폴더에 파일이 없습니다.";
+};
+
+function renderSources(matches) {
+  if (!matches || matches.length === 0) return "<div class='status'>참고한 문서가 없습니다.</div>";
+  return matches.map(m => `
+    <div class="source-card">
+      <div class="source-head">
+        <span class="source-name">📄 ${m.source}</span>
+        <span class="score">score ${m.score.toFixed(3)}</span>
+      </div>
+      <div class="snippet">${(m.content || "").slice(0, 200)}...</div>
+    </div>
+  `).join("");
+}
+
+async function runAsk() {
+  const question = document.getElementById("question").value.trim();
+  const topK = parseInt(document.getElementById("topK").value || "4", 10);
+  if (!question) return;
+
+  const box = document.getElementById("result");
+  box.innerHTML = `<div class="loading">답변 생성 중...</div>`;
+
+  try {
+    const r = await callApi("/rag/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, top_k: topK }),
+    });
+    box.innerHTML = `
+      <div class="card">
+        <div class="status">답변</div>
+        <div class="answer">${r.answer}</div>
+      </div>
+      <div class="card">
+        <div class="status" style="margin-bottom:8px;">참고 문서 출처 (${r.matches.length})</div>
+        ${renderSources(r.matches)}
+      </div>
+    `;
+  } catch (e) {
+    box.innerHTML = `<div class="card">오류: ${e.message}</div>`;
+  }
+}
+
+async function runSearchOnly() {
+  const question = document.getElementById("question").value.trim();
+  const topK = parseInt(document.getElementById("topK").value || "4", 10);
+  if (!question) return;
+
+  const box = document.getElementById("result");
+  box.innerHTML = `<div class="loading">검색 중...</div>`;
+
+  try {
+    const r = await callApi("/rag/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: question, top_k: topK }),
+    });
+    box.innerHTML = `
+      <div class="card">
+        <div class="status" style="margin-bottom:8px;">검색 결과 (${r.count}) - LLM 답변 생성 없이 검색만 수행</div>
+        ${renderSources(r.results)}
+      </div>
+    `;
+  } catch (e) {
+    box.innerHTML = `<div class="card">오류: ${e.message}</div>`;
+  }
+}
+
+document.getElementById("btnAsk").onclick = runAsk;
+document.getElementById("btnSearchOnly").onclick = runSearchOnly;
+
+// 초기 상태 표시
+(async () => {
+  try {
+    const h = await callApi("/health");
+    document.getElementById("healthBadge").textContent =
+      `임베딩: ${h.embedding_backend} · 벡터DB: ${h.vector_backend} · OpenAI 키: ${h.openai_configured ? "설정됨" : "미설정(데모 모드)"}`;
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
