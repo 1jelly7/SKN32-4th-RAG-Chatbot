@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-<<<<<<< HEAD
 import json
 from pathlib import Path
 
@@ -22,23 +21,10 @@ class FaissStore:
         self._index: faiss.Index | None = None
         self._chunks: list[dict] = []
         self._dimension: int | None = None
-=======
-from pathlib import Path
-
-from mcp_servers.document_tools.types import DocumentChunk, IndexMetadata
-
-
-class FaissStore:
-    """FAISS 인덱스와 chunk metadata를 함께 다루는 읽기 전용 저장소."""
-    def __init__(self, index_path: Path) -> None:
-        """인덱스 경로와 대응 metadata 경로를 보관하되 즉시 대용량 파일을 읽지 않는다."""
-        ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
     def load(self) -> IndexMetadata:
         """FAISS 파일과 metadata 파일의 존재·버전·개수·차원을 검증해 메모리에 로드한다.
 
-<<<<<<< HEAD
         둘 중 하나만 갱신된 불일치나 손상은 검색 결과로 숨기지 말고 안전하게 실패시킵니다.
         """
         if not self._index_path.exists():
@@ -77,16 +63,10 @@ class FaissStore:
             "created_at": payload["created_at"],
             "chunk_count": len(chunks),
         }
-=======
-        둘 중 하나만 갱신된 불일치나 손상은 검색 결과로 숨기지 말고 안전하게 실패시킨다.
-        """
-        ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
     def search(self, vector: list[float], top_k: int) -> list[DocumentChunk]:
         """로드된 인덱스에서 top_k 후보를 거리/점수와 함께 반환한다.
 
-<<<<<<< HEAD
         query vector 차원과 top_k 상한을 검증하고, 검색 결과의 index id를 metadata와
         정확히 매핑합니다. 내부 file_path는 검색 처리에만 쓰고 반환 청크에서는 뺍니다.
         """
@@ -123,9 +103,3 @@ class FaissStore:
                 }
             )
         return results
-=======
-        query vector 차원과 top_k 상한을 검증하고, 검색 결과의 index id를 metadata와 정확히
-        매핑한다. 내부 file_path는 검색 처리에만 사용하고 반환 청크에서는 제거한다.
-        """
-        ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

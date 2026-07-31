@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-<<<<<<< HEAD
 import pymysql
 import pymysql.cursors
 
 from app.core.config import get_settings
-=======
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 from mcp_servers.document_tools.types import DocumentPathRecord
 
 
@@ -15,7 +12,6 @@ class DocumentPathRepository:
 
     def __init__(self, host: str, user: str, password: str, database: str) -> None:
         """문서 DB 읽기 연결 설정을 보관하며 비밀번호를 로그에 남기지 않는다."""
-<<<<<<< HEAD
         # 연결은 매 호출마다 새로 여는 방식(단순하고 커넥션 누수 위험이 적음)입니다.
         # 이 kwargs 딕셔너리 자체를 로그로 출력하지 않도록 주의합니다.
         self._connection_kwargs = dict(
@@ -136,19 +132,8 @@ def _get_default_repository() -> DocumentPathRepository:
             database=settings.document_db_database,
         )
     return _default_repository
-=======
-        ...
-
-    async def find_paths(self, query: str) -> list[DocumentPathRecord]:
-        """질문과 연관된 문서의 식별자·제목·파일 경로·갱신 시각을 반환한다."""
-        ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 
 async def lookup_document_paths(query: str) -> list[DocumentPathRecord]:
     """설정된 DocumentPathRepository를 이용해 내부 문서 파일 경로를 조회한다."""
-<<<<<<< HEAD
     return await _get_default_repository().find_paths(query)
-=======
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

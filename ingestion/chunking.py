@@ -1,12 +1,9 @@
-<<<<<<< HEAD
 """
 RawDocument를 문맥을 보존하는 chunk로 분할합니다.
 """
 
 from __future__ import annotations
 
-=======
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 from ingestion.types import DocumentChunk, RawDocument
 
 
@@ -17,7 +14,6 @@ def chunk_document(
 ) -> list[DocumentChunk]:
     """문서 문맥을 보존하면서 크기 제한과 overlap을 만족하는 chunk 목록을 만든다.
 
-<<<<<<< HEAD
     - loaders.py가 PDF 페이지 사이에 넣어둔 '\\f'(form feed)를 기준으로 먼저 페이지를
       나누고, 페이지 안에서는 문단(빈 줄) 경계를 우선으로 chunk_size를 넘지 않게 모읍니다.
     - 각 chunk의 metadata에 원본 document_id, file_path, page(1부터 시작)를 복사합니다.
@@ -109,10 +105,3 @@ def _slide_window(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
         if start + chunk_size >= len(text):
             break
     return pieces
-=======
-    제목/섹션/문단 경계 우선 분할, 빈 chunk 제거, 안정적인 ``chunk_id`` 부여가 필요하다.
-    원본 document_id와 file_path metadata를 모든 chunk에 복사하고, chunk_size·overlap의
-    불가능한 조합은 명확히 거절한다.
-    """
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

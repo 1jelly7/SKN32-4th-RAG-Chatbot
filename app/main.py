@@ -1,22 +1,15 @@
-<<<<<<< HEAD
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-=======
-from fastapi import FastAPI
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 from app.api.chat import router as chat_router
 from app.api.system import router as system_router
 from app.logging import configure_logging
 
-<<<<<<< HEAD
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
-=======
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 def create_app() -> FastAPI:
     """설정·로깅·라우터·정적 UI를 일관되게 등록한 FastAPI 앱을 구성한다.
@@ -29,7 +22,6 @@ def create_app() -> FastAPI:
     application = FastAPI(title="RAG MCP Chatbot")
     application.include_router(chat_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
-<<<<<<< HEAD
 
     # /api 이후에 등록해야 /api/* 요청이 정적 파일 라우트와 충돌하지 않습니다.
     application.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
@@ -46,8 +38,6 @@ def create_app() -> FastAPI:
     def style_css() -> FileResponse:
         return FileResponse(WEB_DIR / "style.css")
 
-=======
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
     return application
 
 

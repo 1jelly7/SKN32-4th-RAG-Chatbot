@@ -10,7 +10,6 @@ class SchemaResource(TypedDict):
 
 
 def get_schema_resource() -> SchemaResource:
-<<<<<<< HEAD
     """Text2SQL에 판매 테이블·컬럼·업무 용어를 제공하는 MCP Resource를 만든다."""
     return {
         "tables": [
@@ -39,7 +38,3 @@ def get_schema_resource() -> SchemaResource:
             "여신한도": "credit_limits.credit_limit_amount",
         },
     }
-=======
-    """판매 도메인의 View·컬럼·용어를 반환한다."""
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

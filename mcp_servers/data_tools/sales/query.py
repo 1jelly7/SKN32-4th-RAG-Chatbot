@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-<<<<<<< HEAD
 import time
 from typing import Any
 
@@ -34,11 +33,3 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
             "error": error,
         }
     ]
-=======
-from typing import Any
-
-
-async def query_sales(question: str) -> list[dict[str, Any]]:
-    """판매 질문을 Text2SQL → read-only 조회 순서로 처리한다."""
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

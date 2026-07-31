@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """
 문서 DB가 알려준 경로(또는 디렉터리)에서 지원 형식의 문서만 읽어
 RawDocument로 변환합니다.
@@ -24,17 +23,10 @@ def _make_document_id(path: Path) -> str:
     digest = hashlib.sha256(str(path).encode("utf-8")).hexdigest()
     return f"doc-{digest[:16]}"
 
-=======
-from pathlib import Path
-
-from ingestion.types import RawDocument
-
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 def load_documents(path: Path) -> list[RawDocument]:
     """문서 DB에서 확인한 파일 또는 디렉터리 경로의 지원 문서만 수집한다.
 
-<<<<<<< HEAD
     경로를 정렬해 재현 가능한 순서를 만들고, 숨김/지원하지 않는 파일은 조용히
     건너뜁니다(개별 파일 오류는 로드 자체를 막지 않되, 어떤 파일이 실패했는지는
     호출자가 확인할 수 있도록 예외 메시지에 파일명을 포함합니다).
@@ -64,17 +56,10 @@ def load_documents(path: Path) -> list[RawDocument]:
             documents.append(load_text(candidate))
 
     return documents
-=======
-    경로를 정렬해 재현 가능한 순서를 만들고, 숨김/지원하지 않는 파일의 처리 정책과 개별
-    파일 오류 보고 방식을 명시한다. 임의 입력 경로나 문서 DB에 없는 경로를 사용하지 않는다.
-    """
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 
 def load_pdf(path: Path) -> RawDocument:
     """PDF의 페이지 순서를 보존해 텍스트와 기본 출처 metadata를 RawDocument로 만든다."""
-<<<<<<< HEAD
 
     reader = PdfReader(str(path))
 
@@ -90,14 +75,10 @@ def load_pdf(path: Path) -> RawDocument:
         "content": content,
         "metadata": {"source_type": "pdf", "page_count": len(reader.pages)},
     }
-=======
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 
 def load_text(path: Path) -> RawDocument:
     """인코딩을 안전하게 판별해 일반 텍스트를 읽고 안정된 document_id를 생성한다."""
-<<<<<<< HEAD
 
     try:
         content = path.read_text(encoding="utf-8")
@@ -112,14 +93,10 @@ def load_text(path: Path) -> RawDocument:
         "content": content,
         "metadata": {"source_type": "text"},
     }
-=======
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 
 def load_markdown(path: Path) -> RawDocument:
     """Markdown 제목/헤더 정보를 title·metadata에 반영해 문서를 읽는다."""
-<<<<<<< HEAD
 
     content = path.read_text(encoding="utf-8")
 
@@ -141,6 +118,3 @@ def load_markdown(path: Path) -> RawDocument:
         "content": content,
         "metadata": {"source_type": "markdown", "headers": headers},
     }
-=======
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

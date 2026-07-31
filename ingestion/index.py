@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """
 chunk + vector로 FAISS 인덱스를 원자적으로 만들고, 인덱스 버전을 관리합니다.
 """
@@ -18,12 +17,6 @@ from ingestion.types import DocumentChunk, IndexBuildResult
 INDEX_FILENAME = "index.faiss"
 METADATA_FILENAME = "metadata.json"
 
-=======
-from pathlib import Path
-
-from ingestion.types import DocumentChunk, IndexBuildResult
-
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 def build_index(
     chunks: list[DocumentChunk],
@@ -32,7 +25,6 @@ def build_index(
 ) -> IndexBuildResult:
     """chunk와 vector의 1:1 대응을 검증해 FAISS 인덱스와 metadata를 원자적으로 작성한다.
 
-<<<<<<< HEAD
     - chunk 수와 vector 수가 다르면 즉시 실패시킵니다.
     - 모든 vector가 같은 차원이어야 하며, 아니면 즉시 실패시킵니다.
     - 출력 폴더에 임시 파일(.tmp)로 먼저 쓰고, 두 파일(.faiss, metadata.json) 모두
@@ -90,19 +82,11 @@ def build_index(
         "index_version": index_version,
         "chunk_count": len(chunks),
     }
-=======
-    출력 폴더에 임시 파일로 저장·검증한 뒤 교체하고, chunk metadata·file_path·인덱스
-    버전·개수를 함께 기록한다. 벡터 수·차원 불일치, 기존 인덱스 손상은 버전을 올리기
-    전에 실패시킨다.
-    """
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 
 def get_index_version(index_path: Path) -> str:
     """인덱스와 짝을 이루는 metadata에서 cache key용 불변 버전 문자열을 읽는다.
 
-<<<<<<< HEAD
     파일 부재·손상은 이전 버전이나 빈 값으로 숨기지 말고, 재인덱싱이 필요함을
     알리는 오류로 명확히 처리합니다.
     """
@@ -122,9 +106,3 @@ def get_index_version(index_path: Path) -> str:
         raise ValueError(f"index_version 필드가 없습니다: {metadata_path}")
 
     return version
-=======
-    파일 부재·손상은 이전 버전이나 빈 값으로 숨기지 말고 재인덱싱이 필요함을 알리는 오류로
-    처리한다.
-    """
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

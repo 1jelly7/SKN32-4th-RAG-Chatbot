@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """ingestion/ 모듈(loaders, chunking, embedding, index, metadata)을 검증합니다."""
 
 from __future__ import annotations
@@ -239,6 +238,3 @@ def test_build_metadata_falls_back_to_filename_when_no_title(tmp_path):
 
     metadata = build_metadata(document)
     assert metadata["title"] == "이름없는문서"
-=======
-def test_placeholder(): assert True
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

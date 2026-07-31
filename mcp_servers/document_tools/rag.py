@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 from __future__ import annotations
 
 import shutil
@@ -15,11 +14,6 @@ from mcp_servers.document_tools.types import DocumentChunk
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 80
 
-=======
-from ingestion.types import RawDocument
-from mcp_servers.document_tools.types import DocumentChunk
-
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 async def retrieve(
     query: str,
@@ -29,7 +23,6 @@ async def retrieve(
     """문서 DB 경로에서 읽은 문서만 대상으로 embedding 검색과 rerank를 수행한다.
 
     query/top_k와 문서 목록을 검증하고, embedding 모델·인덱스 차원·버전을 호환성
-<<<<<<< HEAD
     검사한다. rerank는 후보의 원본 식별자와 score를 보존하고 내부 file_path는
     응답에서 제거한다.
 
@@ -67,9 +60,3 @@ async def retrieve(
         return store.search(query_vector, top_k)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
-=======
-    검사한다. rerank는 후보의 원본 식별자와 score를 보존하고 내부 file_path는 응답에서
-    제거한다.
-    """
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """
 문서 인덱싱 전용 embedding 어댑터.
 
@@ -33,18 +32,10 @@ class EmbeddingClient:
     @property
     def dimension(self) -> int:
         return self._dimension
-=======
-class EmbeddingClient:
-    """문서 인덱싱 전용 embedding API 어댑터."""
-    def __init__(self, api_key: str, model: str) -> None:
-        """API 키와 embedding 모델을 보관하고 요청 클라이언트를 초기화한다."""
-        ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """입력 순서를 보존해 각 비어 있지 않은 텍스트의 동일 차원 벡터를 반환한다.
 
-<<<<<<< HEAD
         API 실패라는 개념이 없는 로컬 구현이라 재시도/timeout은 필요 없습니다.
         빈 문자열이 포함되어 있으면 명시적으로 실패시킵니다(인덱스 작성 전에
         빈 chunk를 걸러내는 게 정상 흐름이라, 여기 들어오면 상위 단계의 버그입니다).
@@ -99,18 +90,8 @@ def _get_default_client() -> EmbeddingClient:
             # 설정을 못 읽는 환경(예: 단위 테스트)에서도 기본값으로 동작하게 합니다.
             _default_client = EmbeddingClient()
     return _default_client
-=======
-        배치 크기·재시도·timeout을 적용하고, 반환 수/차원 불일치나 API 실패는 인덱스 작성
-        전에 명시적으로 실패시킨다. 텍스트 원문이나 키는 로그에 남기지 않는다.
-        """
-        ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 
 def embed(texts: list[str]) -> list[list[float]]:
     """설정된 EmbeddingClient를 이용하는 편의 함수; import 시 API 호출은 하지 않는다."""
-<<<<<<< HEAD
     return _get_default_client().embed(texts)
-=======
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

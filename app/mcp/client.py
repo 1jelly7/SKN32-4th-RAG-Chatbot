@@ -27,19 +27,11 @@ class MCPClient:
         """
         ...
 
-<<<<<<< HEAD
     async def finance_query(
         self,
         question: str,
     ) -> list[dict[str, Any]]:
         """Data MCP의 query_finance 도구를 호출하고 표준 근거 목록으로 반환한다.
-=======
-    async def purchase_query(
-        self,
-        question: str,
-    ) -> list[dict[str, Any]]:
-        """Data MCP의 query_purchase 도구를 호출하고 표준 근거 목록으로 반환한다.
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
         SQL을 클라이언트에서 만들거나 수정하지 않으며, 서버가 반환한 행과 실행 메타데이터
         외의 내부 정보는 노출하지 않는다.
@@ -59,13 +51,8 @@ class MCPClient:
         question: str,
     ) -> list[dict[str, Any]]:
         """명시된 도메인의 Data MCP 도구로만 요청을 전달한다."""
-<<<<<<< HEAD
         if domain == "finance":
             return await self.finance_query(question)
-=======
-        if domain == "purchase":
-            return await self.purchase_query(question)
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
         if domain == "sales":
             return await self.sales_query(question)
         raise ValueError(f"지원하지 않는 데이터 도메인입니다: {domain}")
@@ -79,17 +66,10 @@ async def document_search(
     ...
 
 
-<<<<<<< HEAD
 async def finance_query(
     question: str,
 ) -> list[dict[str, Any]]:
     """기본 MCPClient를 통한 재무 데이터 조회 편의 함수다."""
-=======
-async def purchase_query(
-    question: str,
-) -> list[dict[str, Any]]:
-    """기본 MCPClient를 통한 구매 데이터 조회 편의 함수다."""
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
     ...
 
 

@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 from functools import lru_cache
 
-=======
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,7 +21,6 @@ class Settings(BaseSettings):
     document_db_user: str
     document_db_password: str
     document_db_database: str
-<<<<<<< HEAD
 
     # 임베딩 백엔드: "local"(기본값, 외부 API 불필요) 또는 "openai".
     embedding_backend: str = "local"
@@ -39,19 +35,10 @@ class Settings(BaseSettings):
 
 
 @lru_cache
-=======
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 def get_settings() -> Settings:
     """환경 변수/.env에서 Settings를 한 번 읽어 검증된 설정 객체를 반환한다.
 
     API 키·DB 비밀번호는 오류 메시지나 로그에 포함하지 않는다. 반복 생성 비용을 줄이기
     위해 캐시할 수 있으나 테스트가 환경을 교체할 수 있는 방식으로 설계한다.
     """
-<<<<<<< HEAD
     return Settings()
-=======
-    ...
->>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

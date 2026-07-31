@@ -354,3 +354,47 @@ pytest tests/unit              # 빠른 단위 테스트
 pytest tests/integration       # 통합 테스트
 pytest tests/unit/test_etl.py  # ETL 기능만
 ```
+
+## 9. 현재 구현 상태 (RAG 담당 기준, YYYY-MM-DD 업데이트)
+
+> 이 섹션은 진행 상황 공유용입니다. 아래 표의 파일/디렉터리 경로는 위 5번 구조를 그대로 따릅니다.
+
+### 완료 — 실제 DB/실제 API 호출로 동작 확인함
+
+| 경로 | 상태 |
+|---|---|
+| `app/main.py`, `app/api/chat.py`, `app/api/system.py` | ✅ `/api/chat`, `/api/health` 실제 HTTP 요청으로 검증 완료 |
+| `app/agent/` (graph, nodes, evidence_eval, prompts, llm) | ✅ GENERAL/DOCUMENT/DATABASE/BOTH 4가지 라우팅 전부 end-to-end 검증 |
+| `app/cache/` (key, repository, policy, service) | ✅ 캐시 hit/miss 실제 동작 확인 (동일 질문 재요청 시 `cached: true`) |
+| `app/web/` | ✅ `main.py`에 정적 서빙 연결, 브라우저에서 채팅 UI 동작 확인 |
+| `mcp_servers/document_tools/` (전체) | ✅ 경로조회 → 파일로드 → RAG검색 전체 흐름 검증 |
+| `mcp_servers/data_tools/finance/`, `sales/` (server.py 제외) | ✅ Text2SQL → read-only 조회까지 실제 SQL 실행 검증 |
+| `ingestion/` (전체) | ✅ 로컬 임베딩(API 키 불필요)으로 PDF 10건 인덱싱 검증 |
+| `database/document/`, `database/purchase/`, `database/sales/` | ✅ 스키마 적용 + 실데이터 적재 완료 |
+
+### 보류 — 의도적으로 미룸
+
+| 경로 | 상태 | 비고 |
+|---|---|---|
+| `app/mcp/client.py` | ⏸ 미구현 | MCP 프로토콜(별도 서버 프로세스 통신) 연결은 나중으로 보류. 지금은 `app/agent/nodes.py`가 `search_documents`/`query_finance`/`query_sales`를 같은 프로세스에서 직접 import해서 호출 중 |
+| `mcp_servers/data_tools/server.py` | ⏸ 미구현 | 위와 동일한 이유 |
+
+### 미구현 — 아직 손 못 댄 부분
+
+| 경로 | 상태 |
+|---|---|
+| `etl/finance/`, `etl/sales/`, `scripts/load_mysql_data.py` | ❌ 정식 ETL 파이프라인 없음. 지금은 `scripts/load_purchase_data.py`, `scripts/load_sales_purchasing_seed.py`(임시 스크립트)로 초기 데이터만 적재한 상태 |
+| `app/logging/` 도메인별 로그 분리 | ⚠️ `logs/app.log.txt` 하나에만 기록됨. `logs/rag.log.txt` 등 분리는 안 됨 |
+| `tests/unit/test_api.py`, `test_data_mcp.py`, `test_document_mcp.py`, `test_etl.py`, `test_logging.py` | ⚠️ 통과 여부 미확인 (skeleton 원본 상태 그대로) |
+
+### 참고할 점 — DB 이름과 README 구조가 다릅니다
+
+README 구조상 `finance` 도메인이지만, 실제로 만들어진 DB 이름은 `purchase`입니다. 즉 코드에서 **"finance" = `purchase` DB**로 연결되어 있습니다 (`app/core/config.py`의 `finance_db_database` 기본값 참고). 통합 시 이름 매핑 헷갈리지 않도록 확인 필요합니다.
+
+### 지금 당장 이어서 할 수 있는 일
+
+1. `app/mcp/client.py` + `mcp_servers/*/server.py` — 실제 MCP 프로토콜 연결
+2. `etl/finance/`, `etl/sales/` — 정식 ETL 파이프라인 (지금 임시 스크립트를 이 구조로 옮기는 작업)
+3. 나머지 테스트 파일 채우기 및 통과 확인
+4. 로그를 도메인별 파일로 분리
+
