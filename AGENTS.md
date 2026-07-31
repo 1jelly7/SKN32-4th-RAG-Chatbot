@@ -2,7 +2,7 @@
 
 ## 1. 프로젝트 개요
 
-사내 문서 RAG와 재무·판매 업무 데이터 Text2SQL을 하나의 채팅 API로 제공하는 MCP 기반 챗봇이다. FastAPI가 LangGraph, 캐시, Document/Data MCP를 조율하며 정적 HTML/CSS/JavaScript UI를 함께 제공한다.
+사내 문서 RAG와 구매·판매 업무 데이터 Text2SQL을 하나의 채팅 API로 제공하는 MCP 기반 챗봇이다. FastAPI가 LangGraph, 캐시, Document/Data MCP를 조율하며 정적 HTML/CSS/JavaScript UI를 함께 제공한다.
 런타임은 Python이며 의존성은 `pip`와 `requirements.txt`로 관리한다. 주요 기술은 FastAPI, Pydantic, LangGraph, OpenAI SDK, MCP, FAISS, MySQL, Redis, pytest이고 Node.js/TypeScript/package manager는 사용하지 않는다.
 
 ## 2. 실행 및 테스트 명령
@@ -59,7 +59,7 @@ python -m pytest tests/unit/test_etl.py
 - `.venv/`, `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `dist/`, `build/`, coverage 산출물: 로컬 환경·캐시·빌드 결과다. 소스처럼 수정하지 말고 필요하면 도구로 재생성한다.
 - `database/sales/ddl.sql`: `python -m etl.sales.ddl` 출력으로 재생성되는 DDL이다. 직접 편집하지 말고 `etl/sales/schema.py`를 변경한 뒤 생성 명령으로 갱신하고 diff를 검토한다.
 - `requirements.txt`: lockfile이 없으므로 임의 정리·버전 변경은 재현성을 직접 바꾼다. 새 직접 import나 호환성 수정이 필요한 경우에만 통합 담당과 공유하고 설치 및 전체 테스트를 다시 실행한다.
-- `mcp_servers/document_tools/`, `ingestion/`는 RAG 소유이고, `mcp_servers/data_tools/{finance,sales,purchase}/`, `etl/{finance,sales,purchase}/`, `database/{finance,sales,purchase}/`는 도메인 소유다. 담당 범위 밖에서는 수정하지 말고 소유자와 계약·생성 절차를 먼저 합의한다.
+- `mcp_servers/document_tools/`, `ingestion/`는 RAG 소유이고, `mcp_servers/data_tools/{purchase,sales}/`, `etl/{purchase,sales}/`, `database/{purchase,sales}/`는 도메인 소유다. legacy `finance/` 경로도 소유자 결정 없이 수정·삭제·이동하지 않는다. 담당 범위 밖에서는 소유자와 계약·생성 절차를 먼저 합의한다.
 - `docs/interface.md`, `docs/architecture.md`, `docs/ownership.md`, `docs/test-scenarios.md`는 Tool/API/소유권 계약이다. 구현과 충돌해 변경이 필요하면 추정으로 코드를 선행 수정하지 말고 관련 소유자 검토 후 문서와 계약 테스트를 함께 갱신한다.
 - 생성된 API client나 schema client, 배포 설정, CI workflow는 현재 저장소에 없다. 존재하지 않는 산출물이나 설정을 추측해 만들지 않는다.
 

@@ -1,352 +1,312 @@
 # Backend / Integration 구현 계획
 
-## 범위와 전제
+## 1. 문서 목적과 기준
 
-이 문서는 backend 및 integration 담당자가 실제 팀원 MCP, MySQL, FAISS, Redis, LLM 구현과 결합하기 직전까지 완료할 mock/fake 기반 구현 계획이다.
+이 문서는 FastAPI Host, LangGraph, Answer Cache, MCP client 경계와 mock 기반 통합 테스트의 현재 상태 및 다음 작업 순서를 기록한다. 실제 동작 코드와 실행 설정을 문서 설명보다 우선하며, 상태는 `2026-08-01`의 `develop` 기준이다.
 
-- 실제 Document MCP, Data MCP, MySQL, FAISS, Redis, OpenAI 연결은 구현하지 않는다.
-- RAG, 구매, 판매, ETL, DDL 소유 경로는 변경하지 않는다.
-- 외부 경계는 Protocol, dependency injection, fake/mock, 계약 테스트로 대체한다.
-- `docs/interface.md`의 Tool envelope와 아래에 기록한 합의된 source 선택, evidence, 오류, freshness 규칙을 기준으로 한다.
-- 인터페이스 문서 변경이 필요하면 코드를 변경하지 않고 `BLOCKED`로 보고한다.
+판단 우선순위는 다음과 같다.
 
-## 공통 수정 금지 경로
+1. 실제 구현과 테스트 및 `pytest.ini`, `requirements.txt`, `.env.example`
+2. `docs/interface.md`, `docs/architecture.md`, `docs/ownership.md`, `docs/test-scenarios.md`
+3. 이 계획 문서
 
-다음 경로는 모든 태스크에서 수정 금지다.
+계약 문서와 구현이 충돌하면 임의로 계약을 바꾸지 않는다. 관련 소유자와 변경 방향을 합의하고 계약 문서와 테스트를 먼저 또는 같은 변경에서 동기화한다.
 
-- `mcp_servers/document_tools/`
-- `ingestion/`
-- `mcp_servers/data_tools/purchase/`
-- `mcp_servers/data_tools/sales/`
-- `etl/purchase/`
-- `etl/sales/`
-- `database/purchase/`
-- `database/sales/`
-- `data/raw/`
-- `data/faiss/`
-- `tests/unit/test_document_mcp.py`
-- `tests/unit/test_etl.py`
-- `tests/unit/test_ingestion.py`
-- `tests/integration/test_etl_mysql_flow.py`
-- `docs/interface.md`
-- `docs/ownership.md`
-- `docs/architecture.md`
-- `docs/test-scenarios.md`
+## 2. 모든 에이전트의 작업 규칙
 
-## 의존성 순서
+모든 에이전트는 작업을 시작하기 전에 루트 `AGENTS.md` 전체를 읽고 준수해야 한다. `AGENTS.md`와 이 문서가 충돌하면 `AGENTS.md`가 우선한다.
+
+- 시작 전 `git status --short`로 기존 사용자 변경을 확인하고, 자신의 작업과 무관한 변경을 수정·정리·되돌리지 않는다.
+- 해당 태스크의 허용 경로만 수정한다. RAG·도메인 소유 경로나 계약 문서 변경이 필요하면 소유자 협의 없이 진행하지 않는다.
+- `.env.example`만 공개 설정 계약으로 사용한다. `.env`와 실제 API key·DB 비밀번호·사내 URL을 만들거나 커밋하지 않는다.
+- unit/mock integration 테스트에서 OpenAI, Redis, MySQL, FAISS, 실제 MCP 또는 네트워크를 사용하지 않는다. 외부 I/O는 async 호출 계약을 유지하는 fake/mock으로 대체한다.
+- FastAPI/Agent에 MySQL·FAISS·원문 파일 직접 접근을 추가하지 않는다. Data MCP는 SELECT 전용이고 ETL은 채팅 요청 경로에서 호출하지 않는다.
+- `docs/interface.md`의 Tool envelope와 `BOTH`의 document/database evidence 분리를 유지한다. 한쪽 실패가 다른 쪽 결과를 지우지 않아야 한다.
+- 기존 contract/acceptance 테스트를 삭제하거나 약화하지 않는다. placeholder 테스트 통과를 실제 통합 완료로 보고하지 않는다.
+- 완료 전 변경 범위 테스트, 가능하면 `python -m pytest tests/unit`, `git diff --check`, `git status --short`를 실행하고 통과·실패·skip 및 미검증 사유를 보고한다.
+
+각 에이전트의 작업 요청에는 최소한 목적, 의존성, 수정 허용 경로, 수정 금지 경로, 완료 조건, 검증 명령을 포함한다. 작업 중 계약 변경이나 새 외부 권한이 필요해지면 추정으로 확장하지 말고 `BLOCKED` 사유와 필요한 결정을 남긴다.
+
+## 3. 범위와 소유권
+
+Backend / Integration의 기본 수정 범위:
+
+- `app/main.py`, `app/api/`, `app/schemas/`, `app/core/`
+- `app/agent/`, `app/cache/`, `app/logging/`, `app/mcp/client.py`
+- `mcp_servers/data_tools/server.py`
+- backend 관련 `tests/unit/`, `tests/integration/`
+
+소유자 협의 없이 수정하지 않는 범위:
+
+- RAG: `mcp_servers/document_tools/`, `ingestion/`
+- 도메인: `mcp_servers/data_tools/{purchase,sales}/`, `etl/{purchase,sales}/`, `database/{purchase,sales}/`
+- 생성물·비밀값: `data/raw/`, `data/faiss/`, `logs/*.txt`, `.env*` (`.env.example` 제외)
+- 계약: `docs/interface.md`, `docs/architecture.md`, `docs/ownership.md`, `docs/test-scenarios.md`
+
+세부 Guardrail과 생성 절차는 루트 `AGENTS.md`를 따른다.
+
+## 4. 현재 구현 스냅샷
+
+| 영역 | 현재 상태 | 확인된 구현 | 남은 핵심 작업 |
+|---|---|---|---|
+| FastAPI | 부분 완료 | app factory, health, 정적 UI, `POST /api/chat` | 의존성 주입, readiness, 구조화 오류 매핑 |
+| LangGraph | MVP 완료 | GENERAL/DOCUMENT/DATABASE/BOTH 순차 흐름, evidence 후 answer | MCP client 주입, 실패·충돌 경로 강화 |
+| 라우팅 | 부분 완료 | 키워드 기반 네 route, legacy finance/sales/both 선택 | purchase/sales 계약으로 마이그레이션, `DataDomain` 타입 정합성 |
+| Evidence | 부분 완료 | 빈 근거·DB 오류 기반 3단계 판정 | freshness/confidence/metadata/충돌 및 `CONTRADICTED` 판정 |
+| LLM/응답 | 부분 완료 | API key 없는 demo 응답, source/table/chart 직렬화 | fake 주입, source 계약 전체 필드, 오류 테스트 |
+| Cache | 부분 완료 | Graph 외부 MemoryCache, cache-first API, TTL | Redis adapter, 실제 version/freshness 공급, hit 시 외부 미호출 API 테스트 |
+| MCP Host client | 미구현 | `data_query()` dispatch 형태만 존재 | transport, timeout, envelope 검증, fake adapter |
+| MCP 서버 | 소유자 구현 진행 | Document server, `query_purchase`, `query_sales` 경계 존재 | backend는 직접 확장하지 않고 확정 transport에 연결 |
+| 통합 테스트 | 미구현 | cache repository roundtrip만 실질 검증 | document/data/BOTH/API cache 흐름의 fake 기반 테스트 |
+
+현재 `app/agent/nodes.py`는 전환 단계로 `mcp_servers.document_tools.search`, legacy `data_tools.finance`, `data_tools.sales`를 같은 프로세스에서 직접 호출한다. 새 기능은 이 임시 결합을 확대하지 않고 purchase/sales 계약의 `app/mcp/client.py` 주입 경계로 이동시키는 방향으로 구현한다.
+
+현재 확정된 데이터 계약은 `purchase`와 `sales`이며 Tool 이름은 `query_purchase`, `query_sales`다. 코드와 기존 계약 문서에 남아 있는 `finance`, `query_finance`, `finance_db_database`는 호환 계약이 아니라 제거해야 할 legacy 명칭이다. C0에서 backend와 계약 문서를 먼저 동기화한다.
+
+## 5. 의존성 및 권장 순서
 
 ```text
-B0 계약 확인
- ├─ B1 dependency injection 기반
- ├─ B2 MCP Port/Fake/envelope
- │   └─ B3 라우팅·도메인 결정
- │       └─ B4 evidence·BOTH 병합
- └─ B5 Fake LLM·응답 직렬화
-     └─ B6 LangGraph orchestration
-         └─ B7 cache-first API
-             └─ B8 mock 통합 테스트
-                 └─ B9 회귀·불변 조건 테스트
+C0 purchase/sales 명칭 동기화 [NOT_STARTED]
+  -> B0 현재 계약 고정 [DONE]
+  -> B1 테스트 가능한 dependency injection [PARTIAL]
+      -> B2 MCP Port/Fake/envelope [NOT_STARTED]
+          -> B3 라우팅·도메인 타입 정합성 [PARTIAL]
+          -> B4 evidence·BOTH 강화 [PARTIAL]
+          -> B5 LLM·응답 계약 강화 [PARTIAL]
+              -> B6 LangGraph를 MCP client 경계로 전환 [PARTIAL]
+                  -> B7 cache-first API·오류 처리 완성 [PARTIAL]
+                      -> B8 fake 기반 통합 테스트 [NOT_STARTED]
+                          -> B9 전체 회귀·불변 조건 [NOT_STARTED]
 ```
 
-## 태스크
+## 6. 태스크별 계획
 
-### B0 — 합의된 계약 기준 정리
-
-- 상태: `READY` (코드 미착수)
-- 목적: 확정된 데이터 도메인 선택, source 매핑, evidence 판정, 오류 매핑 계약을 구현 태스크의 입력으로 고정한다.
-- 의존성: 없음
-- 수정 허용 경로: 없음
-- 수정 금지 경로: 공통 수정 금지 경로 전체
-- 확정된 계약:
-  - 질의에 구매/매입 또는 판매/매출 키워드가 명확하면 해당 단일 Data MCP source만 조회한다. 모호하면 purchase와 sales를 모두 조회한다.
-  - 다중 source 결과는 공통 키인 상품 ID, 날짜, 거래유형 기준으로 정규화한다. 실제 View 또는 `UNION ALL` 구현은 도메인 담당 소유이며, backend는 정규화된 fake Tool 결과를 소비한다.
-  - 병합 결과와 각 evidence에는 `origin` 값 `purchase` 또는 `sales`를 보존한다. 수치 또는 사실 해석이 충돌하면 결과를 하나로 합치지 않고 병렬 evidence로 유지해 LLM 합성 단계에 전달한다.
-  - MCP `sources`와 `metadata`는 `source_id`, `source_type`, `title` 또는 `table_name`, `retrieved_at`, `index_version`, `freshness_bucket`, 선택적인 `confidence_score`를 제공한다.
-  - `source_type=document`는 문서 식별자와 page로, `source_type=database`는 table name과 query snippet으로 `app/schemas/chat.py`의 `Source`에 분기 매핑한다.
-  - expected metadata가 없으면 기본 문자열로 대체하지 않고 명시적 `null`과 `metadata_incomplete=true`를 보존한다. 이 상태는 evidence 평가의 감점 요인이다.
-  - Pydantic validator로 MCP source/metadata와 `Source` 매핑을 검증하고, 필수 형식 불일치는 즉시 오류로 처리한다.
-  - `SUPPORTED`, `PARTIALLY_SUPPORTED`, `INSUFFICIENT`, `CONTRADICTED`는 source 수, relevance/confidence, 숫자·날짜 일치, freshness, 명시적 반증을 조합한 규칙으로 판정한다.
-  - Tool error는 malformed input 400, 인증 오류 401/403, `DOC_NOT_FOUND` 404, `RATE_LIMIT` 429, `DB_TIMEOUT` 또는 `DB_CONNECTION_ERROR` 503, MCP 내부 예외 500으로 변환한다. 원본 code는 응답 body에 유지한다.
-  - `TIMEOUT`, `RATE_LIMIT`은 재시도 가능으로, `NOT_FOUND`, `VALIDATION`은 재시도 불가로 표현한다. 재시도 가능 응답은 필요 시 `Retry-After`를 제공한다.
-  - `index_version`과 `freshness_bucket`은 독립 필드다. index version은 재색인 버전이고 freshness bucket은 `realtime`, `recent`, `stale`, `outdated` 중 하나다. `stale`과 `outdated`는 `PARTIALLY_SUPPORTED` 감점 요인이다.
-- 테스트 명령: 없음
-- 완료 조건: 이 문서의 계약이 구현 태스크와 fake/contract test의 단일 기준으로 사용된다.
-- 팀원 통합 보류 조건: 실제 View/`UNION ALL`, source 데이터 생성, index/freshness 갱신은 각 도메인 구현이 제공할 때까지 fake payload로 대체한다.
-
-### B1 — dependency injection 기반 조성
+### C0 — purchase/sales 계약 명칭 동기화
 
 - 상태: `NOT_STARTED`
-- 목적: 실제 외부 연결 없이 FastAPI 앱에 fake MCP, fake LLM, in-memory cache를 주입할 수 있게 한다.
-- 의존성: B0과 무관하게 시작 가능
-- 수정 허용 경로:
-  - `app/main.py`
-  - `app/core/`
-  - `app/logging/`
-  - `tests/unit/test_api.py`
-  - `tests/unit/test_logging.py`
-- 수정 금지 경로: 공통 수정 금지 경로 전체
-- 테스트 명령:
+- 확정 계약: 데이터 도메인은 `purchase`, `sales`, 복수 조회 의미의 `both`이고 Tool은 `query_purchase`, `query_sales`다.
+- 남은 작업:
+  - backend의 `DataDomain`, 라우팅, MCP client, 설정과 테스트에서 legacy `finance`를 `purchase`로 교체한다.
+  - `docs/interface.md`, `docs/architecture.md`, `docs/ownership.md`, `docs/test-scenarios.md`의 데이터 계약과 소유 경로를 purchase/sales로 동기화한다.
+  - 이미 존재하는 `mcp_servers/data_tools/purchase/`의 소유자 구현은 이 태스크에서 수정하지 않고 backend 경계에서 사용한다.
+  - `etl/finance/`, `database/finance/` 같은 legacy 경로를 임의로 삭제·이동하지 않는다. 별도 소유자 결정 전에는 참조 제거와 위험 기록만 수행한다.
+- 수정 허용: backend 소유 `app/` 경로, 관련 backend 테스트, 위 계약 문서
+- 수정 금지: `mcp_servers/data_tools/{purchase,sales}/`, `etl/`, `database/`, 실제 데이터·생성물
+- 검증:
 
   ```powershell
-  pytest tests/unit/test_api.py tests/unit/test_logging.py
+  python -m pytest tests/unit/test_agent.py tests/unit/test_data_mcp.py tests/unit/test_api.py
   ```
 
-- 완료 조건:
-  - 앱 생성 시 테스트용 의존성을 주입할 수 있다.
-  - import 또는 테스트 실행이 실제 Redis, MCP, LLM 연결을 시도하지 않는다.
-  - health endpoint가 외부 설정과 파일 로그 쓰기 없이 테스트된다.
-- 팀원 통합 보류 조건: 운영 로그 저장, Redis 연결, startup readiness는 실제 인프라 연결 단계까지 보류한다.
+### B0 — 현재 계약 고정
 
-### B2 — MCP Port, Fake, Tool envelope 검증
+- 상태: `DONE`
+- 기준: `search_documents`, `query_purchase`, `query_sales`, 공통 success/error envelope, `BOTH` 부분 성공 규칙
+- 확인 사항:
+  - route는 `GENERAL`, `DOCUMENT`, `DATABASE`, `BOTH`다.
+  - 데이터 도메인은 `purchase`, `sales`, 복수 조회 의미의 `both`다.
+  - 캐시는 Graph 외부에서 처리한다.
+  - 내부 `file_path`는 사용자 응답에 노출하지 않는다.
+- 후속 계약 변경: 관련 소유자 검토와 계약 테스트 없이는 진행하지 않는다.
+
+### B1 — 테스트 가능한 dependency injection
+
+- 상태: `PARTIAL`
+- 구현됨: `create_app()`, MemoryCache, demo LLM, 외부 연결 없는 health endpoint
+- 남은 작업:
+  - app factory에 LLM/MCP/cache fake를 명시적으로 주입할 수 있게 한다.
+  - import 시 `logs/app.log.txt` 쓰기가 테스트를 깨지 않도록 logging 경계를 주입하거나 설정한다.
+  - 공유 자원의 startup/shutdown 수명주기 위치를 확정한다.
+- 수정 허용: `app/main.py`, `app/core/`, `app/logging/`, 관련 API/logging 테스트
+- 검증:
+
+  ```powershell
+  python -m pytest tests/unit/test_api.py tests/unit/test_logging.py
+  ```
+
+### B2 — MCP Port, Fake, envelope 정규화
 
 - 상태: `NOT_STARTED`
-- 목적: Document/Purchase/Sales MCP 호출을 Protocol과 fake adapter로 표현하고 Tool envelope를 정규화한다.
-- 의존성: B1
-- 수정 허용 경로:
-  - `app/mcp/client.py`
-  - `app/schemas/`
-  - `tests/unit/test_data_mcp.py`
-- 수정 금지 경로: 공통 수정 금지 경로 전체, `mcp_servers/data_tools/server.py`
-- 테스트 명령:
+- 현재 문제: `app/mcp/client.py`의 transport 메서드와 기본 편의 함수가 `...`이며 Graph가 소유자 모듈을 직접 import한다.
+- 남은 작업:
+  - Document/Purchase/Sales 호출을 async Protocol 또는 주입 가능한 client로 표현한다.
+  - `docs/interface.md`의 success/error envelope를 Pydantic 경계에서 검증하고 내부 evidence로 정규화한다.
+  - malformed payload, `NO_RESULT`, `QUERY_ERROR`, timeout을 구분하는 결정적 fake를 만든다.
+  - client는 SQL을 생성·수정하거나 MySQL·FAISS·파일 시스템에 접근하지 않는다.
+- 수정 허용: `app/mcp/client.py`, `app/schemas/`, backend 소유 fake/fixture, `tests/unit/test_data_mcp.py`
+- 검증:
 
   ```powershell
-  pytest tests/unit/test_data_mcp.py
+  python -m pytest tests/unit/test_data_mcp.py
   ```
 
-- 완료 조건:
-  - fake adapter가 실제 네트워크 없이 document, purchase, sales 결과를 반환한다.
-  - success, `NO_RESULT`, `QUERY_ERROR`, malformed payload가 정규화·검증된다.
-  - fake Data MCP의 다중 source 결과는 `origin=purchase|sales`를 보존한다.
-  - source/metadata가 `source_id`, `source_type`, `retrieved_at`, version/freshness 및 도메인별 인용 필드를 만족하는지 Pydantic validator로 검증한다.
-  - 누락 metadata는 `null`과 `metadata_incomplete=true`로 보존하며, 형식 불일치는 즉시 오류가 된다.
-  - MCP client가 SQL, MySQL, FAISS, 파일 시스템에 직접 접근하지 않는다.
-- 팀원 통합 보류 조건: HTTP/MCP transport, 인증, timeout, retry, SDK 선택은 실제 MCP 서버 계약 후에만 구현한다.
+### B3 — 라우팅 및 데이터 도메인 정합성
 
-### B3 — 라우팅 및 데이터 도메인 결정
+- 상태: `PARTIAL`
+- 구현됨: 네 route의 결정적 키워드 라우팅과 legacy finance/sales/모호 질의의 복수 조회
+- 남은 작업:
+  - `route_data_domain()`이 반환하는 `both`와 `GraphState.DataDomain`의 단일 값 타입 불일치를 제거한다.
+  - C0 이후 purchase/sales 키워드가 동시에 있거나 모두 없는 DATABASE 질의를 복수 도메인으로 명시한다.
+  - 각 도메인 evidence에 origin/domain을 보존하는 테스트를 추가한다.
+- 수정 허용: `app/agent/state.py`, `app/agent/nodes.py`, `tests/unit/test_agent.py`
+- 검증:
+
+  ```powershell
+  python -m pytest tests/unit/test_agent.py
+  ```
+
+### B4 — evidence 평가와 BOTH 부분 성공
+
+- 상태: `PARTIAL`
+- 구현됨: document/database evidence 분리, 빈 근거와 DB 오류에 대한 기본 판정, 순차 BOTH 보존
+- 남은 작업:
+  - relevance/confidence, metadata 완전성, freshness를 주입 가능한 정책값으로 판정한다.
+  - 명시적 반증 또는 동일 사실의 상충 값에만 `CONTRADICTED`를 사용한다.
+  - 한 Tool 실패 시 다른 Tool 근거가 유지되고 `PARTIALLY_SUPPORTED`로 전달되는지 검증한다.
+  - 단순 low-confidence와 실제 충돌을 구분한다.
+- 수정 허용: `app/agent/evidence_eval.py`, `app/agent/nodes.py`, `app/agent/state.py`, `tests/unit/test_agent.py`
+- 검증:
+
+  ```powershell
+  python -m pytest tests/unit/test_agent.py
+  ```
+
+### B5 — Fake LLM과 응답 직렬화 계약
+
+- 상태: `PARTIAL`
+- 구현됨: API key 없는 demo 응답, 검증된 evidence 전달, `ChatResponse`, `Source`, `TableData`, Decimal/date JSON 변환
+- 남은 작업:
+  - LLM port/fake를 app factory에서 주입하고 호출 기록을 검증한다.
+  - document/database source에 계약상 필요한 page/table/query metadata와 freshness/version 필드를 확정 계약에 맞춰 추가한다.
+  - 내부 `file_path`, 질문 원문, 전체 근거가 응답·로그에 노출되지 않는 테스트를 추가한다.
+- 수정 허용: `app/agent/llm.py`, `app/agent/prompts.py`, `app/agent/nodes.py`, `app/schemas/chat.py`, 관련 agent/API 테스트
+- 검증:
+
+  ```powershell
+  python -m pytest tests/unit/test_agent.py tests/unit/test_api.py
+  ```
+
+### B6 — LangGraph orchestration의 MCP client 전환
+
+- 상태: `PARTIAL`
+- 구현됨: StateGraph 조립, GENERAL 무검색, DOCUMENT/DATABASE 단일 검색, BOTH의 document→database 순차 수집, Graph 외부 cache
+- 남은 작업:
+  - retrieval node의 same-process 도메인 import를 B2의 주입된 MCP client로 교체한다.
+  - DOCUMENT/DATABASE/BOTH가 허용된 client 메서드만 호출했는지 fake 호출 기록으로 검증한다.
+  - 한 retrieval 실패 후에도 fan-in과 answer가 계약대로 끝나는지 검증한다.
+- 수정 허용: `app/agent/graph.py`, `app/agent/nodes.py`, `app/agent/state.py`, `tests/unit/test_agent.py`
+- 검증:
+
+  ```powershell
+  python -m pytest tests/unit/test_agent.py
+  ```
+
+### B7 — cache-first API와 오류 매핑
+
+- 상태: `PARTIAL`
+- 구현됨: cache lookup → Graph → cache write 순서, MemoryCache TTL, route별 cache 정책, cached 응답 직렬화
+- 남은 작업:
+  - cache hit에서 Graph·LLM·MCP가 호출되지 않음을 API 수준에서 검증한다.
+  - `document_index_version`, `database_freshness_bucket`, prompt/model 값을 실제 공급자에서 state로 주입한다.
+  - Tool error를 계약에 맞는 HTTP status와 비밀정보 없는 body로 변환한다.
+  - Redis adapter와 분산 무효화는 실제 인프라 연결 태스크로 분리한다.
+- 수정 허용: `app/api/chat.py`, `app/main.py`, `app/cache/`, `app/schemas/chat.py`, 관련 API/cache 테스트
+- 검증:
+
+  ```powershell
+  python -m pytest tests/unit/test_api.py tests/unit/test_cache.py tests/integration/test_cache_flow.py
+  ```
+
+### B8 — fake 기반 document/data/BOTH 통합 테스트
 
 - 상태: `NOT_STARTED`
-- 목적: GENERAL, DOCUMENT, DATABASE, BOTH 라우팅과 데이터 도메인 표현을 계약대로 구현한다.
-- 의존성: B0, B2
-- 수정 허용 경로:
-  - `app/agent/state.py`
-  - `app/agent/nodes.py`
-  - `tests/unit/test_agent.py`
-- 수정 금지 경로: 공통 수정 금지 경로 전체
-- 테스트 명령:
+- 현재 문제: document/data/ETL 통합 테스트가 placeholder이고 cache integration은 repository roundtrip만 검증한다.
+- 남은 작업:
+  - FastAPI 요청부터 Graph, fake MCP/LLM, Pydantic 응답까지 DOCUMENT와 DATABASE 흐름을 검증한다.
+  - BOTH 양쪽 성공, 한쪽 실패, 모두 실패와 source/evidence 분리를 검증한다.
+  - cache miss 후 hit에서 외부 port 호출 횟수가 증가하지 않는지 검증한다.
+  - 실제 MCP process, MySQL, FAISS, Redis, OpenAI를 사용하지 않는다.
+- 수정 허용: `tests/integration/test_chat_document_flow.py`, `test_chat_data_flow.py`, `test_cache_flow.py`, 필요한 backend 소유 `app/` 경로
+- 검증:
 
   ```powershell
-  pytest tests/unit/test_agent.py
+  python -m pytest tests/integration/test_chat_document_flow.py tests/integration/test_chat_data_flow.py tests/integration/test_cache_flow.py
   ```
 
-- 완료 조건:
-  - 네 route와 purchase, sales, 모호한 질의의 기대 결과가 테스트로 고정된다.
-  - 구매/매입 또는 판매/매출 키워드가 명확하면 단일 data source만 선택한다.
-  - 데이터 도메인이 모호하면 purchase와 sales를 모두 선택하고, 그 결과에 각각의 `origin`을 유지한다.
-  - BOTH가 document evidence와 database evidence를 모두 요구한다.
-  - 애매한 데이터 질의에서 임의의 도메인을 선택하지 않는다.
-- 팀원 통합 보류 조건: 실제 공통 View 또는 `UNION ALL` 쿼리는 구매·판매 담당 소유이며 backend는 이를 구현하지 않는다.
-
-### B4 — evidence 평가와 BOTH 결과 병합
+### B9 — 실패 경로 및 불변 조건 회귀
 
 - 상태: `NOT_STARTED`
-- 목적: 도메인별 evidence를 보존하며 부분 성공과 부족한 근거를 일관되게 판정한다.
-- 의존성: B0, B2, B3
-- 수정 허용 경로:
-  - `app/agent/evidence_eval.py`
-  - `app/agent/nodes.py`
-  - `app/agent/state.py`
-  - `tests/unit/test_agent.py`
-- 수정 금지 경로: 공통 수정 금지 경로 전체
-- 테스트 명령:
+- 의존성: B1~B8 완료
+- 남은 작업:
+  - invalid request, malformed envelope, no result, timeout, partial BOTH, insufficient/contradicted evidence, cache hit/miss를 고정한다.
+  - 테스트가 외부 서비스·시간·로컬 DB 상태에 의존하지 않는지 확인한다.
+  - 기존 테스트와 fixture를 약화하거나 삭제하지 않는다.
+- 검증:
 
   ```powershell
-  pytest tests/unit/test_agent.py
+  python -m pytest tests/unit
+  python -m pytest tests/integration
+  python -m pytest
   ```
 
-- 완료 조건:
-  - document/database evidence가 별도 state 필드에 보존된다.
-  - 한 Tool 실패 시 다른 Tool evidence가 유지되는 BOTH 테스트가 있다.
-  - 검색 결과 0건 또는 relevance/confidence가 주입된 임계값 미만이면 `INSUFFICIENT`가 된다.
-  - 핵심 숫자·날짜·필드가 source와 일치하고 metadata가 완전하면 `SUPPORTED`가 된다.
-  - 일부 핵심 주장만 확인되거나 `freshness_bucket`이 `stale` 또는 `outdated`이거나 metadata가 불완전하면 `PARTIALLY_SUPPORTED`가 된다.
-  - 명시적 반증 source 또는 동일 사실에 대한 상충 값이 존재할 때만 `CONTRADICTED`가 된다. 단순 low-confidence는 `CONTRADICTED`가 아니다.
-  - 충돌하는 purchase/sales 결과는 병렬 evidence로 유지하며, 하나의 값으로 임의 병합하지 않는다.
-- 팀원 통합 보류 조건: relevance/confidence의 실제 산출 방식과 운영 임계값은 MCP/RAG 담당이 제공할 때까지 테스트가 주입한 정책값으로 대체한다.
+## 7. 다음 실행 우선순위
 
-### B5 — Fake LLM 기반 답변 합성과 응답 직렬화
+1. C0에서 legacy finance 명칭을 purchase/sales 계약으로 동기화한다.
+2. B1에서 app factory의 MCP/LLM/cache/logging 주입 방식을 확정한다.
+3. B2에서 실제 transport와 분리된 Port/Fake/envelope validator를 구현한다.
+4. B3의 `DataDomain` 타입 불일치를 해결하고 B4의 evidence 규칙을 테스트로 고정한다.
+5. B6에서 Graph의 same-process import를 주입 client로 교체한다.
+6. B7의 API 오류·cache version 공급을 완성한다.
+7. B8 placeholder를 실제 fake 기반 통합 흐름으로 교체한 뒤 B9 전체 회귀를 실행한다.
 
-- 상태: `NOT_STARTED`
-- 목적: 실제 OpenAI 호출 없이 검증된 evidence만 사용해 answer와 source를 `ChatResponse`로 변환한다.
-- 의존성: B1, B2
-- 수정 허용 경로:
-  - `app/agent/llm.py`
-  - `app/agent/prompts.py`
-  - `app/agent/nodes.py`
-  - `app/schemas/chat.py`
-  - `tests/unit/test_agent.py`
-  - `tests/unit/test_api.py`
-- 수정 금지 경로: 공통 수정 금지 경로 전체
-- 테스트 명령:
+## 8. 외부 팀 handoff 체크리스트
 
-  ```powershell
-  pytest tests/unit/test_agent.py tests/unit/test_api.py
-  ```
-
-- 완료 조건:
-  - fake LLM이 실제 API key 없이 동작한다.
-  - 검증된 evidence만 fake LLM에 전달된다.
-  - `ChatResponse`에 answer, sources, cached, route, request_id가 올바르게 직렬화된다.
-  - `Source`는 source id/type, title 또는 table name, retrieved time, document page 또는 database query snippet, `index_version`, `freshness_bucket`, `confidence_score`, `metadata_incomplete`, `origin`을 명시적으로 표현한다.
-  - 내부 `file_path`가 answer 또는 source에 노출되지 않는다.
-- 팀원 통합 보류 조건: 현재 `Source.document_id`와 협의된 document 식별자 명칭, 그리고 새 page/table/query snippet 필드의 호환성은 `app/schemas/chat.py` 변경 시 하위 호환 정책으로 결정한다. 실제 모델 선택, prompt 최적화, SDK retry/timeout은 실제 LLM 연결 단계까지 보류한다.
-
-### B6 — LangGraph orchestration 조립
-
-- 상태: `NOT_STARTED`
-- 목적: route별 retrieval, evidence evaluation, answer synthesis를 cache 외부의 graph로 조립한다.
-- 의존성: B2, B3, B4, B5
-- 수정 허용 경로:
-  - `app/agent/graph.py`
-  - `app/agent/nodes.py`
-  - `app/agent/state.py`
-  - `tests/unit/test_agent.py`
-- 수정 금지 경로: 공통 수정 금지 경로 전체
-- 테스트 명령:
-
-  ```powershell
-  pytest tests/unit/test_agent.py
-  ```
-
-- 완료 조건:
-  - GENERAL은 MCP를 호출하지 않는다.
-  - DOCUMENT와 DATABASE는 해당 fake port만 호출한다.
-  - BOTH fan-out/fan-in이 양쪽 evidence를 보존한다.
-  - 모호한 DATABASE는 purchase와 sales fake port를 모두 호출하되, 충돌하는 결과를 병렬 evidence로 answer synthesis에 전달한다.
-  - graph 내부에서 cache를 직접 읽거나 쓰지 않는다.
-- 팀원 통합 보류 조건: 실제 MCP 동시성, retry, streaming은 실제 transport 결정 후에 처리한다.
-
-### B7 — cache-first `POST /api/chat`
-
-- 상태: `NOT_STARTED`
-- 목적: cache lookup → graph invoke → cache write → response 순서의 API 흐름을 구현한다.
-- 의존성: B1, B6
-- 수정 허용 경로:
-  - `app/api/chat.py`
-  - `app/main.py`
-  - `app/cache/`
-  - `app/schemas/chat.py`
-  - `tests/unit/test_api.py`
-  - `tests/unit/test_cache.py`
-  - `tests/integration/test_cache_flow.py`
-- 수정 금지 경로: 공통 수정 금지 경로 전체
-- 테스트 명령:
-
-  ```powershell
-  pytest tests/unit/test_api.py tests/unit/test_cache.py tests/integration/test_cache_flow.py
-  ```
-
-- 완료 조건:
-  - cache hit에서 graph, fake LLM, fake MCP가 호출되지 않는다.
-  - cache miss에서는 graph 완료 후 재사용 가능한 응답만 저장한다.
-  - API 응답의 `cached` 값과 `route`가 state와 일치한다.
-  - Tool error code가 FastAPI exception handler를 통해 400, 401/403, 404, 429, 500, 503으로 변환되고 원본 `error.code`를 응답 body에 보존한다.
-  - 재시도 가능한 timeout/rate-limit 오류는 retry hint와 가능한 경우 `Retry-After`를 제공한다.
-- 팀원 통합 보류 조건: Redis adapter, distributed invalidation, 실제 index/freshness 값과 실제 MCP retry timing은 실제 인프라 단계까지 보류한다.
-
-### B8 — Mock 기반 document/data/BOTH 통합 테스트
-
-- 상태: `NOT_STARTED`
-- 목적: placeholder 통합 테스트를 FastAPI 요청부터 직렬화 응답까지의 fake 기반 흐름 테스트로 대체한다.
-- 의존성: B2, B3, B4, B5, B6, B7
-- 수정 허용 경로:
-  - `tests/integration/test_chat_document_flow.py`
-  - `tests/integration/test_chat_data_flow.py`
-  - `tests/integration/test_cache_flow.py`
-  - 구현에 필요한 `app/` 내 backend 허용 경로
-- 수정 금지 경로: 공통 수정 금지 경로 전체
-- 테스트 명령:
-
-  ```powershell
-  pytest tests/integration/test_chat_document_flow.py tests/integration/test_chat_data_flow.py tests/integration/test_cache_flow.py
-  ```
-
-- 완료 조건:
-  - DOCUMENT에서 fake Document MCP 결과와 source 직렬화를 검증한다.
-  - DATABASE에서 fake Purchase 또는 Sales MCP 결과를 검증한다.
-  - 모호한 DATABASE에서 fake Purchase와 Sales MCP를 모두 호출하고 `origin`을 보존한다.
-  - BOTH에서 부분 실패와 evidence 분리·병합을 검증한다.
-  - 충돌한 purchase/sales evidence가 `CONTRADICTED`로 표시되고 병렬 source로 응답에 남는지 검증한다.
-  - metadata 누락이 `metadata_incomplete=true` 및 `PARTIALLY_SUPPORTED`로 전파되는지 검증한다.
-  - 모든 fake가 호출 기록을 제공하여 잘못된 외부 경로 호출을 검출한다.
-- 팀원 통합 보류 조건: 실제 MCP process, MySQL, FAISS, Document DB는 이 테스트에 추가하지 않는다.
-
-### B9 — 실패 경로와 불변 조건 회귀 테스트
-
-- 상태: `NOT_STARTED`
-- 목적: 외부 의존 없는 backend/integration 완료 기준을 테스트로 고정한다.
-- 의존성: B8
-- 수정 허용 경로:
-  - `tests/unit/test_api.py`
-  - `tests/unit/test_agent.py`
-  - `tests/unit/test_cache.py`
-  - `tests/unit/test_data_mcp.py`
-  - `tests/integration/test_chat_document_flow.py`
-  - `tests/integration/test_chat_data_flow.py`
-  - `tests/integration/test_cache_flow.py`
-- 수정 금지 경로: 공통 수정 금지 경로 전체
-- 테스트 명령:
-
-  ```powershell
-  pytest tests/unit tests/integration
-  ```
-
-- 완료 조건:
-  - invalid request, malformed Tool envelope, no result, partial BOTH failure, insufficient evidence, cache hit/miss가 회귀 테스트된다.
-  - `DOC_NOT_FOUND`, `RATE_LIMIT`, `DB_TIMEOUT`, MCP 내부 예외의 HTTP status, `error.code`, retry hint가 회귀 테스트된다.
-  - stale/outdated freshness, metadata 불완전, 명시적 반증 source가 evidence 등급에 미치는 영향이 회귀 테스트된다.
-  - 테스트가 실제 DB, FAISS, MCP, Redis, API key, 네트워크를 사용하지 않는다.
-  - 기존 contract와 acceptance 테스트를 약화하거나 삭제하지 않는다.
-- 팀원 통합 보류 조건: 운영 인프라 장애, MySQL timeout, FAISS index corruption은 실제 통합 환경의 별도 테스트로 남긴다.
-
-## 팀원 통합 handoff checklist
-
-### RAG / Document MCP 담당
+### RAG / Document MCP
 
 - `search_documents` transport endpoint와 인증 방식
-- success/error Tool envelope 준수 여부
-- `data`, `sources`, `metadata.index_version` 확정 schema
-- `source_id`, `source_type`, `retrieved_at`, page, confidence score, metadata incomplete 상태의 실제 payload 위치
-- `NO_RESULT`, `INTERNAL_ERROR` contract fixture
-- 내부 `file_path` 비노출 확인
-- 재색인 후 cache invalidation에 전달할 version 또는 event
+- success/error envelope fixture와 `metadata.index_version`
+- source의 document id, title, page, score 필드 위치
+- `NO_RESULT`, timeout, internal error 표현
+- 내부 `file_path` 비노출 및 재인덱싱 후 cache 무효화 신호
 
-### 구매 / 판매 담당
+### Purchase / Sales Data MCP
 
-- `query_purchase`, `query_sales` endpoint와 Tool 이름
-- 결과 row, source, metadata의 최소 필드
-- `origin=purchase|sales`, `table_name`, `query_snippet`, `freshness_bucket`의 실제 payload 위치
-- purchase/sales 선택 및 복수 도메인 질의 정책
-- SELECT 제한, row limit, timeout, error code
-- ETL 완료 후 freshness bucket 또는 cache invalidation 신호
-- 실제 DB 없이 공유 가능한 contract fixture
+- `query_purchase`, `query_sales` endpoint와 인증 방식
+- result row, source, table/query metadata, freshness 필드 위치
+- SELECT 제한, row limit, timeout과 오류 code
+- 모호한 복수 도메인 질의의 origin 보존 방식
+- ETL 완료 후 freshness/cache invalidation 신호
 
-### Backend / Integration 담당
+### Backend / Integration
 
-- fake adapter contract test를 실제 adapter에도 적용
-- HTTP/MCP transport timeout, retry, 오류 변환 구현
-- real settings와 secret 주입 방식 확정
-- health와 readiness 분리
-- 실제 인프라 E2E marker 분리
-- cache invalidation event 연결
+- 같은 contract test를 fake와 실제 adapter에 적용
+- transport timeout/retry와 HTTP 오류 변환
+- `.env.example`과 `Settings` 동기화 및 secret 주입 방식
+- health/readiness 분리, 실제 인프라 E2E marker 분리
+- cache version/freshness 공급자와 무효화 연결
 
-## 위험 및 합의 필요 사항
+## 9. 위험 및 확인 필요 사항
 
-| 위험 또는 모호점 | 영향 | 필요한 합의 |
+| 위험 | 현재 영향 | 해소 기준 |
 |---|---|---|
-| Tool envelope와 현재 `list[dict]` 타입 불일치 | MCP client와 graph 설계 불안정 | envelope를 단일 기준으로 확정 |
-| `GraphState.data_domain`이 단일 값 | purchase+sales 모호 질의 표현 불가 | 복수 도메인과 origin을 보존하도록 state 확장 |
-| `Source`의 현재 필드와 합의된 인용 필드 차이 | 하위 호환성 또는 직렬화 오류 | `app/schemas/chat.py`의 migration 정책 결정 |
-| relevance/confidence의 운영 임계값 미수치화 | evidence 등급이 환경별로 달라질 수 있음 | 임계값을 주입 가능한 정책값으로 두고 운영값 확정 |
-| cache version 제공자 미구현 | 오래된 답변 재사용 위험 | index/freshness 갱신 계약을 실제 파이프라인에 연결 |
-| 파일 기반 logging | 읽기 전용 테스트 환경에서 app import 실패 | 테스트용 logging 주입 경계 |
-| placeholder 통합 테스트 | 통합 전 오류를 검출하지 못함 | B8에서 fake 기반 시나리오로 교체 |
+| MCP client가 스켈레톤 | Graph가 소유자 모듈에 직접 결합 | B2/B6에서 주입 client로 전환 |
+| envelope와 내부 `list[dict]` 불일치 | 오류·metadata 유실 가능 | 경계 validator와 contract fixture 추가 |
+| legacy `finance` 명칭 잔존 | purchase 계약과 코드·문서 불일치 | C0에서 `purchase`로 동기화 |
+| `DataDomain`에 `both` 없음 | 타입 무시 주석과 런타임 표현 불일치 | 복수 도메인 타입을 명시적으로 모델링 |
+| evidence 규칙이 단순함 | freshness·충돌을 정확히 판정하지 못함 | 정책값과 B4 회귀 테스트 추가 |
+| cache version 값 미공급 | 오래된 답변 키 재사용 가능 | index/freshness 공급자를 API 진입 전에 주입 |
+| logging이 app import 시 파일 handler 구성 | 읽기 전용 환경에서 테스트 실패 가능 | B1에서 테스트용 logging 경계 제공 |
+| integration placeholder | 실제 API 흐름 회귀를 검출하지 못함 | B8 시나리오로 대체 |
+| `.venv`의 로컬 Python 경로 의존 | 현재 환경에서 전체 검증이 막힐 수 있음 | `AGENTS.md` 절차로 가상환경 재생성 후 설치 |
+
+## 10. Backend / Integration 완료 기준
+
+- B1~B9의 남은 조건이 contract test로 고정돼 있다.
+- cache hit에서 Graph, LLM, MCP가 호출되지 않는다.
+- GENERAL, DOCUMENT, DATABASE, BOTH와 purchase/sales/복수 도메인이 독립적으로 검증된다.
+- BOTH의 양쪽 evidence가 섞이거나 유실되지 않고 부분 실패가 구조화된다.
+- API/Agent가 MySQL, FAISS, 문서 파일에 직접 접근하지 않는다.
+- 테스트가 실제 비밀값, 네트워크, 로컬 DB와 외부 서비스 없이 결정적으로 실행된다.
+- `python -m pytest` 결과와 실패/skip 사유를 보고한다.
+- `git diff --check`와 `git status --short`로 생성물·비밀값·담당 범위 밖 변경이 없음을 확인한다.
+- 모든 에이전트의 변경이 루트 `AGENTS.md`의 스타일, Guardrail, 소유권, 검증 기준을 충족한다.
