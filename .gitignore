@@ -10,3 +10,4 @@ data/raw/source_data/*
 data/faiss/*
 !data/faiss/.gitkeep
 logs/*.log.txt
+.codex/
