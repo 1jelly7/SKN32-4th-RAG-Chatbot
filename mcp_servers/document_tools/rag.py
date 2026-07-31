@@ -1,4 +1,4 @@
-from mcp_servers.document.types import DocumentChunk
+from mcp_servers.document_tools.types import DocumentChunk
 
 
 async def retrieve(query: str, top_k: int) -> list[DocumentChunk]:

@@ -15,4 +15,13 @@ def filter_allowed(
     손상된 후보는 기본 거부한다. 입력 순서와 원본 객체를 보존하며, 필터링 사실은 감사용
     메타데이터로만 남기고 비허용 문서의 내용은 노출하지 않는다.
     """
-    ...
+    role = user_context.get("role")
+    permissions = set(user_context.get("permissions", []))
+    allowed: list[dict[str, Any]] = []
+    for document in documents:
+        allowed_roles = document.get("allowed_roles")
+        if not isinstance(allowed_roles, list):
+            continue
+        if role in allowed_roles or permissions.intersection(allowed_roles):
+            allowed.append(document)
+    return allowed

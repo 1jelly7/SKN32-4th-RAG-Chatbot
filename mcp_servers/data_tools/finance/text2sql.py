@@ -1,5 +1,5 @@
 from app.core.security import UserContext
-from mcp_servers.data.schema import SchemaResource
+from mcp_servers.data_tools.finance.schema import SchemaResource
 
 
 async def generate_sql(

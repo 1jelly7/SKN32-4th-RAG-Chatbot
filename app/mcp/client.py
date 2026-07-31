@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.agent.state import DataDomain
 from app.core.security import UserContext
 
 
@@ -28,17 +29,38 @@ class MCPClient:
         """
         ...
 
-    async def data_query(
+    async def finance_query(
         self,
         question: str,
         user_context: UserContext,
     ) -> list[dict[str, Any]]:
-        """Data MCP의 query_business_data 도구를 호출하고 표준 근거 목록으로 반환한다.
+        """Data MCP의 query_finance 도구를 호출하고 표준 근거 목록으로 반환한다.
 
         SQL을 클라이언트에서 만들거나 수정하지 않으며, 서버가 반환한 행과 실행 메타데이터
         외의 내부 정보는 노출하지 않는다.
         """
         ...
+
+    async def sales_query(
+        self,
+        question: str,
+        user_context: UserContext,
+    ) -> list[dict[str, Any]]:
+        """Data MCP의 query_sales 도구를 호출하고 표준 근거 목록으로 반환한다."""
+        ...
+
+    async def data_query(
+        self,
+        domain: DataDomain,
+        question: str,
+        user_context: UserContext,
+    ) -> list[dict[str, Any]]:
+        """명시된 도메인의 Data MCP 도구로만 요청을 전달한다."""
+        if domain == "finance":
+            return await self.finance_query(question, user_context)
+        if domain == "sales":
+            return await self.sales_query(question, user_context)
+        raise ValueError(f"지원하지 않는 데이터 도메인입니다: {domain}")
 
 
 async def document_search(
@@ -50,9 +72,17 @@ async def document_search(
     ...
 
 
-async def data_query(
+async def finance_query(
     question: str,
     user_context: UserContext,
 ) -> list[dict[str, Any]]:
-    """기본 MCPClient를 통한 데이터 조회 편의 함수다."""
+    """기본 MCPClient를 통한 재무 데이터 조회 편의 함수다."""
+    ...
+
+
+async def sales_query(
+    question: str,
+    user_context: UserContext,
+) -> list[dict[str, Any]]:
+    """기본 MCPClient를 통한 판매 데이터 조회 편의 함수다."""
     ...

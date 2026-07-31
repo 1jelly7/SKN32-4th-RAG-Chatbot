@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mcp_servers.document.types import DocumentChunk, IndexMetadata
+from mcp_servers.document_tools.types import DocumentChunk, IndexMetadata
 
 
 class FaissStore:

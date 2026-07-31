@@ -8,10 +8,23 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 - 캐시는 LangGraph 실행 전단에서 단일 책임으로 처리한다.
 - 검색·조회 결과는 evidence_eval을 통과해야 최종 답변에 사용된다.
 
+## 현재 구조와 계약 단계
+
+| 계약 영역 | 현재 경로 | 소유자 | 상태 |
+|---|---|---|---|
+| 문서 검색 | `mcp_servers/document_tools/` | RAG 담당 | Tool 경계와 타입 정의 단계 |
+| 공통 데이터 서버·Guard | `mcp_servers/data_tools/server.py`, `sql_guard.py` | 통합 담당 | 최소 SELECT/쓰기 차단 구현 |
+| 재무 조회 | `mcp_servers/data_tools/finance/` | 재무 담당 | 도메인 인터페이스 스켈레톤 |
+| 판매 조회 | `mcp_servers/data_tools/sales/` | 판매 담당 | 도메인 인터페이스 스켈레톤 |
+| 근거 평가 | `app/agent/evidence_eval.py` | 통합 담당 | 경계 분리 단계 |
+
+아래 Tool 응답은 구현해야 할 계약이다. 현재 MCP transport와 실제 DB·FAISS 호출은 아직
+완성되지 않았으므로, 미구현 경로가 이 형식의 성공 응답을 반환한다고 가정해서는 안 된다.
+
 ## 요청 처리 순서
 
 1. **캐시 조회**: 정규화된 질문으로 캐시를 조회한다. 적중 시 LangGraph, MCP, LLM을 모두 호출하지 않고 즉시 응답한다.
-2. **Router**: 질문을 `DOCUMENT`, `DATABASE`, `BOTH`, `NO_INTERNAL_KNOWLEDGE`로 분류한다.
+2. **Router**: 질문을 `GENERAL`, `DOCUMENT`, `DATABASE`, `BOTH`로 분류한다.
 3. **MCP Tool 호출**: 분류에 따라 `search_documents`, `query_finance`, `query_sales`를 호출한다.
 4. **evidence_eval**: 반환된 근거가 질문에 답하기에 충분하고 신뢰할 수 있는지 검증한다.
 5. **답변 합성**: evidence_eval을 통과한 근거만으로 최종 답변을 생성한다.
@@ -20,7 +33,11 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 ## 캐시 책임 (단일 위치)
 
 - 캐시는 `app/cache/`에서만 처리하며, LangGraph 그래프 진입 전에 위치한다.
-- 캐시 키: `hash(normalized_question + user_role)`
+- 캐시 키: 정규화 질문, `user_id`, `tenant_id`, `role`, 권한 목록, 문서 인덱스 버전,
+  대화 문맥 해시, DB freshness bucket, 프롬프트 버전, 모델 식별자를 정렬·직렬화해
+  SHA-256으로 해시한다.
+- 현재 구현은 위 값이 GraphState에 제공되면 모두 키에 반영한다. 실제 재인덱싱·ETL
+  완료 시 무효화 호출은 후속 구현 범위다.
 - 캐시 대상: evidence_eval을 통과한 최종 응답만 저장한다.
 - 캐시 무효화: 문서 재인덱싱 또는 데이터 재적재 시 관련 도메인 캐시를 명시적으로 삭제한다.
 - 다른 모듈(Router, MCP Client, evidence_eval)은 캐시를 직접 읽거나 쓰지 않는다.
@@ -59,6 +76,7 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 - Tool 이름: `search_documents`
 - 제공 서버: Document MCP Server
 - 담당: RAG 담당자
+- 구현 경로: `mcp_servers/document_tools/`
 
 ### 입력
 
@@ -107,6 +125,7 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 - Tool 이름: `query_finance`
 - 제공 서버: Data MCP Server (재무 모듈)
 - 담당: 재무 데이터 담당자
+- 구현 경로: `mcp_servers/data_tools/finance/`
 
 ### 입력
 
@@ -131,15 +150,16 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 
 ### 조회 제한 (SQL Guard 공통 정책 적용)
 
-- 허용 View: `vw_finance_quarterly_summary`, `vw_finance_category_summary`
+- 허용 View: `database/policy/finance_allowed_views.yaml`에 선언한 목록
 - `SELECT` 문만 허용, 결과 최대 100건.
-- SQL Guard는 공통 모듈(`mcp_servers/data/sql_guard.py`)에서 검증하며, 허용 View 목록만 도메인별 정책 파일에서 관리한다.
+- SQL Guard는 공통 모듈(`mcp_servers/data_tools/sql_guard.py`)에서 검증하며, 허용 View 목록만 `database/policy/`의 도메인별 정책 파일에서 관리한다.
 
 ## Tool 3: 판매 데이터 조회
 
 - Tool 이름: `query_sales`
 - 제공 서버: Data MCP Server (판매 모듈)
 - 담당: 판매 데이터 담당자
+- 구현 경로: `mcp_servers/data_tools/sales/`
 
 ### 입력
 
@@ -162,7 +182,7 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 
 ### 조회 제한
 
-- 허용 View: `vw_sales_product_summary`, `vw_sales_monthly_summary`
+- 허용 View: `database/policy/sales_allowed_views.yaml`에 선언한 목록
 - `SELECT` 문만 허용, 결과 최대 100건.
 - SQL Guard는 재무와 동일한 공통 모듈을 사용한다.
 
@@ -210,13 +230,13 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 
 ```json
 {
-  "evidence_status": "sufficient | insufficient",
+  "evidence_status": "SUPPORTED | PARTIALLY_SUPPORTED | INSUFFICIENT | CONTRADICTED",
   "reason": "관련성 낮음 | 근거 부족 | 상충하는 근거",
   "filtered_evidence": []
 }
 ```
 
-- `evidence_status="insufficient"`이면 재검색(최대 1~2회) 또는 `error_code="EVIDENCE_INSUFFICIENT"` 응답으로 전환한다.
+- `evidence_status="INSUFFICIENT"`이면 재검색(최대 1회) 또는 `error_code="EVIDENCE_INSUFFICIENT"` 응답으로 전환한다.
 - 판정 기준: 검색 점수 임계값과 같은 규칙 기반 필터를 우선 적용하고, 애매한 경우에만 경량 LLM 판정을 추가한다.
 
 ## 변경 규칙

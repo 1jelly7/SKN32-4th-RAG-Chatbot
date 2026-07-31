@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
 from app.agent.state import GraphState
 
 
@@ -11,4 +14,18 @@ def make_cache_key(state: GraphState) -> str:
     원문 질문·권한·개인정보를 키로 노출하지 않고, 누락 필드는 명시적 기본값으로 처리해
     동일 입력이 항상 동일 키를 만들도록 한다.
     """
-    ...
+    context = state.get("user_context", {})
+    material = {
+        "question": " ".join(state.get("question", "").casefold().split()),
+        "user_id": context.get("user_id"),
+        "tenant_id": context.get("tenant_id"),
+        "role": context.get("role"),
+        "permissions": sorted(context.get("permissions", [])),
+        "conversation_context_hash": state.get("conversation_context_hash"),
+        "document_index_version": state.get("document_index_version"),
+        "database_freshness_bucket": state.get("database_freshness_bucket"),
+        "prompt_version": state.get("prompt_version"),
+        "model_id": state.get("model_id"),
+    }
+    serialized = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()

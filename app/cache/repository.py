@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+from time import monotonic
 from typing import Any, Protocol
 
 
@@ -12,7 +14,7 @@ class CacheRepository(Protocol):
         """만료되지 않은 값의 방어적 사본을 반환하고, 없거나 만료되면 None을 반환한다."""
         ...
 
-    def set(self, key: str, value: CacheValue, ttl_seconds: int) -> None:
+    def set(self, key: str, value: CacheValue, ttl_seconds: int = 300) -> None:
         """양수 TTL로 직렬화 가능한 값을 저장한다; 호출자 값을 공유 참조로 보관하지 않는다."""
         ...
 
@@ -29,19 +31,28 @@ class MemoryCache:
     """
     def __init__(self) -> None:
         """빈 저장소와 만료 메타데이터를 초기화한다."""
-        ...
+        self._store: dict[str, CacheValue] = {}
+        self._expires_at: dict[str, float] = {}
 
     def get(self, key: str) -> CacheValue | None:
         """키 유효성·만료를 확인한 뒤 안전한 복사본을 반환한다."""
-        ...
+        expires_at = self._expires_at.get(key)
+        if expires_at is None or expires_at <= monotonic():
+            self.delete(key)
+            return None
+        return deepcopy(self._store.get(key))
 
-    def set(self, key: str, value: CacheValue, ttl_seconds: int) -> None:
+    def set(self, key: str, value: CacheValue, ttl_seconds: int = 300) -> None:
         """현재 시각 기준 만료 시각과 함께 값을 저장하며 0 이하 TTL은 저장하지 않는다."""
-        ...
+        if ttl_seconds <= 0:
+            return
+        self._store[key] = deepcopy(value)
+        self._expires_at[key] = monotonic() + ttl_seconds
 
     def delete(self, key: str) -> None:
         """값과 만료 메타데이터를 함께 제거한다."""
-        ...
+        self._store.pop(key, None)
+        self._expires_at.pop(key, None)
 
 
 class RedisCache:
@@ -65,4 +76,4 @@ class RedisCache:
 
 # 설정에 따라 RedisCache 또는 개발용 MemoryCache 한 구현체를 주입한다. import 시 네트워크
 # 연결 실패 때문에 앱이 즉시 죽지 않도록 생성·fallback 정책은 설정 계층에서 명확히 둔다.
-cache: CacheRepository = ...
+cache: CacheRepository = MemoryCache()

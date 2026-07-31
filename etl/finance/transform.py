@@ -16,4 +16,11 @@ def transform(
     자연키 기준 중복 제거 규칙과 유지 행을 결정적으로 정하고, 입력 프레임을 제자리에서
     수정하지 않는다. 변환 실패값은 검증 단계가 추적할 수 있게 보존/표시한다.
     """
-    ...
+    result = frame.copy()
+    if column_mapping:
+        result = result.rename(columns=column_mapping)
+    if type_mapping:
+        for column, dtype in type_mapping.items():
+            if column in result:
+                result[column] = result[column].astype(dtype)
+    return result.drop_duplicates().reset_index(drop=True)

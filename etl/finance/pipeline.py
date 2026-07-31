@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from etl.types import PipelineResult
+from etl.finance.types import PipelineResult
 
 
 def run_csv_pipeline(

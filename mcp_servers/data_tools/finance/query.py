@@ -5,11 +5,11 @@ from typing import Any
 from app.core.security import UserContext
 
 
-async def query_business_data(
+async def query_finance(
     question: str,
     user_context: UserContext,
 ) -> list[dict[str, Any]]:
-    """Data MCP의 자연어 업무 조회 전체 흐름을 수행한다.
+    """재무 자연어 업무 조회 전체 흐름을 수행한다.
 
     schema resource를 읽고 generate_sql로 초안을 만든 다음 SQL Guard로 단일 SELECT,
     allowlist, LIMIT, 금지 키워드를 확인한다. 이후 user_context의 tenant/권한 필터를

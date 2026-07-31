@@ -8,3 +8,4 @@ data/raw/*
 !data/raw/.gitkeep
 data/faiss/*
 !data/faiss/.gitkeep
+logs/*.log.txt

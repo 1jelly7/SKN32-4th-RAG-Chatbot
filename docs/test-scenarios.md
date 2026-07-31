@@ -8,6 +8,30 @@
 - 통합 테스트: 실제 또는 테스트용 FAISS, MySQL, MCP Server를 연결한다.
 - BOTH 라우팅, evidence_eval, 캐시, ETL 멱등성을 필수 검증 항목으로 포함한다.
 
+## 문서 사용 규칙
+
+이 문서는 **현재 자동 검증**과 **목표 수용 시나리오**를 구분한다. 현재 코드베이스는
+구조 재배치 뒤의 스켈레톤 단계이므로, 아래 목표 시나리오를 모두 구현·통과했다는 뜻이
+아니다. 테스트 파일의 실제 범위는 `tests/`가, Tool 계약은 `interface.md`가 기준이다.
+
+## 현재 자동 검증
+
+2026-07-31 기준 `pytest`는 17개 테스트를 수집해 통과한다.
+
+| 테스트 파일 | 현재 검증 범위 | 연관 경로 |
+|---|---|---|
+| `tests/unit/test_agent.py` | 문서·데이터 키워드 라우팅 | `app/agent/nodes.py` |
+| `tests/unit/test_cache.py`, `tests/integration/test_cache_flow.py` | 사용자·대화 문맥별 키 분리, Graph 외부 캐시 서비스, 메모리 캐시 round-trip | `app/cache/` |
+| `tests/unit/test_api.py` | `/api/health` HTTP 200 | `app/api/system.py` |
+| `tests/unit/test_logging.py` | 누락된 `event`의 기본값과 5필드 로그 포맷 | `app/logging/` |
+| `tests/unit/test_document_mcp.py` | 역할 기반 ACL 필터 | `mcp_servers/document_tools/acl.py` |
+| `tests/unit/test_data_mcp.py` | 정상 SELECT 허용, 쓰기 SQL 거부, 재무·판매 Tool dispatch | `app/mcp/client.py`, `mcp_servers/data_tools/sql_guard.py` |
+| `tests/unit/test_etl.py` | 재무 ETL 변환의 중복 제거 | `etl/finance/transform.py` |
+| `tests/integration/test_chat_document_flow.py`, `test_chat_data_flow.py`, `test_etl_mysql_flow.py` | 현재는 placeholder 통과 확인 | 후속 실제 통합 테스트 대상 |
+
+`test_chat_*_flow.py`와 `test_etl_mysql_flow.py`는 실제 MCP·MySQL·FAISS를 연결하지 않는
+placeholder이므로, 아래 수용 시나리오의 통과 근거로 사용하면 안 된다.
+
 ## 공통 테스트 데이터
 
 | 구분 | 최소 준비물 |
@@ -18,7 +42,7 @@
 | DB | 재무·판매 도메인별 허용 View |
 | 질문 | 문서 2개, 재무 2개, 판매 2개, BOTH 1개, 실패 질문 2개 |
 
-## 단위 테스트
+## 목표 단위 수용 테스트
 
 ### TS-U01: 문서 검색 Tool
 
@@ -62,14 +86,15 @@
 - 기대: `evidence_status="insufficient"`, 재검색 또는 `EVIDENCE_INSUFFICIENT` 반환
 - 실패 조건: 근거 부족 상태에서도 답변이 그대로 합성됨
 
-### TS-U07: ETL 멱등성
+### TS-U07: ETL 멱등성 및 실행 이력
 
 - 담당: 재무 담당 + 판매 담당
 - 입력: 동일 원천 데이터로 ETL을 2회 연속 실행
-- 기대: 테이블 행 수 불변(중복 없음), 실행 이력 테이블에 2건 기록
+- 기대: 테이블 행 수 불변(중복 없음), `logs/etl_finance.log.txt` 또는
+  `logs/etl_sales.log.txt`에 실행 시각·처리 행 수·검증 결과가 2회 기록
 - 실패 조건: 재실행 시 행이 중복 삽입되거나 실행 이력이 남지 않음
 
-## 통합 테스트
+## 목표 통합 수용 테스트
 
 ### TS-I01: 문서 질의 전체 흐름
 
@@ -129,10 +154,13 @@
 | D04 | 문서+판매 복합 질문 | BOTH fan-out/fan-in, 도메인별 출처 |
 | D05 | 반복 질문 | 캐시 적중, 응답 속도 개선 |
 
-## 완료 판정
+## 목표 완료 판정
 
 - 담당 기능의 단위 테스트(SQL Guard, evidence_eval, ETL 멱등성 포함)가 통과한다.
-- 관련 통합 테스트(BOTH, 캐시, 인덱스 버전 포함)가 통과한다.
+- 실제 MCP·FAISS·MySQL을 연결한 관련 통합 테스트(BOTH, 캐시, 인덱스 버전 포함)가 통과한다.
 - `interface.md`의 응답 형식과 병합 규칙을 준수한다.
 - 오류 상황에서 예외가 아닌 구조화된 응답을 반환한다.
 - 발표 필수 시나리오 D01~D05를 로컬 환경에서 재현할 수 있다.
+
+현재 통과한 17개 자동 테스트는 이 목표의 선행 검증일 뿐이다. 목표 완료로 판정하려면
+placeholder 통합 테스트를 실제 흐름 검증으로 교체하고 위 수용 시나리오를 모두 통과해야 한다.

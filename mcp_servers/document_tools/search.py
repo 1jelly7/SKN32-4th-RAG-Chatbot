@@ -1,5 +1,5 @@
 from app.core.security import UserContext
-from mcp_servers.document.types import DocumentChunk
+from mcp_servers.document_tools.types import DocumentChunk
 
 
 async def search_documents(
