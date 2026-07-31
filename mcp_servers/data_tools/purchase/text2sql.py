@@ -1,4 +1,4 @@
-from mcp_servers.data_tools.finance.schema import SchemaResource
+from mcp_servers.data_tools.purchase.schema import SchemaResource
 
 
 async def generate_sql(

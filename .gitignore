@@ -4,7 +4,8 @@
 __pycache__/
 .pytest_cache/
 *.py[cod]
-data/raw/*
+data/raw/documents/*
+data/raw/source_data/*
 !data/raw/.gitkeep
 data/faiss/*
 !data/faiss/.gitkeep
