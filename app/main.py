@@ -5,6 +5,12 @@ from app.api.system import router as system_router
 
 
 def create_app() -> FastAPI:
+    """설정·로깅·라우터·정적 UI를 일관되게 등록한 FastAPI 앱을 구성한다.
+
+    startup/shutdown에서 공유 MCP/Redis 자원을 수명 관리하고, /api 라우터와 UI 경로의
+    충돌을 방지한다. 생성 함수가 실제 앱 인스턴스와 동등하게 구성되어 테스트에서
+    독립적으로 사용할 수 있어야 한다.
+    """
     ...
 
 
