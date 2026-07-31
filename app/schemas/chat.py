@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 
@@ -17,7 +15,6 @@ class Source(BaseModel):
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1)
     session_id: str | None = None
-    user_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class ChatResponse(BaseModel):

@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     document_mcp_url: str
     data_mcp_url: str
     faiss_path: str
+    document_db_host: str
+    document_db_user: str
+    document_db_password: str
+    document_db_database: str
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

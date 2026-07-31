@@ -6,7 +6,7 @@ from typing import Any
 class ReadOnlyMySQLClient:
     """SELECT 전용 chatbot_reader 계정을 사용하는 데이터 조회 어댑터."""
     def __init__(self, host: str, user: str, password: str, database: str) -> None:
-        """읽기 전용 연결 설정을 보관하고 자동 커밋/쓰기 권한을 사용하지 않는다."""
+        """읽기 전용 연결 설정을 보관하고 자동 커밋을 사용하지 않는다."""
         ...
 
     def query(self, sql: str, timeout_seconds: int) -> list[dict[str, Any]]:

@@ -4,10 +4,10 @@ from ingestion.types import RawDocument
 
 
 def load_documents(path: Path) -> list[RawDocument]:
-    """입력 파일 또는 디렉터리에서 지원 형식(PDF/TXT/Markdown)만 안정적으로 수집한다.
+    """문서 DB에서 확인한 파일 또는 디렉터리 경로의 지원 문서만 수집한다.
 
     경로를 정렬해 재현 가능한 순서를 만들고, 숨김/지원하지 않는 파일의 처리 정책과 개별
-    파일 오류 보고 방식을 명시한다. 문서 내용은 이후 metadata와 ACL 설정을 위해 보존한다.
+    파일 오류 보고 방식을 명시한다. 임의 입력 경로나 문서 DB에 없는 경로를 사용하지 않는다.
     """
     ...
 

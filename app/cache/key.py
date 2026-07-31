@@ -9,18 +9,12 @@ from app.agent.state import GraphState
 def make_cache_key(state: GraphState) -> str:
     """재사용 안전성을 보장하는 결정적 캐시 키를 생성한다.
 
-    정규화한 질문, tenant/user/permission 범위, 대화 문맥 해시, 문서 인덱스 버전,
-    DB freshness bucket, prompt 버전, model ID를 정렬된 직렬화 후 SHA-256 등으로 해시한다.
-    원문 질문·권한·개인정보를 키로 노출하지 않고, 누락 필드는 명시적 기본값으로 처리해
-    동일 입력이 항상 동일 키를 만들도록 한다.
+    정규화한 질문, 대화 문맥 해시, 문서 인덱스 버전, DB freshness bucket, 프롬프트
+    버전, model ID를 정렬된 직렬화 후 SHA-256으로 해시한다. 질문 원문을 키에 노출하지
+    않고, 누락 필드는 명시적 기본값으로 처리해 동일 입력이 항상 동일 키를 만들도록 한다.
     """
-    context = state.get("user_context", {})
     material = {
         "question": " ".join(state.get("question", "").casefold().split()),
-        "user_id": context.get("user_id"),
-        "tenant_id": context.get("tenant_id"),
-        "role": context.get("role"),
-        "permissions": sorted(context.get("permissions", [])),
         "conversation_context_hash": state.get("conversation_context_hash"),
         "document_index_version": state.get("document_index_version"),
         "database_freshness_bucket": state.get("database_freshness_bucket"),

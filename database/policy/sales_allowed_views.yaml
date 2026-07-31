@@ -1,6 +1,0 @@
-# 판매 담당자가 관리하고 통합 담당자가 SQL Guard 연결을 검토한다.
-allowed_tables: []
-allowed_columns: {}
-allowed_views: []
-default_limit: 100
-forbidden_keywords: [insert, update, delete, drop, alter, create, truncate, grant]

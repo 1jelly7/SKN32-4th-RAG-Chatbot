@@ -30,11 +30,11 @@ async def router(state: GraphState) -> GraphState:
 
 
 async def document_retrieval(state: GraphState) -> GraphState:
-    """Document MCP에 question, 검증된 user_context, top_k를 전달한다.
+    """Document MCP에 question과 top_k를 전달한다.
 
-    응답은 ACL을 통과한 chunk 목록이어야 하며 document_evidence에 저장한다. 반환 필드와
-    출처 메타데이터를 검증하고, MCP 실패는 상태의 오류 정책에 따라 처리하여 임의의
-    문서 내용이나 직접 FAISS 접근으로 대체하지 않는다.
+    Document MCP는 내부 문서 DB에서 파일 경로를 먼저 조회한 뒤 해당 파일만 읽는다.
+    응답은 document_evidence에 저장하고, MCP 실패 시 임의 경로의 문서를 직접 읽는
+    방식으로 대체하지 않는다.
     """
     ...
 
@@ -43,7 +43,7 @@ async def database_retrieval(state: GraphState) -> GraphState:
     """Data MCP를 통해서만 업무 데이터를 조회해 database_evidence에 저장한다.
 
     state.data_domain에 따라 query_finance 또는 query_sales를 명시적으로 선택하고 자연어
-    질문과 사용자 범위를 전달한다. SQL·MySQL에는 직접 접근하지 않는다. 조회 결과의
+    질문을 전달한다. SQL·MySQL에는 직접 접근하지 않는다. 조회 결과의
     실행 시각·SQL 요약·행 수 같은 메타데이터를 보존해 이후 근거 평가와 출처 표시가
     가능해야 한다.
     """

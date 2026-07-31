@@ -6,7 +6,10 @@
 
 사용자가 웹 채팅 화면에서 질문하면 시스템은 질문의 성격을 판별한다. 사내 문서 근거가 필요하면 FAISS 기반 RAG를, 정형 업무 데이터가 필요하면 MySQL 기반 Text2SQL을 사용한다. 두 근거가 모두 필요할 때만 병렬 또는 순차적으로 두 경로를 수행한다.
 
-사내 문서와 MySQL은 애플리케이션이 직접 접근하지 않는다. `Document MCP Server` 및 `Data MCP Server`를 통해서만 접근한다. 같은 조건의 질문에 대한 답변은 Answer Cache에서 먼저 찾고, 캐시가 적중하면 OpenAI, LangGraph, MCP, FAISS, MySQL 호출을 모두 생략한다.
+사내 문서와 MySQL은 애플리케이션이 직접 접근하지 않는다. `Document MCP Server`는
+내부 문서 DB에서 관련 파일 경로를 먼저 조회한 뒤 해당 파일을 읽고, `Data MCP Server`는
+업무 DB를 조회한다. 같은 조건의 질문에 대한 답변은 Answer Cache에서 먼저 찾고, 캐시가
+적중하면 OpenAI, LangGraph, MCP, FAISS, MySQL 호출을 모두 생략한다.
 
 ### 필수 기술
 
@@ -23,13 +26,12 @@
 
 ## 2. 핵심 원칙
 
-1. **Cache first**: 모든 `/api/chat` 요청은 먼저 Answer Cache를 조회한다.
-2. **Selective retrieval**: 모든 질문에 문서와 DB를 둘 다 조회하지 않는다.
+1. **Cache first**: 모든 `/api/chat` 요청은 코드 규칙으로 생성한 캐시 키를 사용해 먼저 Answer Cache를 조회한다.
+2. **Explicit question routing**: 질문을 `GENERAL`, `DOCUMENT`, `DATABASE`, `BOTH`로 분류하고, `GENERAL`은 검색 없이 답변하며 `DOCUMENT`는 문서만, `DATABASE`는 업무 DB만, `BOTH`는 두 경로를 모두 조회한다.
 3. **MCP-only data access**: LangGraph/FastAPI는 FAISS와 MySQL에 직접 연결하지 않는다.
-4. **Read/write separation**: Data MCP의 MySQL 계정은 `SELECT` 전용, ETL 계정만 `INSERT`/`UPDATE` 권한을 가진다.
+4. **Read/write separation**: Data MCP는 읽기 전용 MySQL 연결을 사용하고 ETL은 적재 전용 연결을 사용한다.
 5. **Evidence-grounded answer**: 검색 또는 조회 근거가 있을 때는 그 근거 범위 안에서만 답변한다.
-6. **Deterministic safety first**: 권한, ACL, SQL guard, 캐시 키는 LLM이 아닌 코드 규칙으로 처리한다.
-7. **Bootcamp scope**: 초기 구현은 단순하고 검증 가능해야 한다. 불필요한 마이크로서비스, Docker, Kubernetes는 포함하지 않는다.
+6. **Bootcamp scope**: 초기 구현은 단순하고 검증 가능해야 한다. 불필요한 마이크로서비스, Docker, Kubernetes는 포함하지 않는다.
 
 ## 3. 시스템 흐름
 
@@ -42,7 +44,7 @@
        -> Miss: LangGraph 실행
             -> Query Router
                -> GENERAL: 최종 답변 생성
-               -> DOCUMENT: Document MCP -> FAISS RAG
+               -> DOCUMENT: Document MCP -> 문서 DB 경로 조회 -> 파일 로드 -> FAISS RAG
                -> DATABASE: Data MCP -> Text2SQL -> MySQL SELECT
                -> BOTH: Document MCP + Data MCP
             -> Evidence Eval
@@ -68,9 +70,8 @@
 
 ### 코드/규칙으로 판정할 항목
 
-- 문서 ACL 및 사용자 역할 일치 여부
-- 허용된 문서 저장소·테이블·컬럼인지 여부
-- SQL이 단일 `SELECT`인지, 금지 키워드가 없는지, `LIMIT`이 적용됐는지
+- 문서 DB 조회 결과에 파일 경로와 문서 식별자가 있는지
+- 조회한 파일 경로와 실제 로드한 문서가 일치하는지
 - 문서 수정일·인덱스 버전·DB 조회 시각의 최신성
 - 중복 문서 청크 또는 중복 DB 행 제거
 - 질문의 기간, 조직, 단위, 필수 필터 누락 여부
@@ -95,7 +96,10 @@ skn32_3rd_pj_rag_mcp_chatbot/
 ├── .gitignore                        # 비밀값·데이터·FAISS 산출물 제외
 │
 ├── docs/
-│   └── architecture.md               # 이 문서를 복사/유지할 설계 기준 문서
+│   ├── architecture.md               # 시스템 흐름과 코드 경계
+│   ├── interface.md                  # MCP Tool 인터페이스 계약
+│   ├── ownership.md                  # 코드 소유권과 변경 규칙
+│   └── test-scenarios.md             # 테스트 시나리오와 완료 기준
 │
 ├── app/                              # FastAPI Host 및 LangGraph 애플리케이션
 │   ├── main.py                       # FastAPI 생성, router/static UI 등록
@@ -103,8 +107,7 @@ skn32_3rd_pj_rag_mcp_chatbot/
 │   │   ├── chat.py                   # POST /api/chat: graph 호출 및 응답 반환
 │   │   └── system.py                 # GET /api/health, 최소 관리자 API
 │   ├── core/
-│   │   ├── config.py                 # .env 기반 설정 객체
-│   │   └── security.py               # 사용자·역할·부서 권한 컨텍스트
+│   │   └── config.py                 # .env 기반 설정 객체
 │   ├── logging/
 │   │   ├── logger.py                 # 공통 로그 기록 인터페이스
 │   │   └── formatter.py              # 한 줄 1이벤트 로그 포맷
@@ -132,20 +135,21 @@ skn32_3rd_pj_rag_mcp_chatbot/
 ├── mcp_servers/                      # 사내 지식 접근 MCP Server들
 │   ├── document_tools/               # RAG 담당
 │   │   ├── server.py                 # search_documents Tool 등록·서버 시작
-│   │   ├── search.py                 # query+권한 -> ACL -> 검색 결과 반환
+│   │   ├── document_db.py            # 내부 문서 DB에서 파일 경로 조회
+│   │   ├── file_loader.py            # 조회된 경로의 문서 파일 로드
+│   │   ├── search.py                 # 경로 조회 -> 파일 로드 -> RAG 검색
 │   │   ├── rag.py                    # query embedding, top-k, rerank
 │   │   ├── faiss_store.py            # FAISS index/metadata load·search
-│   │   └── acl.py                    # 문서 ACL 필터
+│   │   └── types.py                  # 문서 경로·청크·인덱스 타입
 │   └── data_tools/
 │       ├── server.py                 # 도메인 Tool 등록·공통 실행
-│       ├── sql_guard.py              # SELECT-only, whitelist, limit, timeout 검사
 │       ├── finance/                  # 재무 담당: query_finance, Text2SQL, read-only MySQL
 │       └── sales/                    # 판매 담당: query_sales, Text2SQL, read-only MySQL
 │
 ├── ingestion/                        # 문서 -> FAISS 배치 인덱싱
 │   ├── loaders.py                    # PDF/TXT/Markdown 원문 로드
 │   ├── chunking.py                   # 문맥 보존 청킹
-│   ├── metadata.py                   # source, title, update, ACL 메타데이터
+│   ├── metadata.py                   # source, title, file_path, update 메타데이터
 │   ├── embedding.py                  # 청크 embedding 생성
 │   └── index.py                      # FAISS 및 metadata 저장·버전 갱신
 │
@@ -154,15 +158,12 @@ skn32_3rd_pj_rag_mcp_chatbot/
 │   └── sales/                        # 판매 담당: ETL, UPSERT, 실행 이력
 │
 ├── database/
-│   ├── policy/                       # 도메인별 허용 View 정책
-│   │   ├── finance_allowed_views.yaml
-│   │   └── sales_allowed_views.yaml
 │   ├── finance/                      # 재무 테이블·View DDL, 용어집
 │   └── sales/                        # 판매 테이블·View DDL, 용어집
 │
 ├── data/                             # Git 미추적 실제/산출 데이터
 │   ├── raw/
-│   │   ├── documents/                # 사내 원본 문서
+│   │   ├── documents/                # 문서 DB 경로가 가리키는 파일 저장소(직접 순회 금지)
 │   │   └── source_data/              # ETL 입력 CSV/Excel/JSON
 │   └── faiss/                        # FAISS index, metadata, version 파일
 │
@@ -173,6 +174,7 @@ skn32_3rd_pj_rag_mcp_chatbot/
 │
 ├── logs/                             # 임시 텍스트 로그 저장소(현재 Git 미추적)
 │   ├── app.log.txt                   # 통합 흐름
+│   ├── rag.log.txt                   # RAG 실행
 │   ├── etl_finance.log.txt           # 재무 ETL
 │   └── etl_sales.log.txt             # 판매 ETL
 │
@@ -186,8 +188,8 @@ skn32_3rd_pj_rag_mcp_chatbot/
     │   ├── test_api.py               # API 형식·입력 검증
     │   ├── test_agent.py             # router/evidence/state 노드
     │   ├── test_cache.py             # cache key/TTL/hit/miss
-    │   ├── test_document_mcp.py      # RAG·ACL·FAISS adapter
-    │   ├── test_data_mcp.py          # Text2SQL·SQL guard·result format
+    │   ├── test_document_mcp.py      # 문서 DB 경로 조회·파일 로드·RAG 순서
+    │   ├── test_data_mcp.py          # 재무·판매 Tool dispatch
     │   ├── test_ingestion.py         # loader/chunk/embedding/index
     │   └── test_etl.py               # extract/transform/validate/load
     └── integration/
@@ -197,26 +199,11 @@ skn32_3rd_pj_rag_mcp_chatbot/
         └── test_etl_mysql_flow.py     # ETL -> test MySQL insert/upsert 흐름
 ```
 
-### 5.1 현재 구조 반영 및 구현 단계
-
-위 구조는 [`docs/ownership.md`](docs/ownership.md)의 코드 소유권 경계를 실제 경로에
-반영한 결과다. 통합 코드는 `app/`, `app/cache/`, `app/logging/`,
-`mcp_servers/data_tools/server.py`, `mcp_servers/data_tools/sql_guard.py`에 둔다. RAG는
-`ingestion/`과 `mcp_servers/document_tools/`에, 재무·판매 도메인 코드는 각각
-`etl/{finance,sales}/`, `mcp_servers/data_tools/{finance,sales}/`,
-`database/{finance,sales}/`에 둔다.
-
-현재 저장소는 구현 명세와 함께 단계적 스켈레톤을 포함한다. 라우팅, 메모리 캐시, 캐시 키,
-헬스 체크, 문서 ACL, 최소 SQL 쓰기 차단은 동작하지만, LangGraph 조립, MCP 전송,
-FAISS/MySQL 연동, 도메인 ETL 및 evidence_eval은 후속 구현 대상이다. 아래의 인터페이스와
-완료 조건은 구현 목표이며, 현재 동작 범위는 `docs/test-scenarios.md`에서 별도로 관리한다.
-
 ## 6. 모듈별 구현 지시
 
 ### `app/api/chat.py`
 
-- 입력: `question`, 선택적 `session_id`, `user_context`.
-- `security.py`에서 신뢰 가능한 사용자 컨텍스트를 생성한다. 운영 환경에서 사용자 권한을 클라이언트 입력으로 신뢰하면 안 된다.
+- 입력: `question`, 선택적 `session_id`.
 - `graph.ainvoke()`에 초기 상태를 전달한다.
 - 출력: `answer`, `sources`, `cached`, 필요 시 `route` 및 `request_id`.
 - 스트리밍은 MVP 완료 후 Server-Sent Events로 추가한다.
@@ -244,7 +231,7 @@ LangGraph 노드는 캐시를 직접 읽거나 쓰지 않는다.
 캐시 키는 최소 아래 요소를 해시해야 한다.
 
 ```text
-normalized_question + tenant/user permission scope + conversation context hash
+normalized_question + conversation context hash
 + document_index_version + database freshness bucket + prompt_version + model_id
 ```
 
@@ -252,52 +239,47 @@ normalized_question + tenant/user permission scope + conversation context hash
 
 ### `mcp_servers/document_tools/`
 
-`search_documents(query, user_context, top_k)` Tool은 다음 순서를 지킨다.
+`search_documents(query, top_k)` Tool은 다음 순서를 지킨다.
 
 ```text
-권한 범위 확인 -> query embedding -> FAISS 후보 검색 -> ACL filter
--> optional rerank -> chunk text + metadata + source 반환
+내부 문서 DB에서 관련 파일 경로 조회 -> 해당 파일 로드
+-> query embedding -> FAISS 검색 -> optional rerank
+-> chunk text + metadata + source 반환
 ```
 
-반환값은 최소 `chunk_id`, `document_id`, `title`, `content`, `score`, `updated_at`, `allowed_roles`를 포함한다. ACL은 검색 후 필터링만 하지 말고, 가능하면 metadata filter 후보 단계에도 적용한다.
+문서 DB에서는 문서 본문을 바로 가져오지 않고 `document_id`, `title`, `file_path`,
+`updated_at`만 조회한다. 반환값은 최소 `chunk_id`, `document_id`, `title`, `content`,
+`score`, `updated_at`을 포함하며 내부 `file_path`는 출처 구성에 사용하되 사용자 응답에는
+노출하지 않는다.
 
 ### `mcp_servers/data_tools/`
 
-`query_finance(question, user_context)`와 `query_sales(question, user_context)`는 각 도메인
-소유 모듈에서 구현한다. 공통 서버와 SQL Guard는 두 도메인의 Tool 등록과 안전 검증만
-담당한다.
+`query_finance(question)`와 `query_sales(question)`는 각 도메인 소유 모듈에서 구현한다.
+공통 서버는 두 도메인의 Tool 등록과 요청 전달만 담당한다.
 
 ```text
 mcp_servers/data_tools/
 ├── server.py                 # 통합: Tool 등록·도메인 전달
-├── sql_guard.py              # 통합: SELECT-only 공통 검증
 ├── finance/                  # 재무: query_finance, schema, text2sql, mysql
 └── sales/                    # 판매: query_sales, schema, text2sql, mysql
 ```
 
 ```text
-스키마/용어집 제공 -> SQL 생성 -> SQL Guard -> 권한 필터 적용
--> read-only MySQL 실행 -> 결과 행 수 제한 -> 결과와 실행 메타데이터 반환
+스키마/용어집 제공 -> SQL 생성 -> read-only MySQL 실행
+-> 결과 행 수 제한 -> 결과와 실행 메타데이터 반환
 ```
-
-`sql_guard.py`는 최소 다음을 차단한다.
-
-- `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `CREATE`, `TRUNCATE`, `GRANT`
-- 다중 statement와 세미콜론 기반 우회
-- 허용 목록 밖 테이블·컬럼
-- `LIMIT` 없는 대용량 조회
-- 설정된 쿼리 timeout 초과
 
 ### `ingestion/`
 
 문서 인덱싱은 API 요청 경로에서 실행하지 않는다. `scripts/ingest_documents.py`를 통해 배치 실행한다.
 
 ```text
-data/raw/documents -> load -> clean/chunk -> metadata/ACL -> embedding
--> FAISS index + metadata -> data/faiss
+내부 문서 DB -> file_path 조회 -> 파일 로드 -> clean/chunk -> metadata
+-> embedding -> FAISS index + metadata -> data/faiss
 ```
 
-문서 변경 시 인덱스 버전을 증가시키고, cache key에서 이 버전을 사용한다. 문서 내용/ACL 변경 시 관련 캐시를 무효화하거나 이전 버전 키가 재사용되지 않게 한다.
+문서 변경 시 인덱스 버전을 증가시키고 cache key에서 이 버전을 사용한다. 문서 DB의 경로
+또는 실제 파일이 변경되면 이전 버전 키가 재사용되지 않게 한다.
 
 ### `etl/finance/`, `etl/sales/`
 
@@ -315,7 +297,7 @@ data/raw/source_data -> extract -> transform -> validate -> MySQL load
 `scripts/load_mysql_data.py`는 도메인별 파이프라인 선택과 입력 검증을 완료한 뒤에만 각
 디렉터리의 `pipeline.py`를 호출해야 한다. 챗봇 API나 `app/agent/`에서 ETL을 호출하지 않는다.
 
-## 7. 환경변수와 권한
+## 7. 환경변수와 연결 계정
 
 `.env`에는 비밀값을 보관하고 Git에 절대 커밋하지 않는다.
 
@@ -333,12 +315,17 @@ MYSQL_DATABASE=chatbot
 DOCUMENT_MCP_URL=http://localhost:8001
 DATA_MCP_URL=http://localhost:8002
 FAISS_PATH=data/faiss
+DOCUMENT_DB_HOST=localhost
+DOCUMENT_DB_USER=document_reader
+DOCUMENT_DB_PASSWORD=
+DOCUMENT_DB_DATABASE=documents
 ```
 
-| 계정 | 권한 | 사용하는 코드 |
+| 계정 | 접근 방식 | 사용하는 코드 |
 |---|---|---|
-| `chatbot_reader` | 허용 View/Table에 `SELECT`만 | `mcp_servers/data_tools/{finance,sales}/mysql.py` |
-| `etl_writer` | 지정된 적재 테이블에 `INSERT`, 제한적 `UPDATE` | `etl/{finance,sales}/load.py` |
+| `document_reader` | 문서 식별자·파일 경로 읽기 | `mcp_servers/document_tools/document_db.py` |
+| `chatbot_reader` | 업무 데이터 읽기 | `mcp_servers/data_tools/{finance,sales}/mysql.py` |
+| `etl_writer` | 업무 데이터 적재 | `etl/{finance,sales}/load.py` |
 | Redis 계정 | 지정 namespace의 get/set/delete | `app/cache/repository.py` |
 
 ## 8. 테스트 기준
@@ -347,11 +334,10 @@ FAISS_PATH=data/faiss
 
 ### 필수 단위 테스트
 
-- 동일 질문·동일 권한·동일 버전이면 cache key가 동일하다.
-- 권한 또는 문서 버전이 달라지면 cache key가 달라진다.
+- 동일 질문·동일 문맥·동일 버전이면 cache key가 동일하다.
+- 대화 문맥 또는 문서 버전이 달라지면 cache key가 달라진다.
 - `DOCUMENT`, `DATABASE`, `GENERAL`, `BOTH` 라우팅이 기대대로 동작한다.
-- ACL이 없는 문서는 Document MCP 결과에서 제외된다.
-- SQL Guard가 쓰기 쿼리, 다중 쿼리, 비허용 테이블, LIMIT 누락을 거부한다.
+- 문서 검색이 문서 DB 경로 조회 → 파일 로드 → RAG 순서로 수행된다.
 - ETL이 중복 제거·필수값 검증·타입 변환을 수행한다.
 - Evidence Eval이 근거 부족 및 충돌 상태를 올바르게 반환한다.
 
@@ -368,25 +354,3 @@ pytest tests/unit              # 빠른 단위 테스트
 pytest tests/integration       # 통합 테스트
 pytest tests/unit/test_etl.py  # ETL 기능만
 ```
-
-## 9. 구현 순서
-
-1. FastAPI `/api/health`, 최소 UI, `ChatRequest/ChatResponse` 구현.
-2. In-memory Answer Cache와 cache hit/miss 단위 테스트 구현.
-3. LangGraph `GENERAL` 및 `DOCUMENT` 라우팅과 mock MCP Client 구현.
-4. Document MCP, 문서 ingestion, FAISS 검색, ACL 필터 구현.
-5. Data MCP, schema policy, Text2SQL skeleton, SQL Guard 구현.
-6. ETL extract/transform/validate/load와 테스트 MySQL 통합 테스트 구현.
-7. Evidence Eval 및 `BOTH` 경로 구현.
-8. Redis adapter, 실제 OpenAI 호출, 비용·오류 로그를 연결.
-
-## 10. 완료 조건
-
-- [ ] 동일 질문 재요청 시 캐시 답변이 반환되고 LLM/MCP 호출이 없다.
-- [ ] 문서 질문은 Document MCP를 통해서만 FAISS를 조회한다.
-- [ ] 데이터 질문은 Data MCP를 통해서만 MySQL을 읽기 조회한다.
-- [ ] `BOTH` 질문에서 문서/DB 근거가 모두 보존되고 출처와 함께 답변된다.
-- [ ] Data MCP가 어떤 경우에도 DML/DDL을 실행하지 않는다.
-- [ ] ETL만 MySQL 쓰기 권한을 가지며, 검증 실패 데이터는 적재하지 않는다.
-- [ ] pytest 단위·통합 테스트가 통과한다.
-- [ ] 실제 사내 문서·원천 데이터·`.env`·FAISS 산출물은 Git에 커밋하지 않는다.

@@ -10,8 +10,9 @@ def build_index(
 ) -> IndexBuildResult:
     """chunk와 vector의 1:1 대응을 검증해 FAISS 인덱스와 metadata를 원자적으로 작성한다.
 
-    출력 폴더에 임시 파일로 저장·검증한 뒤 교체하고, chunk metadata/ACL·인덱스 버전·개수를
-    함께 기록한다. 벡터 수·차원 불일치, 기존 인덱스 손상은 버전을 올리기 전에 실패시킨다.
+    출력 폴더에 임시 파일로 저장·검증한 뒤 교체하고, chunk metadata·file_path·인덱스
+    버전·개수를 함께 기록한다. 벡터 수·차원 불일치, 기존 인덱스 손상은 버전을 올리기
+    전에 실패시킨다.
     """
     ...
 

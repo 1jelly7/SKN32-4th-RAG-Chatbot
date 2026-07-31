@@ -15,7 +15,6 @@ EvidenceStatus = Literal[
 class GraphState(TypedDict, total=False):
     question: str
     session_id: str | None
-    user_context: dict[str, Any]
     request_id: str
     route: Route
     data_domain: DataDomain
