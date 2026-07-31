@@ -1,0 +1,12 @@
+.idea/
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+data/raw/documents/*
+data/raw/source_data/*
+!data/raw/.gitkeep
+data/faiss/*
+!data/faiss/.gitkeep
+logs/*.log.txt

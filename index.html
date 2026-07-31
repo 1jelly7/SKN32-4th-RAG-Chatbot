@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 검색 챗봇 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#1e40af',
+                        bglight: '#f3f4f6',
+                        bggray: '#e5e7eb',
+                        bordercolor: '#d1d5db',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        /* 캡처를 위한 스타일 */
+        .capture-container {
+            position: relative;
+        }
+        .download-btn {
+            position: absolute;
+            top: -15px;
+            right: -15px;
+            display: none;
+            background: white;
+            border-radius: 50%;
+            padding: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            cursor: pointer;
+            z-index: 10;
+        }
+        .capture-container:hover .download-btn {
+            display: flex;
+        }
+    </style>
+</head>
+<body class="bg-bglight h-screen flex overflow-hidden">
+    <!-- 메인 화면 (좌측) -->
+    <main class="flex-1 flex flex-col h-full border-r border-bordercolor bg-white relative">
+        <!-- 헤더 -->
+        <header class="p-4 border-b border-bordercolor flex justify-between items-center bg-white z-10 shadow-sm">
+            <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <i class="fa-solid fa-robot text-primary"></i> 
+                AI 검색 어시스턴트
+            </h1>
+            <div class="flex gap-3">
+                <button class="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><i class="fa-solid fa-bars"></i></button>
+            </div>
+        </header>
+
+        <!-- 채팅 / 결과 영역 -->
+        <div id="chat-container" class="flex-1 overflow-y-auto p-6 custom-scroll flex flex-col gap-6">
+            <!-- 사용자 질문 -->
+            <div class="flex justify-end mb-2">
+                <div class="bg-primary text-white rounded-2xl rounded-tr-sm py-3 px-5 max-w-[80%] shadow-sm">
+                    <p>2023년 대비 2024년 부서별 매출 성장률과 관련 주요 요인들을 표와 차트로 정리해줘. 참고한 문서도 알려줘.</p>
+                </div>
+            </div>
+
+            <!-- AI 답변 -->
+            <div class="flex gap-4 mb-2 max-w-[90%]">
+                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 border border-blue-200">
+                    <i class="fa-solid fa-robot text-primary"></i>
+                </div>
+                <div class="flex flex-col gap-4 w-full">
+                    <div class="bg-gray-50 border border-bordercolor rounded-2xl rounded-tl-sm p-5 shadow-sm text-gray-800 leading-relaxed">
+                        <p class="mb-4">요청하신 2023년 대비 2024년 부서별 매출 성장률 분석 결과입니다. 첨부된 내부 회의록 및 구매 보고서를 바탕으로 작성되었습니다.</p>
+
+                        <h3 class="font-bold text-lg mt-4 mb-2 border-b pb-1">주요 성장 요인</h3>
+                        <ul class="list-disc pl-5 mb-5 space-y-1">
+                            <li><span class="font-semibold text-blue-700">IT 부서:</span> 클라우드 전환 프로젝트 성공 및 신규 AI 솔루션 도입으로 가장 높은 성장(45%) 기록</li>
+                            <li><span class="font-semibold text-blue-700">마케팅 부서:</span> 3분기 대규모 글로벌 캠페인 성공으로 25% 성장 달성</li>
+                            <li><span class="font-semibold text-blue-700">영업 부서:</span> 주요 대기업 고객사 확보로 15%의 안정적인 성장 유지</li>
+                        </ul>
+
+                        <!-- 표 (다운로드 가능) -->
+                        <div class="capture-container mt-6 mb-6 inline-block w-full border border-gray-200 rounded-lg p-4 bg-white" id="table-capture">
+                            <button class="download-btn text-gray-600 hover:text-primary transition-colors" onclick="downloadElement('table-capture', '부서별_매출_성장률_표.png')" title="이미지로 저장">
+                                <i class="fa-solid fa-download"></i>
+                            </button>
+                            <h4 class="font-bold text-center mb-3">2023-2024 부서별 매출 현황 (단위: 억원)</h4>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left border-collapse">
+                                    <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                                        <tr>
+                                            <th class="px-4 py-3 border border-gray-300">부서명</th>
+                                            <th class="px-4 py-3 border border-gray-300">2023년 매출</th>
+                                            <th class="px-4 py-3 border border-gray-300">2024년 매출</th>
+                                            <th class="px-4 py-3 border border-gray-300 text-right">성장률 (%)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr class="bg-white border-b hover:bg-gray-50">
+                                            <td class="px-4 py-3 border border-gray-300 font-medium">IT 부서</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right">240</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right">348</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right font-bold text-green-600">+45.0%</td>
+                                        </tr>
+                                        <tr class="bg-gray-50 border-b hover:bg-gray-100">
+                                            <td class="px-4 py-3 border border-gray-300 font-medium">마케팅</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right">180</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right">225</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right font-bold text-green-600">+25.0%</td>
+                                        </tr>
+                                        <tr class="bg-white border-b hover:bg-gray-50">
+                                            <td class="px-4 py-3 border border-gray-300 font-medium">영업</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right">520</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right">598</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right font-bold text-green-600">+15.0%</td>
+                                        </tr>
+                                        <tr class="bg-gray-50 hover:bg-gray-100">
+                                            <td class="px-4 py-3 border border-gray-300 font-medium">연구개발</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right">120</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right">126</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right font-bold text-green-600">+5.0%</td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot class="font-bold bg-blue-50">
+                                        <tr>
+                                            <td class="px-4 py-3 border border-gray-300">총계</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right">1,060</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right">1,297</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-right text-blue-700">+22.4%</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-2 text-right">* 표를 클릭(우측 상단 아이콘)하여 이미지로 저장할 수 있습니다.</p>
+                        </div>
+
+                        <!-- 차트 (다운로드 가능) -->
+                        <div class="capture-container mt-2 mb-2 inline-block w-full border border-gray-200 rounded-lg p-4 bg-white" id="chart-capture">
+                            <button class="download-btn text-gray-600 hover:text-primary transition-colors" onclick="downloadElement('chart-capture', '부서별_성장률_차트.png')" title="이미지로 저장">
+                                <i class="fa-solid fa-download"></i>
+                            </button>
+                            <h4 class="font-bold text-center mb-3">부서별 매출 성장률 비교 차트</h4>
+                            <div class="w-full h-[300px] flex justify-center">
+                                <canvas id="growthChart"></canvas>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-2 text-right">* 차트를 클릭(우측 상단 아이콘)하여 이미지로 저장할 수 있습니다.</p>
+                        </div>
+                    </div>
+
+                    <!-- 상태 표시 -->
+                    <div class="flex items-center gap-2 text-xs text-gray-500 ml-2">
+                        <i class="fa-solid fa-check-double text-blue-500"></i> 답변 생성 완료 (우측 패널에서 출처 확인 가능)
+                    </div>
+                </div>
+            </div>
+
+            <!-- 여백 확보 -->
+            <div class="h-10"></div>
+        </div>
+
+        <!-- 검색창 (하단 고정) -->
+        <div class="p-4 bg-white border-t border-bordercolor shadow-[0_-5px_15px_-10px_rgba(0,0,0,0.1)]">
+            <div class="max-w-4xl mx-auto relative flex items-center">
+                <button class="absolute left-4 text-gray-400 hover:text-primary transition-colors p-2">
+                    <i class="fa-solid fa-paperclip"></i>
+                </button>
+                <textarea 
+                    class="w-full bg-gray-50 border border-gray-300 text-gray-900 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary block p-4 pl-12 pr-16 resize-none custom-scroll" 
+                    rows="2" 
+                    placeholder="궁금한 내용을 입력하세요 (예: 2024년 영업부 실적 자료 찾아줘)..."></textarea>
+                <button class="absolute right-3 bottom-3 bg-primary hover:bg-secondary text-white rounded-lg p-2.5 transition-colors shadow-sm">
+                    <i class="fa-solid fa-paper-plane px-1"></i>
+                </button>
+            </div>
+            <div class="text-center mt-2 text-[11px] text-gray-400">
+                AI는 실수를 할 수 있습니다. 중요한 정보는 항상 출처를 확인하세요.
+            </div>
+        </div>
+    </main>
+
+    <!-- 우측 패널 (RAG 문서 출처) -->
+    <aside class="w-[400px] bg-gray-50 flex flex-col h-full shadow-[-5px_0_15px_-10px_rgba(0,0,0,0.1)] z-20">
+        <!-- 패널 헤더 -->
+        <div class="p-5 border-b border-bordercolor bg-white flex items-center gap-3">
+            <div class="bg-blue-100 p-2 rounded-lg text-primary">
+                <i class="fa-solid fa-file-contract"></i>
+            </div>
+            <div>
+                <h2 class="font-bold text-gray-800">참고 문서 출처</h2>
+                <p class="text-xs text-gray-500 mt-0.5">답변 생성에 사용된 내부 RAG 검색 결과</p>
+            </div>
+        </div>
+
+        <!-- 문서 리스트 -->
+        <div class="flex-1 overflow-y-auto p-4 custom-scroll space-y-4">
+
+            <!-- 문서 1 -->
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group overflow-hidden">
+                <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-file-pdf text-red-500 text-lg"></i>
+                            <h3 class="font-semibold text-gray-800 text-sm truncate w-[240px]" title="2024_경영실적_보고서_최종.pdf">2024_경영실적_보고서_최종.pdf</h3>
+                        </div>
+                        <span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded border border-green-200">높은 관련성</span>
+                    </div>
+
+                    <div class="text-xs text-gray-500 mb-3 flex gap-3">
+                        <span><i class="fa-regular fa-calendar mr-1"></i> 2025-01-15</span>
+                        <span><i class="fa-regular fa-folder mr-1"></i> 구매팀</span>
+                    </div>
+
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r-lg text-sm text-gray-700">
+                        <p class="font-medium text-xs text-gray-500 mb-1">인용된 텍스트:</p>
+                        <p class="line-clamp-3">"...특히 <strong>IT 부서</strong>의 경우 작년 하반기부터 추진된 클라우드 전환 프로젝트가 성공적으로 마무리되고, 전사적 AI 솔루션 도입이 가속화되면서 전년 동기 대비 <strong>45%라는 가장 높은 성장률</strong>을 기록하였습니다. 이는 당초 목표치를 15% 이상 상회하는 수치입니다..."</p>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 px-4 py-2 border-t border-gray-100">
+                    <button class="w-full flex items-center justify-center gap-2 text-sm text-primary font-medium hover:text-secondary py-1 transition-colors" onclick="alert('2024_경영실적_보고서_최종.pdf 파일 다운로드를 시작합니다.')">
+                        <i class="fa-solid fa-download"></i> 원본 문서 다운로드
+                    </button>
+                </div>
+            </div>
+
+            <!-- 문서 2 -->
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group overflow-hidden">
+                <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-file-word text-blue-600 text-lg"></i>
+                            <h3 class="font-semibold text-gray-800 text-sm truncate w-[240px]" title="3분기_글로벌마케팅_결과보고.docx">3분기_글로벌마케팅_결과보고.docx</h3>
+                        </div>
+                    </div>
+
+                    <div class="text-xs text-gray-500 mb-3 flex gap-3">
+                        <span><i class="fa-regular fa-calendar mr-1"></i> 2024-11-20</span>
+                        <span><i class="fa-regular fa-folder mr-1"></i> 마케팅팀</span>
+                    </div>
+
+                    <div class="bg-gray-50 border-l-4 border-gray-400 p-3 rounded-r-lg text-sm text-gray-700">
+                        <p class="font-medium text-xs text-gray-500 mb-1">인용된 텍스트:</p>
+                        <p class="line-clamp-3">"...이번 북미/유럽 타겟 대규모 캠페인의 성공적인 안착으로 <strong>마케팅 부서</strong> 기여 매출이 크게 증가했습니다. 결과적으로 해당 부문에서 전년 대비 <strong>25%의 매출 성장</strong>을 달성했으며, 신규 리드 확보 측면에서도..."</p>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 px-4 py-2 border-t border-gray-100">
+                    <button class="w-full flex items-center justify-center gap-2 text-sm text-gray-600 font-medium hover:text-primary py-1 transition-colors" onclick="alert('3분기_글로벌마케팅_결과보고.docx 파일 다운로드를 시작합니다.')">
+                        <i class="fa-solid fa-download"></i> 원본 문서 다운로드
+                    </button>
+                </div>
+            </div>
+
+            <!-- 문서 3 -->
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group overflow-hidden">
+                <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-file-excel text-green-600 text-lg"></i>
+                            <h3 class="font-semibold text-gray-800 text-sm truncate w-[240px]" title="23_24_부서별_매출_RawData.xlsx">23_24_부서별_매출_RawData.xlsx</h3>
+                        </div>
+                    </div>
+
+                    <div class="text-xs text-gray-500 mb-3 flex gap-3">
+                        <span><i class="fa-regular fa-calendar mr-1"></i> 2025-01-10</span>
+                        <span><i class="fa-regular fa-folder mr-1"></i> Data팀</span>
+                    </div>
+
+                    <div class="bg-gray-50 border-l-4 border-gray-400 p-3 rounded-r-lg text-sm text-gray-700">
+                        <p class="font-medium text-xs text-gray-500 mb-1">참고 데이터:</p>
+                        <ul class="text-xs space-y-1">
+                            <li>- 영업부 23년: 520억 / 24년: 598억 (15%↑)</li>
+                            <li>- 연구개발 23년: 120억 / 24년: 126억 (5%↑)</li>
+                            <li>- 전체 총계: 1060억 -> 1297억 (22.4%↑)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 px-4 py-2 border-t border-gray-100">
+                    <button class="w-full flex items-center justify-center gap-2 text-sm text-gray-600 font-medium hover:text-primary py-1 transition-colors" onclick="alert('23_24_부서별_매출_RawData.xlsx 파일 다운로드를 시작합니다.')">
+                        <i class="fa-solid fa-download"></i> 원본 문서 다운로드
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </aside>
+
+    <!-- 스크립트 영역 (차트 렌더링 및 캡처 기능) -->
+    <script>
+        // 1. Chart.js 렌더링
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('growthChart').getContext('2d');
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['IT 부서', '마케팅', '영업', '연구개발'],
+                    datasets: [
+                        {
+                            label: '2023년 매출',
+                            data: [240, 180, 520, 120],
+                            backgroundColor: 'rgba(156, 163, 175, 0.5)',
+                            borderColor: 'rgb(156, 163, 175)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '2024년 매출',
+                            data: [348, 225, 598, 126],
+                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                            borderColor: 'rgb(59, 130, 246)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: '매출액 (억원)' }
+                        }
+                    },
+                    // 차트 애니메이션 비활성화 (캡처 시 안정성 위해)
+                    animation: {
+                        duration: 0
+                    }
+                }
+            });
+        });
+
+        // 2. html2canvas 요소 캡처 및 다운로드 기능
+        function downloadElement(elementId, fileName) {
+            const element = document.getElementById(elementId);
+
+            // 캡처 버튼 임시 숨김 처리
+            const btn = element.querySelector('.download-btn');
+            if(btn) btn.style.display = 'none';
+
+            // 요소 캡처
+            html2canvas(element, {
+                scale: 2, // 고해상도 캡처
+                backgroundColor: '#ffffff', // 배경색 지정
+                logging: false,
+                useCORS: true
+            }).then(canvas => {
+                // 이미지 데이터 URL 생성
+                const imgData = canvas.toDataURL('image/png');
+
+                // 가상 링크 생성 및 클릭하여 다운로드
+                const link = document.createElement('a');
+                link.download = fileName;
+                link.href = imgData;
+                link.click();
+
+                // 버튼 다시 보이기
+                if(btn) btn.style.display = '';
+
+                // 알림창
+                alert(fileName + ' 이미지가 다운로드 되었습니다.');
+            }).catch(err => {
+                console.error('캡처 중 오류 발생:', err);
+                alert('이미지 생성 중 오류가 발생했습니다.');
+                if(btn) btn.style.display = '';
+            });
+        }
+    </script>
+</body>
+</html>
