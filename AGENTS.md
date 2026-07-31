@@ -1,212 +1,74 @@
 # AGENTS.md
 
-## 1. 프로젝트와 담당 범위
+## 1. 프로젝트 개요
 
-이 저장소는 FastAPI Host가 LangGraph, Answer Cache, MCP Client를 통해 문서 RAG와 업무 데이터 조회를 오케스트레이션하는 구조다.
+사내 문서 RAG와 재무·판매 업무 데이터 Text2SQL을 하나의 채팅 API로 제공하는 MCP 기반 챗봇이다. FastAPI가 LangGraph, 캐시, Document/Data MCP를 조율하며 정적 HTML/CSS/JavaScript UI를 함께 제공한다.
+런타임은 Python이며 의존성은 `pip`와 `requirements.txt`로 관리한다. 주요 기술은 FastAPI, Pydantic, LangGraph, OpenAI SDK, MCP, FAISS, MySQL, Redis, pytest이고 Node.js/TypeScript/package manager는 사용하지 않는다.
 
-현재 작업자는 backend 및 integration 담당자다. 이번 단계의 목표는 실제 외부 팀원 산출물을 연결하기 직전까지의 통합 기반을 구현하는 것이다.
+## 2. 실행 및 테스트 명령
 
-담당 범위:
-
-- FastAPI 진입점, API, Pydantic schema
-- Agent state, routing, graph 조립, evidence evaluation, LLM port
-- Cache 정책·repository port·service
-- MCP client port, 공통 Data MCP Tool 등록 경계
-- 공통 logging, 설정, dependency injection
-- 계약 테스트와 fake/mock 기반 통합 테스트
-
-이번 단계에서는 다음을 구현하거나 실제로 연결하지 않는다.
-
-- 실제 Document MCP / Data MCP 서버
-- 실제 MySQL, Redis, FAISS, OpenAI
-- 문서 ingestion, embedding, FAISS index 생성
-- 구매·판매 ETL, DDL, View, Text2SQL
-- 실제 API key 또는 외부 인프라
-
-## 2. 수정 가능·금지 경로
-
-### 수정 가능
-
-- `app/main.py`
-- `app/api/`
-- `app/schemas/`
-- `app/core/`
-- `app/agent/`
-- `app/cache/`
-- `app/logging/`
-- `app/mcp/client.py`
-- `mcp_servers/data_tools/server.py`
-- backend/integration 범위의 테스트:
-  - `tests/unit/test_api.py`
-  - `tests/unit/test_agent.py`
-  - `tests/unit/test_cache.py`
-  - `tests/unit/test_data_mcp.py`
-  - `tests/unit/test_logging.py`
-  - `tests/integration/test_chat_document_flow.py`
-  - `tests/integration/test_chat_data_flow.py`
-  - `tests/integration/test_cache_flow.py`
-
-### 수정 금지
-
-- `mcp_servers/document_tools/`
-- `ingestion/`
-- `mcp_servers/data_tools/purchase/`
-- `mcp_servers/data_tools/sales/`
-- `etl/purchase/`
-- `etl/sales/`
-- `database/purchase/`
-- `database/sales/`
-- `data/raw/`, `data/faiss/`
-- 팀원 소유 테스트:
-  - `tests/unit/test_document_mcp.py`
-  - `tests/unit/test_etl.py`
-  - `tests/unit/test_ingestion.py`
-  - `tests/integration/test_etl_mysql_flow.py`
-
-`docs/interface.md`, `docs/ownership.md`, `docs/architecture.md`, `docs/test-scenarios.md`의 계약 변경이 필요하면 코드를 먼저 수정하지 말고 `BLOCKED`로 보고한다.
-
-## 3. 반드시 읽을 문서
-
-구현 또는 계약 테스트 작성 전 아래 문서를 읽는다.
-
-1. `README.md`
-2. `docs/architecture.md`
-3. `docs/interface.md`
-4. `docs/ownership.md`
-5. `docs/test-scenarios.md`
-6. `pytest.ini`
-7. `.env.example`
-
-특히 `docs/interface.md`의 Tool 응답 envelope, BOTH 병합, evidence evaluation, cache 무효화 규칙을 따른다.
-
-## 4. 실행 환경과 설치 명령
-
-Python 가상환경을 사용한다.
+Python 버전은 저장소에 고정돼 있지 않다. 기존 `.venv`는 로컬 경로에 종속될 수 있으므로 실행되지 않으면 삭제 후가 아니라 새 가상환경을 만들어 사용한다. lockfile은 없으며 `requirements.txt`가 유일한 Python 의존성 목록이다.
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-```
-
-환경 변수 파일은 필요할 때만 `.env.example`을 참고해 로컬 `.env`로 준비한다.
-
-```powershell
 Copy-Item .env.example .env
 ```
 
-단, 이번 단계의 unit/integration 테스트에는 실제 API key, DB 비밀번호, 외부 URL을 넣지 않는다. 테스트는 fake 설정값 또는 dependency injection을 사용한다.
-
-## 5. 테스트 명령
-
-기본 테스트 명령은 다음과 같다.
+개발 서버:
 
 ```powershell
-pytest
-pytest tests/unit
-pytest tests/integration
-pytest tests/unit/test_api.py
-pytest tests/unit/test_agent.py
-pytest tests/unit/test_cache.py
+python -m uvicorn app.main:app --reload
 ```
 
-테스트는 네트워크·DB·FAISS·실제 MCP에 연결하지 않아야 한다.
-
-읽기 전용 환경에서 pytest capture 또는 파일 로깅이 막히면 다음처럼 실행할 수 있다.
+테스트:
 
 ```powershell
-$env:PYTHONDONTWRITEBYTECODE='1'
-python -B -m pytest -p no:cacheprovider -s -q
+python -m pytest
+python -m pytest tests/unit
+python -m pytest tests/integration
+python -m pytest tests/unit/test_etl.py
 ```
 
-테스트 결과 보고에는 실행 명령, 통과/실패 수, 실패 원인을 포함한다.
+`pytest.ini`는 `tests/`, `test_*.py`, `unit`/`integration` marker와 async auto mode를 정의한다. 현재 `tests/integration/test_chat_document_flow.py`, `test_chat_data_flow.py`, `test_etl_mysql_flow.py`는 placeholder이므로 통과해도 실제 외부 통합 완료를 뜻하지 않는다. 린트·포맷·타입 검사·빌드 도구 설정과 CI 설정은 현재 없으므로 임의의 명령을 추가하지 않는다.
 
-## 6. 코드 규칙과 타입 힌트 규칙
+`app/core/config.py`의 `Settings`가 환경 변수의 실행 기준이며 `.env.example`이 비밀값 없는 변수 템플릿이다. 로컬에서는 이를 `.env`로 복사한 뒤 `OPENAI_*`, `REDIS_URL`, `MYSQL_READ_*`, `MYSQL_WRITE_*`, `MYSQL_DATABASE`, `DOCUMENT_MCP_URL`, `DATA_MCP_URL`, `FAISS_PATH`, `DOCUMENT_DB_*`를 팀이 제공한 값으로 채운다. 단위 테스트는 가능한 한 API key, 네트워크, MySQL, Redis, FAISS 없이 실행한다.
 
-- Python 함수와 메서드에는 매개변수·반환 타입을 명시한다.
-- 외부 경계는 `Protocol`, Pydantic model, `TypedDict` 중 적절한 타입으로 표현한다.
-- `Any`는 MCP/외부 payload 경계에서만 최소한으로 사용하고, 내부로 전달하기 전에 정규화한다.
-- 비동기 I/O 경계는 `async def`로 두되, fake 구현도 동일한 호출 계약을 유지한다.
-- API 요청/응답은 `app/schemas/`의 Pydantic model로 검증한다.
-- Agent는 MySQL, FAISS, 파일 시스템에 직접 접근하지 않는다.
-- MCP Client는 SQL을 만들거나 수정하지 않고 Tool 호출·timeout·응답 검증만 담당한다.
-- cache read/write는 `app/cache/service.py`를 통한 Graph 외부 경계에 둔다.
-- 비밀값, 질문 원문, 전체 근거 본문, DB 인증정보를 로그에 남기지 않는다.
-- `...` 스켈레톤을 구현할 때는 명시적 fake/port인지 실제 구현 예정 코드인지 테스트로 구분한다.
+## 3. 코드 스타일 및 규칙
 
-## 7. MCP 경계 및 읽기/쓰기 권한 규칙
+- Python 파일·모듈·변수·함수는 `snake_case`, 클래스·Pydantic model·`TypedDict`는 `PascalCase`, 상수는 `UPPER_SNAKE_CASE`를 쓴다. 예: `make_cache_key`, `GraphState`, `INDEX_FILENAME`.
+- 새 Python 함수와 메서드는 매개변수와 반환 타입을 명시한다. `list[str]`, `dict[str, Any]`, `str | None` 같은 내장 generic/union 문법을 쓰고, 경계 타입은 Pydantic model, `TypedDict`, `Protocol`, `Literal`로 표현한다. `Any`는 MCP payload·JSON 표 데이터 같은 외부 경계에서만 최소화한다.
+- import는 `from __future__ import annotations`(필요 시), 표준 라이브러리, 제3자 패키지, 프로젝트 모듈 순으로 빈 줄을 두어 구분한다. 절대 import(`from app...`, `from ingestion...`)를 사용하며 alias 설정은 없다.
+- I/O 경계(FastAPI handler, LLM/MCP 호출, 문서 검색)는 `async def` 계약을 유지하고, 순수 변환·검증·캐시 저장소는 동기 함수로 둔다. 예외는 입력/파일 문제를 `ValueError`·`FileNotFoundError`로 명확히 발생시키고 외부 호출 경계에서는 `raise ... from exc` 또는 비밀정보 없는 `HTTPException`으로 변환한다.
+- API 요청·응답은 `app/schemas/`의 Pydantic model로 검증하고, 그래프 상태는 `app/agent/state.py`의 `GraphState`를 사용한다. 캐시는 그래프 밖의 `app/cache/service.py`에서만 읽고 쓴다.
+- FastAPI/Agent는 MySQL, FAISS, 원문 파일에 직접 접근하지 않는다. 현재 `app/agent/nodes.py`는 전환 단계로 MCP Tool과 같은 async 시그니처의 `mcp_servers.*` 함수를 같은 프로세스에서 호출한다. 이 경계를 우회하는 새 직접 접근을 추가하지 말고 `docs/interface.md`의 envelope와 `BOTH`의 document/database evidence 분리를 유지한다.
+- Data MCP 조회는 SELECT 전용이며 ETL은 API/Agent 요청 경로에서 호출하지 않는다. 질문 원문, 전체 근거, API key, DB 비밀번호, 내부 `file_path`를 로그나 사용자 응답에 남기지 않는다.
+- 웹 UI는 `app/web/`의 vanilla HTML/CSS/JavaScript다. React 컴포넌트, TypeScript, 별도 상태 관리·데이터 패칭 라이브러리는 현재 패턴이 아니다. API 호출과 응답/표/차트 렌더링은 `app/web/chat.js`에 둔다.
+- 테스트는 `tests/unit/test_<기능>.py`, `tests/integration/test_<흐름>.py`에 두고 `pytest` 함수와 `@pytest.mark.parametrize`/`@pytest.mark.asyncio`를 사용한다. 외부 연결은 결정적 fake/mock 또는 `tmp_path`로 대체하고, 실제 로컬 MySQL이 필요한 검증은 명시적으로 skip한다. 기존 contract/acceptance 테스트를 삭제하거나 약화하지 않는다.
+- 자동 포매터는 없지만 구현 코드의 기존 형식인 4칸 들여쓰기, 한 줄 하나의 명확한 동작, 짧은 한국어 docstring/comment를 따른다. 광범위한 `except Exception`은 외부 경계의 부분 실패 처리처럼 필요한 경우에만 이유와 `# noqa: BLE001`을 함께 둔다.
 
-Host와 외부 시스템의 경계는 다음과 같다.
+## 4. 금지 구역 (Guardrails)
 
-```text
-FastAPI / Agent
-  -> Cache service
-  -> MCP client port
-  -> Document MCP / Data MCP port
-```
+- `.env`, `.env.local`, `*.env.local`: 비밀값과 환경별 연결 정보다. `.env.example`을 복사해 로컬에서만 채우고 수정·커밋하지 않는다.
+- `.env.example`: 추적되는 공개 설정 계약이므로 실제 key·비밀번호·사내 URL을 넣지 않는다. `app/core/config.py`의 `Settings` 필드가 추가·삭제될 때만 함께 갱신하고 통합 담당과 공유한다.
+- `data/raw/**`: 실제 문서와 ETL 원천 데이터이며 Git 제외 대상이다. 테스트 데이터는 `tests/fixtures/`에 비식별 소형 fixture로 추가하고 원천 데이터는 직접 수정·커밋하지 않는다.
+- `data/faiss/**`: `scripts/ingest_documents.py` 또는 `scripts/rebuild_faiss_index.py`가 만드는 `index.faiss`/`metadata.json` 산출물이다. 손으로 편집·커밋하지 말고 원천·인덱싱 코드를 바꾼 뒤 스크립트로 재생성한다.
+- `logs/*.txt`, `logs/*.log.txt`: 런타임 생성 로그다. 편집·커밋하지 말고 로그 형식 변경은 `app/logging/` 또는 해당 ETL logger에서 수행한다.
+- `.venv/`, `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `dist/`, `build/`, coverage 산출물: 로컬 환경·캐시·빌드 결과다. 소스처럼 수정하지 말고 필요하면 도구로 재생성한다.
+- `database/sales/ddl.sql`: `python -m etl.sales.ddl` 출력으로 재생성되는 DDL이다. 직접 편집하지 말고 `etl/sales/schema.py`를 변경한 뒤 생성 명령으로 갱신하고 diff를 검토한다.
+- `requirements.txt`: lockfile이 없으므로 임의 정리·버전 변경은 재현성을 직접 바꾼다. 새 직접 import나 호환성 수정이 필요한 경우에만 통합 담당과 공유하고 설치 및 전체 테스트를 다시 실행한다.
+- `mcp_servers/document_tools/`, `ingestion/`는 RAG 소유이고, `mcp_servers/data_tools/{finance,sales,purchase}/`, `etl/{finance,sales,purchase}/`, `database/{finance,sales,purchase}/`는 도메인 소유다. 담당 범위 밖에서는 수정하지 말고 소유자와 계약·생성 절차를 먼저 합의한다.
+- `docs/interface.md`, `docs/architecture.md`, `docs/ownership.md`, `docs/test-scenarios.md`는 Tool/API/소유권 계약이다. 구현과 충돌해 변경이 필요하면 추정으로 코드를 선행 수정하지 말고 관련 소유자 검토 후 문서와 계약 테스트를 함께 갱신한다.
+- 생성된 API client나 schema client, 배포 설정, CI workflow는 현재 저장소에 없다. 존재하지 않는 산출물이나 설정을 추측해 만들지 않는다.
 
-규칙:
+## 5. 완료 기준
 
-- `app/`은 문서 파일, FAISS, MySQL에 직접 연결하지 않는다.
-- 문서 검색은 `search_documents` Tool 계약을 통해서만 수행한다.
-- 데이터 조회는 `query_purchase`, `query_sales` Tool 계약을 통해서만 수행한다.
-- Data MCP는 SELECT 전용이다. INSERT, UPDATE, DELETE, DDL은 금지한다.
-- ETL은 챗봇 API 또는 Agent에서 호출하지 않는다.
-- Document MCP는 원문 파일을 수정하지 않는다.
-- 이번 단계에는 실제 MCP transport 대신 `Protocol`과 fake/mock adapter를 사용한다.
-- Tool 성공/실패 응답은 `docs/interface.md`의 공통 envelope를 유지한다.
-- `BOTH`는 document evidence와 database evidence를 별도로 보존하며, 한쪽 실패 시 부분 응답 계약을 깨지 않는다.
-
-## 8. 테스트 불변 조건
-
-다음 조건은 항상 유지한다.
-
-- 기존 contract 및 acceptance 테스트를 약화하거나 삭제하지 않는다.
-- 팀원 소유 모듈을 구현하거나 리팩터링하지 않는다.
-- 실제 DB, FAISS, 외부 MCP, API key를 unit test에서 사용하지 않는다.
-- 외부 통합은 dependency injection 및 fake/mock으로 대체한다.
-- 인터페이스 문서 변경이 필요하면 코드 변경 전에 `BLOCKED`로 보고한다.
-- cache hit 테스트는 Graph, LLM, MCP port가 호출되지 않았음을 검증한다.
-- DOCUMENT, DATABASE, GENERAL, BOTH 라우팅은 각각 독립적으로 검증한다.
-- BOTH 테스트는 두 evidence 채널이 섞이거나 한쪽 결과가 유실되지 않음을 검증한다.
-- fake MCP 응답도 실제 Tool envelope와 동일한 success/error 구조를 사용한다.
-- 테스트 fixture는 결정적이어야 하며 시간, 네트워크, 로컬 DB 상태에 의존하지 않는다.
-
-## 9. Git/커밋 규칙
-
-- `main`에는 직접 push하지 않는다.
-- backend/integration 작업은 backend 계열 기능 브랜치에서 수행하고, 최종 병합은 `develop`을 거친다.
-- 한 커밋은 하나의 목적만 가진다.
-- 커밋 전 관련 unit test와 mock 기반 integration test를 실행한다.
-- 팀원 소유 경로가 변경된 경우 커밋하지 말고 소유자와 조율한다.
-- Tool 이름, 응답 형식, cache key, BOTH 병합, source 형식 변경은 독립 커밋으로 분리하고 관련 담당자의 검토를 요청한다.
-- 비밀값, `.env`, 실제 데이터, FAISS 산출물, 로그 파일을 커밋하지 않는다.
-
-## 10. 완료 보고 형식
-
-작업 완료 또는 중단 시 아래 형식으로 보고한다.
-
-```md
-## 결과
-
-- 상태: DONE | BLOCKED
-- 구현 범위:
-  - ...
-- 변경 파일:
-  - ...
-- 추가/변경한 계약 테스트:
-  - ...
-- 실행한 테스트:
-  - `<command>` — 결과
-- 외부 의존성:
-  - fake/mock으로 대체한 대상
-  - 실제 통합 시 필요한 담당 팀원 산출물
-- 계약 확인 사항:
-  - 확정된 내용
-  - 아직 미확정인 내용
-- BLOCKED 사유:
-  - 없으면 `없음`
-```
-
-`BLOCKED`일 때는 필요한 문서 변경 또는 외부 팀원 결정 사항을 구체적으로 적고, 추정으로 인터페이스를 변경하지 않는다.
+- [ ] 변경 파일이 담당 범위 안에 있고, `git diff --check`와 `git status --short`로 비밀값·생성물·금지 구역 변경이 없는지 확인했다.
+- [ ] 변경 범위의 단위 테스트를 실행했고, 가능하면 `python -m pytest tests/unit`을 통과했다.
+- [ ] API/그래프/캐시/MCP 경계를 변경했다면 관련 mock 기반 통합 테스트를 실행하고 placeholder 통과를 실제 통합 성공으로 보고하지 않았다.
+- [ ] 전체 의존성이 준비된 환경에서는 `python -m pytest`를 실행해 통과 수, 실패/skip 수와 원인을 보고했다.
+- [ ] 린트·타입 검사·빌드는 현재 검증된 프로젝트 명령이 없음을 확인했으며, 임의 도구 결과를 완료 기준으로 대체하지 않았다.
+- [ ] Tool 이름·응답 envelope·source 형식·`BOTH` 병합·cache key/무효화·환경 변수·DB schema가 바뀌었다면 관련 문서, Pydantic/TypedDict 계약, fixture와 테스트를 함께 동기화했다.
+- [ ] 새 코드는 기존 async 경계, 타입 표현, import 순서, 오류·비밀정보 처리 및 소유권 규칙과 일치한다.
