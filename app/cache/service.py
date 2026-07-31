@@ -25,6 +25,7 @@ def write_answer_cache(state: GraphState) -> bool:
     cache_value: CacheValue = {
         "answer": state.get("answer", ""),
         "sources": state.get("sources", []),
+        "tables": state.get("tables", []),
         "route": route,
     }
     cache.set(cache_key, cache_value, get_cache_ttl(route))

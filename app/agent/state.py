@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal, TypedDict
 
 Route = Literal["GENERAL", "DOCUMENT", "DATABASE", "BOTH"]
-DataDomain = Literal["purchase", "sales"]
+DataDomain = Literal["finance", "sales"]
 EvidenceStatus = Literal[
     "SUPPORTED",
     "PARTIALLY_SUPPORTED",
@@ -30,4 +30,5 @@ class GraphState(TypedDict, total=False):
     evidence: list[dict[str, Any]]
     evidence_status: EvidenceStatus
     sources: list[dict[str, Any]]
+    tables: list[dict[str, Any]]
     answer: str

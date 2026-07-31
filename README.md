@@ -354,35 +354,3 @@ pytest tests/unit              # 빠른 단위 테스트
 pytest tests/integration       # 통합 테스트
 pytest tests/unit/test_etl.py  # ETL 기능만
 ```
-
-## 판매(Sales) 도메인 ETL 실행 방법
-
-### 1. 사전 준비
-
-`.env`에 아래 값을 채운다.
-```env
-MYSQL_WRITE_HOST=localhost
-MYSQL_WRITE_USER=etl_writer
-MYSQL_WRITE_PASSWORD=
-MYSQL_DATABASE=sales
-```
-
-### 2. DB 생성 (최초 1회, 관리자 계정으로 실행)
-```bash
-mysql -u root -p < database/sales/create_sales_db.sql
-```
-`.env`의 `MYSQL_WRITE_USER`/`MYSQL_WRITE_PASSWORD`와 스크립트 안 계정 정보를 동일하게 맞춘다.
-
-### 3. 테이블 생성
-```bash
-mysql -u etl_writer -p sales < database/sales/ddl.sql
-```
-
-### 4. 원천 데이터 배치
-`ERP_Sales_Data_Full.xlsx`를 `data/raw/source_data/`에 둔다.
-
-### 5. ETL 실행
-```bash
-python -m etl.sales.run_all data/raw/source_data/ERP_Sales_Data_Full.xlsx
-```
-실행 로그는 `logs/etl_sales.log.txt`에서 확인한다. 동일 원천으로 재실행해도 UPSERT라 행 수는 늘지 않는다(멱등성).

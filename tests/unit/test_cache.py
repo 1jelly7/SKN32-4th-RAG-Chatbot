@@ -29,5 +29,6 @@ def test_cache_service_wraps_graph_execution():
     assert lookup_cached_answer(repeated_state) == {
         "answer": "ok",
         "sources": [],
+        "tables": [],
         "route": "GENERAL",
     }
