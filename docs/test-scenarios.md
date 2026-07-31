@@ -15,8 +15,13 @@
 | `tests/unit/test_cache.py`, `tests/integration/test_cache_flow.py` | 질문·대화 문맥별 키와 Graph 외부 캐시 |
 | `tests/unit/test_api.py` | `/api/health` |
 | `tests/unit/test_document_mcp.py` | 문서 DB 경로 조회 → 파일 로드 → RAG 호출 순서 |
+<<<<<<< HEAD
 | `tests/unit/test_data_mcp.py` | 재무·판매 Tool dispatch |
 | `tests/unit/test_etl.py` | 재무 ETL 변환의 중복 제거 |
+=======
+| `tests/unit/test_data_mcp.py` | 구매·판매 Tool dispatch |
+| `tests/unit/test_etl.py` | 구매 ETL 변환의 중복 제거 |
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 | `tests/unit/test_logging.py` | 5필드 로그 포맷 |
 
 `test_chat_document_flow.py`, `test_chat_data_flow.py`, `test_etl_mysql_flow.py`는 아직
@@ -28,9 +33,15 @@ placeholder이므로 실제 통합 완료의 근거로 사용하지 않는다.
 |---|---|
 | 문서 DB | 문서 식별자·제목·파일 경로·갱신 시각 레코드 3건 이상 |
 | 문서 파일 | 문서 DB 경로와 일치하는 PDF/TXT/Markdown 3건 이상 |
+<<<<<<< HEAD
 | 재무 | 분기별 매출·영업이익 샘플 데이터 |
 | 판매 | 월별·상품별 매출 샘플 데이터 |
 | 질문 | 문서 2개, 재무 2개, 판매 2개, BOTH 1개, 실패 질문 2개 |
+=======
+| 구매 | 구매 금액·공급처별 집계 샘플 데이터 |
+| 판매 | 월별·상품별 매출 샘플 데이터 |
+| 질문 | 문서 2개, 구매 2개, 판매 2개, BOTH 1개, 실패 질문 2개 |
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 ## 목표 단위 수용 테스트
 
@@ -46,9 +57,15 @@ placeholder이므로 실제 통합 완료의 근거로 사용하지 않는다.
 - PDF/TXT/Markdown 파일을 읽은 뒤 RAG 검색을 실행한다.
 - 사용자 응답에는 내부 파일 경로가 포함되지 않는다.
 
+<<<<<<< HEAD
 ### TS-U03: 재무 질의 Tool
 
 - `query_finance`가 재무 스키마와 읽기 전용 DB 연결을 사용한다.
+=======
+### TS-U03: 구매 질의 Tool
+
+- `query_purchase`가 구매 스키마와 읽기 전용 DB 연결을 사용한다.
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 - 결과에 사용된 View와 조회 시각을 metadata로 반환한다.
 
 ### TS-U04: 판매 질의 Tool
@@ -70,7 +87,11 @@ placeholder이므로 실제 통합 완료의 근거로 사용하지 않는다.
 ### TS-U07: ETL 멱등성 및 실행 이력
 
 - 동일 원천 데이터로 ETL을 두 번 실행해도 행 수가 증가하지 않는다.
+<<<<<<< HEAD
 - 재무·판매 로그에 실행 시각, 처리 행 수, 검증 결과가 기록된다.
+=======
+- 구매·판매 로그에 실행 시각, 처리 행 수, 검증 결과가 기록된다.
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 ## 목표 통합 수용 테스트
 
@@ -83,9 +104,15 @@ placeholder이므로 실제 통합 완료의 근거로 사용하지 않는다.
 
 완료 조건은 HTTP 200, 문서 출처 존재, 내부 파일 경로 미노출, RAG 실행 로그 존재다.
 
+<<<<<<< HEAD
 ### TS-I02: 재무 질의 전체 흐름
 
 `Router(DATABASE, finance)`가 `query_finance`만 호출하고 테스트 DB의 수치와 같은 결과를
+=======
+### TS-I02: 구매 질의 전체 흐름
+
+`Router(DATABASE, purchase)`가 `query_purchase`만 호출하고 테스트 DB의 수치와 같은 결과를
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 반환한다.
 
 ### TS-I03: 판매 질의 전체 흐름
@@ -117,7 +144,11 @@ placeholder이므로 실제 통합 완료의 근거로 사용하지 않는다.
 | 번호 | 질문 | 검증 포인트 |
 |---|---|---|
 | D01 | 사내 문서 질문 | 문서 DB 경로 조회, 파일 로드, RAG, 출처 |
+<<<<<<< HEAD
 | D02 | 재무 집계 질문 | 재무 Tool, 수치 근거 |
+=======
+| D02 | 구매 집계 질문 | 구매 Tool, 수치 근거 |
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 | D03 | 판매 집계 질문 | 판매 Tool, 수치 근거 |
 | D04 | 문서+판매 복합 질문 | BOTH 병합, 도메인별 출처 |
 | D05 | 반복 질문 | 캐시 적중 |

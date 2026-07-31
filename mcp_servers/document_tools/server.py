@@ -1,9 +1,12 @@
 from typing import Any
 
+<<<<<<< HEAD
 from mcp.server.mcpserver import MCPServer
 
 from mcp_servers.document_tools.search import search_documents
 
+=======
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 def create_server() -> Any:
     """search_documents 도구를 등록한 Document MCP 서버를 만든다.
@@ -11,6 +14,7 @@ def create_server() -> Any:
     도구 스키마/오류 경계를 정의한다. 내부적으로 문서 DB에서 파일 경로를 조회한 뒤
     파일을 읽지만, 응답에는 내부 파일 경로를 노출하지 않는다.
     """
+<<<<<<< HEAD
 
     server = MCPServer(name="document-mcp", version="0.1.0")
 
@@ -68,10 +72,14 @@ def create_server() -> Any:
         }
 
     return server
+=======
+    ...
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 
 def main() -> None:
     """검증된 환경 설정으로 Document MCP 서버를 시작하는 CLI 진입점이다."""
+<<<<<<< HEAD
 
     # 환경설정이 잘못되어 있으면(DB 접속 정보 등) 서버 기동 전에 바로 알 수 있도록
     # 여기서 한 번 로드해봅니다.
@@ -85,3 +93,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+=======
+    ...
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 const form = document.querySelector('#chat-form');
 const input = document.querySelector('#question');
 const messages = document.querySelector('#messages');
@@ -50,3 +51,7 @@ form.addEventListener('submit', async (e) => {
   }
   messages.scrollTop = messages.scrollHeight;
 });
+=======
+const form=document.querySelector('#chat-form'), input=document.querySelector('#question'), messages=document.querySelector('#messages');
+form.addEventListener('submit', async e=>{e.preventDefault(); const question=input.value; messages.innerHTML+=`<p><b>나:</b> ${question}</p>`; input.value=''; const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question})}); const d=await r.json(); messages.innerHTML+=`<p><b>봇:</b> ${d.answer} ${d.cached?'(cache)':''}</p>`;});
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

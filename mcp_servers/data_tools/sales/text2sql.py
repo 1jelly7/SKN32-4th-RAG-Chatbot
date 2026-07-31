@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from __future__ import annotations
 
 from app.core.config import get_settings
@@ -78,3 +79,11 @@ async def generate_sql(
     )
     sql = response.choices[0].message.content or ""
     return sql.strip().strip("`").removeprefix("sql\n").strip()
+=======
+from mcp_servers.data_tools.sales.schema import SchemaResource
+
+
+async def generate_sql(question: str, schema: SchemaResource) -> str:
+    """판매 도메인에 한정된 단일 SELECT 초안을 만든다."""
+    ...
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

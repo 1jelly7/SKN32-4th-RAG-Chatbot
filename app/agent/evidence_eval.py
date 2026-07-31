@@ -6,6 +6,7 @@ from app.agent.state import GraphState
 async def evidence_eval(state: GraphState) -> GraphState:
     """공통 근거 판정 경계.
 
+<<<<<<< HEAD
     1차 MVP는 결정적 규칙으로 판정한다: 근거가 하나도 없으면 INSUFFICIENT,
     DB 근거에 오류가 있으면 PARTIALLY_SUPPORTED(문서 근거가 있으면) 또는
     INSUFFICIENT(근거가 아예 없으면), 그 외에는 SUPPORTED로 본다.
@@ -42,3 +43,9 @@ async def evidence_eval(state: GraphState) -> GraphState:
         state["evidence_status"] = "SUPPORTED"
 
     return state
+=======
+    판정 로직은 통합 담당이 소유하고, 도메인별 충분성 기준은 구매·판매·RAG 담당과
+    협의한다. 이 모듈은 DB나 FAISS에 직접 접근하지 않는다.
+    """
+    ...
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

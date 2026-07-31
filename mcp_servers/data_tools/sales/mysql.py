@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+<<<<<<< HEAD
 import re
 from typing import Any
 
@@ -71,3 +72,13 @@ def _get_default_client() -> ReadOnlyMySQLClient:
 def query_readonly(sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
     """기본 ReadOnlyMySQLClient로 위임하는 편의 함수다."""
     return _get_default_client().query(sql, timeout_seconds)
+=======
+from typing import Any
+
+
+class ReadOnlySalesMySQLClient:
+    """판매 View를 SELECT하는 읽기 전용 어댑터."""
+
+    def query(self, sql: str, timeout_seconds: int) -> list[dict[str, Any]]:
+        ...
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

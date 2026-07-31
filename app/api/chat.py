@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from __future__ import annotations
 
 import uuid
@@ -8,6 +9,11 @@ from app.agent.graph import get_graph
 from app.agent.state import GraphState
 from app.cache.service import lookup_cached_answer, write_answer_cache
 from app.schemas.chat import ChatRequest, ChatResponse, Source
+=======
+from fastapi import APIRouter
+
+from app.schemas.chat import ChatRequest, ChatResponse
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 
 router = APIRouter(tags=["chat"])
 
@@ -21,6 +27,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     실행한다. graph 완료 뒤 write_answer_cache를 호출하고 answer/sources/cached/route를
     ChatResponse로 직렬화한다. 내부 오류·시간 초과는 비밀정보 없이 API 오류로 매핑한다.
     """
+<<<<<<< HEAD
     request_id = str(uuid.uuid4())
 
     state: GraphState = {
@@ -68,3 +75,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
         route=result_state.get("route"),
         request_id=request_id,
     )
+=======
+    ...
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

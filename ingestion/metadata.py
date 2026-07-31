@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """
 RawDocument에 표준 metadata(출처 경로, 제목, 갱신 시각)를 붙입니다.
 """
@@ -6,6 +7,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+=======
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 from typing import Any
 
 from ingestion.types import RawDocument
@@ -14,6 +17,7 @@ from ingestion.types import RawDocument
 def build_metadata(document: RawDocument) -> dict[str, Any]:
     """출처 경로, 제목, 갱신 시각, 문서 버전을 포함한 표준 metadata를 만든다.
 
+<<<<<<< HEAD
     - title은 document에 이미 있으면 그대로 쓰고(양끝 공백만 정리), 없으면 파일명으로
       대체합니다.
     - updated_at은 실제 파일의 마지막 수정 시각(mtime)을 사용합니다 - 문서 DB가 알려준
@@ -44,3 +48,9 @@ def _resolve_updated_at(path: Path) -> str:
         return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
     except OSError:
         return datetime.now(tz=timezone.utc).isoformat()
+=======
+    사용자 입력값은 정규화하고, 실제 파일 변경 정보에 근거한 updated_at을 기록한다.
+    문서 본문이나 불필요한 민감 필드는 metadata에 중복 저장하지 않는다.
+    """
+    ...
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

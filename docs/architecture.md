@@ -18,7 +18,11 @@ Static Web UI
               -> 내부 문서 DB에서 file_path 조회
               -> 조회된 경로의 파일 로드
               -> FAISS RAG
+<<<<<<< HEAD
           -> Data MCP: mcp_servers/data_tools/{finance,sales}/
+=======
+          -> Data MCP: mcp_servers/data_tools/{purchase,sales}/
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
   -> app/agent/evidence_eval.py
   -> answer synthesis
   -> app/cache/ (검증된 응답만 저장)
@@ -45,10 +49,17 @@ Document MCP는 문서 본문을 DB에서 직접 받지 않는다.
 | `app/`, `app/cache/`, `app/logging/` | 통합 담당 | FastAPI·그래프·캐시·공통 로그 |
 | `ingestion/`, `mcp_servers/document_tools/` | RAG 담당 | 문서 DB 경로 조회·파일 로드·FAISS |
 | `mcp_servers/data_tools/server.py` | 통합 담당 | Tool 등록과 도메인 전달 |
+<<<<<<< HEAD
 | `mcp_servers/data_tools/finance/`, `etl/finance/`, `database/finance/` | 재무 담당 | 재무 조회와 재무 ETL |
 | `mcp_servers/data_tools/sales/`, `etl/sales/`, `database/sales/` | 판매 담당 | 판매 조회와 판매 ETL |
 
 `logs/app.log.txt`, `logs/rag.log.txt`, `logs/etl_finance.log.txt`,
+=======
+| `mcp_servers/data_tools/purchase/`, `etl/purchase/`, `database/purchase/` | 구매 담당 | 구매 조회와 구매 ETL |
+| `mcp_servers/data_tools/sales/`, `etl/sales/`, `database/sales/` | 판매 담당 | 판매 조회와 판매 ETL |
+
+`logs/app.log.txt`, `logs/rag.log.txt`, `logs/etl_purchase.log.txt`,
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
 `logs/etl_sales.log.txt`는 런타임 임시 로그 경로이며 Git에서는 제외한다.
 
 ## 현재 구현 단계

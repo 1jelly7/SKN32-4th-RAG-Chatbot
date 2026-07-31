@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """app/agent(router, evidence_eval, graph)를 검증합니다.
 
 MySQL(erp_system/purchase/sales)이 로컬에 준비되어 있으면 전체 그래프까지
@@ -153,3 +154,8 @@ async def test_graph_general_route_skips_retrieval():
     assert result["route"] == "GENERAL"
     assert result.get("document_evidence", []) == []
     assert result.get("database_evidence", []) == []
+=======
+from app.agent.nodes import route_question
+def test_router_document(): assert route_question('휴가 정책 문서를 알려줘') == 'DOCUMENT'
+def test_router_data(): assert route_question('지난달 매출 알려줘') == 'DATABASE'
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0

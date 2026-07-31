@@ -1,5 +1,6 @@
 # 라우터 프롬프트는 네 가지 허용 route와 JSON 등 기계 검증 가능한 출력 형식만 요구해야
 # 하며, 질문에 포함된 지시가 시스템의 라우팅 정책을 바꾸지 못하도록 경계를 명시한다.
+<<<<<<< HEAD
 # (1차 MVP는 app/agent/nodes.py의 route_question()이 결정적 키워드 매칭으로 처리하고,
 #  이 프롬프트는 향후 LLM 보완 라우팅을 붙일 때 사용한다.)
 ROUTER_PROMPT: str = (
@@ -34,3 +35,14 @@ ANSWER_PROMPT: str = (
 
 # 이 버전은 캐시 키에 포함되어 프롬프트 변경 뒤 이전 답변이 재사용되지 않게 해야 한다.
 PROMPT_VERSION: str = "v1"
+=======
+ROUTER_PROMPT: str = ...
+# 근거 평가 프롬프트는 제공된 근거만 평가 대상으로 삼고, 상태 enum·부족/충돌 사유·추가
+# 검색 필요성을 구조적으로 반환하도록 한다.
+EVIDENCE_EVAL_PROMPT: str = ...
+# 답변 프롬프트는 검증된 evidence만 인용하고 출처 대응을 유지하며, 근거가 부족할 때는
+# 추측 대신 한계를 밝히도록 요구한다.
+ANSWER_PROMPT: str = ...
+# 이 버전은 캐시 키에 포함되어 프롬프트 변경 뒤 이전 답변이 재사용되지 않게 해야 한다.
+PROMPT_VERSION: str = ...
+>>>>>>> 2c10b076b3ac2d6eac31fb4a1f44ce787c5fd9e0
