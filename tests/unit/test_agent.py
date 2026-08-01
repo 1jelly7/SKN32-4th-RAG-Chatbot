@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from app.agent.nodes import database_retrieval, route_data_domain, route_question, router
-from app.agent.state import DataDomain, GraphState, Route
+from app.agent.state import DataDomain, EvidencePolicy, GraphState, Route
 
 
 # ------------------------------------------------------------------
@@ -127,6 +127,122 @@ async def test_evidence_eval_general_route_skips_check():
     result = await evidence_eval(state)
     assert result["evidence_status"] == "SUPPORTED"
     assert result["evidence"] == []
+
+
+@pytest.mark.asyncio
+async def test_evidence_eval_marks_partial_when_one_tool_failed() -> None:
+    from app.agent.evidence_eval import evidence_eval
+
+    document_evidence = [{"type": "document", "content": "휴가 규정", "score": 0.9}]
+    state: GraphState = {
+        "route": "BOTH",
+        "document_evidence": document_evidence,
+        "database_evidence": [],
+        "_errors": ["sales_retrieval 실패"],
+    }
+
+    result = await evidence_eval(state)
+
+    assert result["evidence_status"] == "PARTIALLY_SUPPORTED"
+    assert result["document_evidence"] == document_evidence
+    assert result["database_evidence"] == []
+    assert result["evidence"] == document_evidence
+
+
+@pytest.mark.asyncio
+async def test_evidence_eval_uses_injected_quality_policy() -> None:
+    from app.agent.evidence_eval import evidence_eval
+
+    policy = EvidencePolicy(
+        min_relevance=0.7,
+        min_confidence=0.8,
+        required_metadata_keys=("source_version",),
+        max_freshness_seconds=60,
+    )
+    valid_document = {
+        "type": "document",
+        "content": "정책",
+        "relevance": 0.9,
+        "confidence": 0.9,
+        "metadata": {"source_version": "v1", "freshness_seconds": 30},
+    }
+    stale_database = {
+        "type": "database",
+        "domain": "sales",
+        "relevance": 0.9,
+        "confidence": 0.9,
+        "metadata": {"source_version": "v1", "freshness_seconds": 120},
+    }
+    state: GraphState = {
+        "route": "BOTH",
+        "document_evidence": [valid_document],
+        "database_evidence": [stale_database],
+    }
+
+    result = await evidence_eval(state, policy)
+
+    assert result["evidence_status"] == "PARTIALLY_SUPPORTED"
+    assert result["evidence"] == [valid_document]
+    assert result["document_evidence"] == [valid_document]
+    assert result["database_evidence"] == [stale_database]
+
+
+@pytest.mark.asyncio
+async def test_evidence_eval_low_confidence_is_insufficient_not_contradicted() -> None:
+    from app.agent.evidence_eval import evidence_eval
+
+    state: GraphState = {
+        "route": "DOCUMENT",
+        "document_evidence": [{"type": "document", "content": "정책", "confidence": 0.1}],
+        "database_evidence": [],
+    }
+
+    result = await evidence_eval(state, EvidencePolicy(min_confidence=0.8))
+
+    assert result["evidence_status"] == "INSUFFICIENT"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "document_evidence",
+    [
+        [{"type": "document", "content": "정책", "contradicted": True}],
+        [
+            {"type": "document", "content": "정책", "fact_id": "leave-days", "fact_value": 10},
+            {"type": "document", "content": "정책", "fact_id": "leave-days", "fact_value": 15},
+        ],
+    ],
+)
+async def test_evidence_eval_marks_only_explicit_or_fact_value_conflicts_contradicted(
+    document_evidence: list[dict[str, object]],
+) -> None:
+    from app.agent.evidence_eval import evidence_eval
+
+    result = await evidence_eval(
+        {"route": "DOCUMENT", "document_evidence": document_evidence, "database_evidence": []}
+    )
+
+    assert result["evidence_status"] == "CONTRADICTED"
+
+
+@pytest.mark.asyncio
+async def test_database_retrieval_keeps_sales_evidence_when_purchase_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def failing_purchase_query(question: str) -> list[dict[str, object]]:
+        raise RuntimeError(question)
+
+    async def fake_sales_query(question: str) -> list[dict[str, object]]:
+        assert question == "구매와 판매 현황"
+        return [{"type": "database", "domain": "sales", "rows": []}]
+
+    monkeypatch.setattr("app.agent.nodes.query_purchase", failing_purchase_query)
+    monkeypatch.setattr("app.agent.nodes.query_sales", fake_sales_query)
+
+    result = await database_retrieval({"question": "구매와 판매 현황", "data_domain": "both"})
+
+    assert result["database_evidence"] == [{"type": "database", "domain": "sales", "rows": []}]
+    assert result["_errors"]
 
 
 # ------------------------------------------------------------------

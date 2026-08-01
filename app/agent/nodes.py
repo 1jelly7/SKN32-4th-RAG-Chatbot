@@ -85,7 +85,7 @@ async def document_retrieval(state: GraphState) -> GraphState:
         ]
     except Exception as exc:  # noqa: BLE001 - 실패해도 다른 경로 결과로 부분 응답 가능해야 함
         state["document_evidence"] = []
-        state.setdefault("_errors", []).append(f"document_retrieval 실패: {exc}")  # type: ignore[attr-defined]
+        state.setdefault("_errors", []).append(f"document_retrieval 실패: {exc}")
     return state
 
 
@@ -100,14 +100,17 @@ async def database_retrieval(state: GraphState) -> GraphState:
     question = state.get("question", "")
     domain = state.get("data_domain", "both")
 
-    evidence: list[dict] = []
-    try:
-        if domain in ("purchase", "both"):
+    evidence: list[dict[str, Any]] = []
+    if domain in ("purchase", "both"):
+        try:
             evidence.extend(await query_purchase(question))
-        if domain in ("sales", "both"):
+        except Exception as exc:  # noqa: BLE001 - 다른 도메인 조회 결과는 보존해야 함
+            state.setdefault("_errors", []).append(f"purchase_retrieval 실패: {exc}")
+    if domain in ("sales", "both"):
+        try:
             evidence.extend(await query_sales(question))
-    except Exception as exc:  # noqa: BLE001
-        state.setdefault("_errors", []).append(f"database_retrieval 실패: {exc}")  # type: ignore[attr-defined]
+        except Exception as exc:  # noqa: BLE001 - 다른 도메인 조회 결과는 보존해야 함
+            state.setdefault("_errors", []).append(f"sales_retrieval 실패: {exc}")
 
     state["database_evidence"] = evidence
     return state
