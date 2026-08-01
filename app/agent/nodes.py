@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from app.agent.llm import complete
+from app.agent.llm import AsyncLLMPort, complete
 from app.agent.prompts import ANSWER_PROMPT
 from app.agent.state import DataDomain, GraphState, Route
 
@@ -15,6 +15,8 @@ from app.agent.state import DataDomain, GraphState, Route
 from mcp_servers.document_tools.search import search_documents
 from mcp_servers.data_tools.purchase.query import query_purchase
 from mcp_servers.data_tools.sales.query import query_sales
+
+SENSITIVE_FIELD_PARTS = ("api_key", "password", "secret", "token", "file_path")
 
 
 def route_question(question: str) -> Route:
@@ -116,7 +118,10 @@ async def database_retrieval(state: GraphState) -> GraphState:
     return state
 
 
-async def answer_synthesis(state: GraphState) -> GraphState:
+async def answer_synthesis(
+    state: GraphState,
+    llm: AsyncLLMPort | None = None,
+) -> GraphState:
     """검증된 evidence 범위 안에서 answer와 sources를 만든다.
 
     GENERAL은 일반 답변을 생성할 수 있지만, 검색 경로는 근거 밖의 사실을 보태지
@@ -133,7 +138,7 @@ async def answer_synthesis(state: GraphState) -> GraphState:
         state["sources"] = []
         return state
 
-    answer = await complete(ANSWER_PROMPT, evidence)
+    answer = await complete(ANSWER_PROMPT, evidence, llm)
     if evidence_status == "PARTIALLY_SUPPORTED":
         answer += "\n\n(일부 근거에 조회 오류가 있어, 확인된 부분만 반영한 답변입니다.)"
 
@@ -152,9 +157,9 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
-def _build_tables(evidence: list[dict]) -> list[dict]:
+def _build_tables(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """database 타입 근거를 프론트엔드가 표/차트로 그릴 수 있는 형태로 변환합니다."""
-    tables: list[dict] = []
+    tables: list[dict[str, Any]] = []
 
     for item in evidence:
         if item.get("type") != "database":
@@ -164,7 +169,7 @@ def _build_tables(evidence: list[dict]) -> list[dict]:
         if not rows:
             continue
 
-        columns = list(rows[0].keys())
+        columns = [column for column in rows[0] if not _is_sensitive_field_name(column)]
         row_values = [[_json_safe(row.get(col)) for col in columns] for row in rows]
 
         # 라벨 컬럼(문자열)과 값 컬럼(숫자)을 하나씩 찾아, 막대그래프를 그릴 수 있는지 판단합니다.
@@ -193,14 +198,18 @@ def _build_tables(evidence: list[dict]) -> list[dict]:
                 "chartable": chartable,
                 "label_column": label_column,
                 "value_column": value_column,
+                "table_name": _metadata_value(item, "table_name", "view_name"),
+                "query_id": _metadata_value(item, "query_id"),
+                "freshness_seconds": _metadata_value(item, "freshness_seconds"),
+                "source_version": _metadata_value(item, "source_version"),
             }
         )
 
     return tables
 
 
-def _build_sources(evidence: list[dict]) -> list[dict]:
-    sources = []
+def _build_sources(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sources: list[dict[str, Any]] = []
     for item in evidence:
         if item.get("type") == "document":
             sources.append(
@@ -210,6 +219,9 @@ def _build_sources(evidence: list[dict]) -> list[dict]:
                     "source_type": "document",
                     "document_id": item["document_id"],
                     "score": item.get("score"),
+                    "page": item.get("page"),
+                    "updated_at": _metadata_value(item, "updated_at"),
+                    "source_version": _metadata_value(item, "source_version", "index_version"),
                 }
             )
         elif item.get("type") == "database":
@@ -220,6 +232,25 @@ def _build_sources(evidence: list[dict]) -> list[dict]:
                     "source_type": "database",
                     "document_id": None,
                     "score": None,
+                    "table_name": _metadata_value(item, "table_name", "view_name"),
+                    "query_id": _metadata_value(item, "query_id"),
+                    "freshness_seconds": _metadata_value(item, "freshness_seconds"),
+                    "source_version": _metadata_value(item, "source_version"),
                 }
             )
     return sources
+
+
+def _metadata_value(item: dict[str, Any], *keys: str) -> Any:
+    metadata = item.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    for key in keys:
+        value = metadata.get(key)
+        if value is not None:
+            return value
+    return None
+
+
+def _is_sensitive_field_name(field_name: object) -> bool:
+    return isinstance(field_name, str) and any(part in field_name.casefold() for part in SENSITIVE_FIELD_PARTS)

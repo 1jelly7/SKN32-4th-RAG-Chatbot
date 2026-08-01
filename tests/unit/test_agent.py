@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent.nodes import database_retrieval, route_data_domain, route_question, router
+from app.agent.llm import FakeLLMPort
+from app.agent.nodes import _build_sources, _build_tables, answer_synthesis, database_retrieval, route_data_domain, route_question, router
 from app.agent.state import DataDomain, EvidencePolicy, GraphState, Route
 
 
@@ -243,6 +244,86 @@ async def test_database_retrieval_keeps_sales_evidence_when_purchase_fails(
 
     assert result["database_evidence"] == [{"type": "database", "domain": "sales", "rows": []}]
     assert result["_errors"]
+
+
+@pytest.mark.asyncio
+async def test_answer_synthesis_uses_only_sanitized_validated_evidence() -> None:
+    fake_llm = FakeLLMPort("검증된 답변")
+    validated_evidence = [
+        {
+            "type": "document",
+            "document_id": "policy-1",
+            "title": "휴가 규정",
+            "content": "연차는 15일입니다.",
+            "score": 0.9,
+            "file_path": "C:/internal/policy.pdf",
+            "api_key": "secret-key",
+        }
+    ]
+    state: GraphState = {
+        "route": "DOCUMENT",
+        "evidence_status": "SUPPORTED",
+        "document_evidence": [{"type": "document", "content": "검증 전 근거"}],
+        "evidence": validated_evidence,
+    }
+
+    result = await answer_synthesis(state, fake_llm)
+
+    assert result["answer"] == "검증된 답변"
+    assert fake_llm.calls[0].context == [
+        {
+            "type": "document",
+            "document_id": "policy-1",
+            "title": "휴가 규정",
+            "content": "연차는 15일입니다.",
+            "score": 0.9,
+        }
+    ]
+    assert "file_path" not in result["sources"][0]
+    assert "api_key" not in result["sources"][0]
+
+
+def test_source_and_table_serialization_preserves_safe_metadata_only() -> None:
+    evidence = [
+        {
+            "type": "document",
+            "document_id": "policy-1",
+            "title": "휴가 규정",
+            "content": "내용",
+            "score": 0.9,
+            "page": 3,
+            "file_path": "C:/internal/policy.pdf",
+            "metadata": {"updated_at": "2026-08-01", "index_version": "v3", "api_key": "secret"},
+        },
+        {
+            "type": "database",
+            "domain": "sales",
+            "generated_sql": "SELECT customer, revenue FROM sales_summary",
+            "rows": [{"customer": "A사", "revenue": 100, "file_path": "C:/internal/sales.csv"}],
+            "row_count": 1,
+            "metadata": {
+                "table_name": "sales_summary",
+                "query_id": "q-1",
+                "freshness_seconds": 30,
+                "source_version": "v2",
+                "password": "secret",
+            },
+        },
+    ]
+
+    sources = _build_sources(evidence)
+    tables = _build_tables(evidence)
+
+    assert sources[0]["page"] == 3
+    assert sources[0]["updated_at"] == "2026-08-01"
+    assert sources[0]["source_version"] == "v3"
+    assert sources[1]["table_name"] == "sales_summary"
+    assert sources[1]["query_id"] == "q-1"
+    assert "file_path" not in sources[0]
+    assert "password" not in sources[1]
+    assert tables[0]["table_name"] == "sales_summary"
+    assert tables[0]["freshness_seconds"] == 30
+    assert tables[0]["columns"] == ["customer", "revenue"]
 
 
 # ------------------------------------------------------------------

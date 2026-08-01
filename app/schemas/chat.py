@@ -11,7 +11,12 @@ class Source(BaseModel):
     source_type: str
     document_id: str | None = None
     score: float | None = None
+    page: int | None = None
     updated_at: str | None = None
+    table_name: str | None = None
+    query_id: str | None = None
+    freshness_seconds: float | None = None
+    source_version: str | None = None
 
 
 class TableData(BaseModel):
@@ -25,6 +30,10 @@ class TableData(BaseModel):
     chartable: bool = False
     label_column: str | None = None
     value_column: str | None = None
+    table_name: str | None = None
+    query_id: str | None = None
+    freshness_seconds: float | None = None
+    source_version: str | None = None
 
 
 class ChatRequest(BaseModel):
