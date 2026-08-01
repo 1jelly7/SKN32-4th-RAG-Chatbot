@@ -30,4 +30,5 @@ class GraphState(TypedDict, total=False):
     evidence: list[dict[str, Any]]
     evidence_status: EvidenceStatus
     sources: list[dict[str, Any]]
+    tables: list[dict[str, Any]]
     answer: str

@@ -1,8 +1,14 @@
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.chat import router as chat_router
 from app.api.system import router as system_router
 from app.logging import configure_logging
+
+WEB_DIR = Path(__file__).resolve().parent / "web"
 
 
 def create_app() -> FastAPI:
@@ -16,6 +22,22 @@ def create_app() -> FastAPI:
     application = FastAPI(title="RAG MCP Chatbot")
     application.include_router(chat_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
+
+    # /api 이후에 등록해야 /api/* 요청이 정적 파일 라우트와 충돌하지 않습니다.
+    application.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+
+    @application.get("/")
+    def index() -> FileResponse:
+        return FileResponse(WEB_DIR / "index.html")
+
+    @application.get("/chat.js")
+    def chat_js() -> FileResponse:
+        return FileResponse(WEB_DIR / "chat.js")
+
+    @application.get("/style.css")
+    def style_css() -> FileResponse:
+        return FileResponse(WEB_DIR / "style.css")
+
     return application
 
 
