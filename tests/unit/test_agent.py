@@ -6,6 +6,7 @@ MySQL(erp_system/purchase/sales)이 로컬에 준비되어 있으면 전체 그�
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
@@ -431,7 +432,7 @@ def _mysql_available() -> bool:
         return False
 
 
-MYSQL_READY = _mysql_available()
+MYSQL_READY = os.getenv("RUN_LOCAL_MYSQL_TESTS") == "1" and _mysql_available()
 skip_without_mysql = pytest.mark.skipif(not MYSQL_READY, reason="로컬에 MySQL(erp_system/purchase/sales)이 준비되어 있지 않습니다")
 
 

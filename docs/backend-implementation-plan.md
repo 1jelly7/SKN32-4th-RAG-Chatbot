@@ -111,7 +111,7 @@ C0 purchase/sales 명칭 동기화 [DONE]
 
 ### B1 — 테스트 가능한 dependency injection
 
-- 상태: `PARTIAL`
+- 상태: `DONE`
 - 구현됨: `create_app()`, MemoryCache, demo LLM, 외부 연결 없는 health endpoint
 - 남은 작업:
   - app factory에 LLM/MCP/cache fake를 명시적으로 주입할 수 있게 한다.
@@ -126,7 +126,7 @@ C0 purchase/sales 명칭 동기화 [DONE]
 
 ### B2 — MCP Port, Fake, envelope 정규화
 
-- 상태: `NOT_STARTED`
+- 상태: `DONE`
 - 현재 문제: `app/mcp/client.py`의 transport 메서드와 기본 편의 함수가 `...`이며 Graph가 소유자 모듈을 직접 import한다.
 - 남은 작업:
   - Document/Purchase/Sales 호출을 async Protocol 또는 주입 가능한 client로 표현한다.
@@ -142,7 +142,7 @@ C0 purchase/sales 명칭 동기화 [DONE]
 
 ### B3 — 라우팅 및 데이터 도메인 정합성
 
-- 상태: `PARTIAL`
+- 상태: `DONE`
 - 구현됨: 네 route의 결정적 키워드 라우팅, purchase/sales/모호 질의의 복수 조회, `DataDomain`의 `both` 표현
 - 남은 작업:
   - purchase/sales 키워드가 동시에 있거나 모두 없는 DATABASE 질의의 복수 도메인 정책을 회귀 테스트로 고정한다.
@@ -156,7 +156,7 @@ C0 purchase/sales 명칭 동기화 [DONE]
 
 ### B4 — evidence 평가와 BOTH 부분 성공
 
-- 상태: `PARTIAL`
+- 상태: `DONE`
 - 구현됨: document/database evidence 분리, 빈 근거와 DB 오류에 대한 기본 판정, 순차 BOTH 보존
 - 남은 작업:
   - relevance/confidence, metadata 완전성, freshness를 주입 가능한 정책값으로 판정한다.
@@ -172,7 +172,7 @@ C0 purchase/sales 명칭 동기화 [DONE]
 
 ### B5 — Fake LLM과 응답 직렬화 계약
 
-- 상태: `PARTIAL`
+- 상태: `DONE`
 - 구현됨: API key 없는 demo 응답, 검증된 evidence 전달, `ChatResponse`, `Source`, `TableData`, Decimal/date JSON 변환
 - 남은 작업:
   - LLM port/fake를 app factory에서 주입하고 호출 기록을 검증한다.
@@ -187,7 +187,7 @@ C0 purchase/sales 명칭 동기화 [DONE]
 
 ### B6 — LangGraph orchestration의 MCP client 전환
 
-- 상태: `PARTIAL`
+- 상태: `DONE`
 - 구현됨: StateGraph 조립, GENERAL 무검색, DOCUMENT/DATABASE 단일 검색, BOTH의 document→database 순차 수집, Graph 외부 cache
 - 남은 작업:
   - retrieval node의 same-process 도메인 import를 B2의 주입된 MCP client로 교체한다.
@@ -202,7 +202,7 @@ C0 purchase/sales 명칭 동기화 [DONE]
 
 ### B7 — cache-first API와 오류 매핑
 
-- 상태: `PARTIAL`
+- 상태: `DONE`
 - 구현됨: cache lookup → Graph → cache write 순서, MemoryCache TTL, route별 cache 정책, cached 응답 직렬화
 - 남은 작업:
   - cache hit에서 Graph·LLM·MCP가 호출되지 않음을 API 수준에서 검증한다.
@@ -218,9 +218,10 @@ C0 purchase/sales 명칭 동기화 [DONE]
 
 ### B8 — fake 기반 document/data/BOTH 통합 테스트
 
-- 상태: `NOT_STARTED`
-- 현재 문제: document/data/ETL 통합 테스트가 placeholder이고 cache integration은 repository roundtrip만 검증한다.
-- 남은 작업:
+- 상태: `DONE`
+- 완료 내용: document/data placeholder를 FastAPI → Graph → fake MCP/LLM → Pydantic 응답 흐름으로 교체했다. DOCUMENT, purchase/sales DATABASE, 모호한 `both`, BOTH 성공·부분 실패·전체 실패, cache hit의 외부 호출 비증가를 결정적으로 검증한다.
+- 남은 placeholder: `tests/integration/test_etl_mysql_flow.py`는 ETL 소유 범위로 유지한다.
+- 검증 범위:
   - FastAPI 요청부터 Graph, fake MCP/LLM, Pydantic 응답까지 DOCUMENT와 DATABASE 흐름을 검증한다.
   - BOTH 양쪽 성공, 한쪽 실패, 모두 실패와 source/evidence 분리를 검증한다.
   - cache miss 후 hit에서 외부 port 호출 횟수가 증가하지 않는지 검증한다.
@@ -234,9 +235,10 @@ C0 purchase/sales 명칭 동기화 [DONE]
 
 ### B9 — 실패 경로 및 불변 조건 회귀
 
-- 상태: `NOT_STARTED`
+- 상태: `PARTIAL` (회귀 테스트는 추가했으나 로컬 `.venv`의 Python 경로가 없어 전체 실행은 보류)
+- 완료 내용: invalid request의 cache/Graph 미호출, malformed envelope·NO_RESULT·timeout의 구조화된 오류, partial BOTH, insufficient/contradicted evidence, cache hit/miss 회귀를 fake 기반 테스트로 고정했다. unit의 로컬 MySQL 검증은 `RUN_LOCAL_MYSQL_TESTS=1`일 때만 접속을 시도한다.
 - 의존성: B1~B8 완료
-- 남은 작업:
+- 검증 범위:
   - invalid request, malformed envelope, no result, timeout, partial BOTH, insufficient/contradicted evidence, cache hit/miss를 고정한다.
   - 테스트가 외부 서비스·시간·로컬 DB 상태에 의존하지 않는지 확인한다.
   - 기존 테스트와 fixture를 약화하거나 삭제하지 않는다.

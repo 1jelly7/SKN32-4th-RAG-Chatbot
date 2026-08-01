@@ -170,6 +170,22 @@ def test_cache_miss_invokes_graph_once_then_writes_and_hits() -> None:
     assert graph.mcp_calls == 1
 
 
+def test_invalid_chat_request_does_not_invoke_cache_or_graph() -> None:
+    cache = RecordingCache()
+    graph = CountingGraph()
+    application = _application(cache, graph)
+
+    with TestClient(application) as client:
+        response = client.post("/api/chat", json={"question": ""})
+
+    assert response.status_code == 422
+    assert cache.get_calls == 0
+    assert cache.set_calls == 0
+    assert graph.graph_calls == 0
+    assert graph.llm_calls == 0
+    assert graph.mcp_calls == 0
+
+
 @pytest.mark.parametrize(
     ("error", "status_code", "error_code"),
     [
