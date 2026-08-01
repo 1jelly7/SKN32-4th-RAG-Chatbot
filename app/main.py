@@ -37,7 +37,7 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
 
     application = FastAPI(title="RAG MCP Chatbot", lifespan=lifespan)
     application.state.dependencies = app_dependencies
-    application.state.graph = build_graph(app_dependencies.mcp)
+    application.state.graph = build_graph(app_dependencies.mcp, app_dependencies.llm)
     application.state.cache_key_context = dict(CACHE_KEY_CONTEXT)
     application.include_router(chat_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
