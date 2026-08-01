@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from typing import Literal
 
 from langgraph.graph import END, StateGraph
@@ -7,6 +8,7 @@ from langgraph.graph import END, StateGraph
 from app.agent.evidence_eval import evidence_eval
 from app.agent.nodes import answer_synthesis, database_retrieval, document_retrieval, router
 from app.agent.state import GraphState
+from app.mcp.client import MCPClient
 
 GraphTransition = Literal["end", "router", "document", "database", "answer"]
 
@@ -37,7 +39,7 @@ def after_document(state: GraphState) -> str:
     return "evidence"
 
 
-def build_graph() -> object:
+def build_graph(mcp_client: MCPClient | None = None) -> object:
     """명세의 StateGraph를 조립하고 컴파일된 실행 객체를 반환한다.
 
     캐시 miss 상태만 이 그래프에 진입하므로 시작점은 router다. 검색 결과는
@@ -49,8 +51,8 @@ def build_graph() -> object:
     graph = StateGraph(GraphState)
 
     graph.add_node("router", router)
-    graph.add_node("document", document_retrieval)
-    graph.add_node("database", database_retrieval)
+    graph.add_node("document", partial(document_retrieval, mcp_client=mcp_client))
+    graph.add_node("database", partial(database_retrieval, mcp_client=mcp_client))
     graph.add_node("evidence", evidence_eval)
     graph.add_node("answer", answer_synthesis)
 
@@ -76,8 +78,10 @@ def build_graph() -> object:
 _compiled_graph = None
 
 
-def get_graph():
+def get_graph(mcp_client: MCPClient | None = None) -> object:
     """컴파일된 그래프를 매 요청마다 새로 빌드하지 않도록 캐싱해서 반환한다."""
+    if mcp_client is not None:
+        return build_graph(mcp_client)
     global _compiled_graph
     if _compiled_graph is None:
         _compiled_graph = build_graph()

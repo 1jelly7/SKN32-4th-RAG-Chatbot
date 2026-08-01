@@ -6,11 +6,31 @@ MySQL(erp_system/purchase/sales)이 로컬에 준비되어 있으면 전체 그�
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
+from app.agent.graph import build_graph
 from app.agent.llm import FakeLLMPort
 from app.agent.nodes import _build_sources, _build_tables, answer_synthesis, database_retrieval, route_data_domain, route_question, router
 from app.agent.state import DataDomain, EvidencePolicy, GraphState, Route
+from app.mcp.client import FakeMCPPort, MCPClient
+
+
+def _tool_success(
+    domain: str,
+    data: list[dict[str, Any]],
+    sources: list[dict[str, Any]] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "status": "success",
+        "domain": domain,
+        "message": None,
+        "data": data,
+        "sources": sources or [],
+        "metadata": metadata or {},
+    }
 
 
 # ------------------------------------------------------------------
@@ -74,25 +94,23 @@ async def test_router_preserves_route_and_data_domain(
 
 @pytest.mark.asyncio
 async def test_database_retrieval_preserves_database_origin_and_domain(
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_purchase_query(question: str) -> list[dict[str, object]]:
-        assert question == "구매와 판매 현황"
-        return [{"type": "database", "domain": "purchase", "rows": []}]
+    port = FakeMCPPort(
+        {
+            "search_documents": _tool_success("document", []),
+            "query_purchase": _tool_success("purchase", []),
+            "query_sales": _tool_success("sales", []),
+        }
+    )
+    mcp_client = MCPClient(port)
 
-    async def fake_sales_query(question: str) -> list[dict[str, object]]:
-        assert question == "구매와 판매 현황"
-        return [{"type": "database", "domain": "sales", "rows": []}]
+    result = await database_retrieval(
+        {"question": "구매와 판매 현황", "data_domain": "both"},
+        mcp_client,
+    )
 
-    monkeypatch.setattr("app.agent.nodes.query_purchase", fake_purchase_query)
-    monkeypatch.setattr("app.agent.nodes.query_sales", fake_sales_query)
-
-    result = await database_retrieval({"question": "구매와 판매 현황", "data_domain": "both"})
-
-    assert result["database_evidence"] == [
-        {"type": "database", "domain": "purchase", "rows": []},
-        {"type": "database", "domain": "sales", "rows": []},
-    ]
+    assert [item["domain"] for item in result["database_evidence"]] == ["purchase", "sales"]
+    assert [call.tool_name for call in port.calls] == ["query_purchase", "query_sales"]
 
 
 # ------------------------------------------------------------------
@@ -228,22 +246,86 @@ async def test_evidence_eval_marks_only_explicit_or_fact_value_conflicts_contrad
 
 @pytest.mark.asyncio
 async def test_database_retrieval_keeps_sales_evidence_when_purchase_fails(
+) -> None:
+    port = FakeMCPPort(
+        {
+            "search_documents": _tool_success("document", []),
+            "query_purchase": RuntimeError("구매 조회 실패"),
+            "query_sales": _tool_success("sales", []),
+        }
+    )
+    mcp_client = MCPClient(port)
+
+    result = await database_retrieval(
+        {"question": "구매와 판매 현황", "data_domain": "both"},
+        mcp_client,
+    )
+
+    assert result["database_evidence"][0]["domain"] == "sales"
+    assert result["_errors"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "expected_calls"),
+    [
+        ("오늘 날씨 어때", []),
+        ("휴가 규정을 알려줘", ["search_documents"]),
+        ("고객별 매출 순위", ["query_sales"]),
+    ],
+)
+async def test_graph_calls_only_allowed_mcp_tools_for_each_route(
+    question: str,
+    expected_calls: list[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def failing_purchase_query(question: str) -> list[dict[str, object]]:
-        raise RuntimeError(question)
+    async def fake_complete(prompt: str, context: list[dict[str, Any]], llm: object = None) -> str:
+        return "답변"
 
-    async def fake_sales_query(question: str) -> list[dict[str, object]]:
-        assert question == "구매와 판매 현황"
-        return [{"type": "database", "domain": "sales", "rows": []}]
+    monkeypatch.setattr("app.agent.nodes.complete", fake_complete)
+    port = FakeMCPPort(
+        {
+            "search_documents": _tool_success(
+                "document",
+                [{"content": "휴가 규정", "score": 0.9}],
+                [{"document_id": "policy-1", "title": "휴가 규정"}],
+            ),
+            "query_purchase": _tool_success("purchase", [{"amount": 100}]),
+            "query_sales": _tool_success("sales", [{"revenue": 200}]),
+        }
+    )
 
-    monkeypatch.setattr("app.agent.nodes.query_purchase", failing_purchase_query)
-    monkeypatch.setattr("app.agent.nodes.query_sales", fake_sales_query)
+    await build_graph(MCPClient(port)).ainvoke({"question": question})
 
-    result = await database_retrieval({"question": "구매와 판매 현황", "data_domain": "both"})
+    assert [call.tool_name for call in port.calls] == expected_calls
 
-    assert result["database_evidence"] == [{"type": "database", "domain": "sales", "rows": []}]
-    assert result["_errors"]
+
+@pytest.mark.asyncio
+async def test_graph_both_fans_in_document_and_partial_database_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_complete(prompt: str, context: list[dict[str, Any]], llm: object = None) -> str:
+        return "부분 답변"
+
+    monkeypatch.setattr("app.agent.nodes.complete", fake_complete)
+    port = FakeMCPPort(
+        {
+            "search_documents": _tool_success(
+                "document",
+                [{"content": "휴가 규정", "score": 0.9}],
+                [{"document_id": "policy-1", "title": "휴가 규정"}],
+            ),
+            "query_purchase": {"status": "error", "domain": "purchase", "message": "실패", "error_code": "QUERY_ERROR"},
+            "query_sales": _tool_success("sales", [{"revenue": 200}]),
+        }
+    )
+
+    result = await build_graph(MCPClient(port)).ainvoke({"question": "휴가 규정과 구매 및 판매 현황"})
+
+    assert [call.tool_name for call in port.calls] == ["search_documents", "query_purchase", "query_sales"]
+    assert len(result["document_evidence"]) == 1
+    assert [item["domain"] for item in result["database_evidence"]] == ["sales"]
+    assert result["evidence_status"] == "PARTIALLY_SUPPORTED"
 
 
 @pytest.mark.asyncio

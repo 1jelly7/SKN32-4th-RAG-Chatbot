@@ -7,14 +7,7 @@ from typing import Any
 from app.agent.llm import AsyncLLMPort, complete
 from app.agent.prompts import ANSWER_PROMPT
 from app.agent.state import DataDomain, GraphState, Route
-
-# MCP 프로토콜(별도 서버 프로세스 + 네트워크 통신)은 아직 연결하지 않았습니다.
-# 대신 Document MCP/Data MCP가 노출하기로 한 함수를 같은 프로세스에서 직접 호출합니다.
-# 나중에 app/mcp/client.py가 완성되면, 아래 import를 실제 MCP 클라이언트 호출로만
-# 바꾸면 되도록 함수 시그니처(입력/출력)를 MCP Tool 계약과 동일하게 맞춰뒀습니다.
-from mcp_servers.document_tools.search import search_documents
-from mcp_servers.data_tools.purchase.query import query_purchase
-from mcp_servers.data_tools.sales.query import query_sales
+from app.mcp.client import MCPClient
 
 SENSITIVE_FIELD_PARTS = ("api_key", "password", "secret", "token", "file_path")
 
@@ -65,33 +58,34 @@ async def router(state: GraphState) -> GraphState:
     return state
 
 
-async def document_retrieval(state: GraphState) -> GraphState:
+async def document_retrieval(
+    state: GraphState,
+    mcp_client: MCPClient | None = None,
+) -> GraphState:
     """Document MCP에 question과 top_k를 전달한다.
 
     Document MCP는 내부 문서 DB에서 파일 경로를 먼저 조회한 뒤 해당 파일만 읽는다.
     응답은 document_evidence에 저장하고, MCP 실패 시 임의 경로의 문서를 직접 읽는
     방식으로 대체하지 않는다.
     """
+    if mcp_client is None:
+        state["document_evidence"] = []
+        state.setdefault("_errors", []).append("document_retrieval 실패: MCP client가 주입되지 않았습니다.")
+        return state
+
     question = state.get("question", "")
     try:
-        chunks = await search_documents(question, top_k=4)
-        state["document_evidence"] = [
-            {
-                "type": "document",
-                "document_id": c["document_id"],
-                "title": c["title"],
-                "content": c["content"],
-                "score": c["score"],
-            }
-            for c in chunks
-        ]
+        state["document_evidence"] = await mcp_client.document_search(question, top_k=4)
     except Exception as exc:  # noqa: BLE001 - 실패해도 다른 경로 결과로 부분 응답 가능해야 함
         state["document_evidence"] = []
         state.setdefault("_errors", []).append(f"document_retrieval 실패: {exc}")
     return state
 
 
-async def database_retrieval(state: GraphState) -> GraphState:
+async def database_retrieval(
+    state: GraphState,
+    mcp_client: MCPClient | None = None,
+) -> GraphState:
     """Data MCP를 통해서만 업무 데이터를 조회해 database_evidence에 저장한다.
 
     state.data_domain에 따라 query_purchase 또는 query_sales를 명시적으로 선택하고 자연어
@@ -99,18 +93,23 @@ async def database_retrieval(state: GraphState) -> GraphState:
     내부에서만 접근). 조회 결과의 실행 시각·SQL 요약·행 수 같은 메타데이터를 보존해
     이후 근거 평가와 출처 표시가 가능해야 한다.
     """
+    if mcp_client is None:
+        state["database_evidence"] = []
+        state.setdefault("_errors", []).append("database_retrieval 실패: MCP client가 주입되지 않았습니다.")
+        return state
+
     question = state.get("question", "")
     domain = state.get("data_domain", "both")
 
     evidence: list[dict[str, Any]] = []
     if domain in ("purchase", "both"):
         try:
-            evidence.extend(await query_purchase(question))
+            evidence.extend(await mcp_client.purchase_query(question))
         except Exception as exc:  # noqa: BLE001 - 다른 도메인 조회 결과는 보존해야 함
             state.setdefault("_errors", []).append(f"purchase_retrieval 실패: {exc}")
     if domain in ("sales", "both"):
         try:
-            evidence.extend(await query_sales(question))
+            evidence.extend(await mcp_client.sales_query(question))
         except Exception as exc:  # noqa: BLE001 - 다른 도메인 조회 결과는 보존해야 함
             state.setdefault("_errors", []).append(f"sales_retrieval 실패: {exc}")
 
