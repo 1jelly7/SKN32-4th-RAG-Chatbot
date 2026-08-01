@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -48,3 +48,16 @@ class ChatResponse(BaseModel):
     cached: bool
     route: str | None = None
     request_id: str | None = None
+
+
+class ErrorResponse(BaseModel):
+    """Tool 오류를 비밀값 없이 API 경계에서 표현하는 응답이다."""
+
+    detail: str
+    error_code: Literal[
+        "INVALID_INPUT",
+        "NO_RESULT",
+        "QUERY_ERROR",
+        "EVIDENCE_INSUFFICIENT",
+        "INTERNAL_ERROR",
+    ]

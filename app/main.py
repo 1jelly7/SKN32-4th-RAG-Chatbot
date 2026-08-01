@@ -9,9 +9,16 @@ from fastapi.staticfiles import StaticFiles
 from app.api.chat import router as chat_router
 from app.api.system import router as system_router
 from app.agent.graph import build_graph
+from app.agent.prompts import PROMPT_VERSION
 from app.core.dependencies import AppDependencies
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
+CACHE_KEY_CONTEXT = {
+    "document_index_version": "unknown",
+    "database_freshness_bucket": "unknown",
+    "prompt_version": PROMPT_VERSION,
+    "model_id": "configured-model",
+}
 
 
 def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
@@ -31,6 +38,7 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
     application = FastAPI(title="RAG MCP Chatbot", lifespan=lifespan)
     application.state.dependencies = app_dependencies
     application.state.graph = build_graph(app_dependencies.mcp)
+    application.state.cache_key_context = dict(CACHE_KEY_CONTEXT)
     application.include_router(chat_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
 

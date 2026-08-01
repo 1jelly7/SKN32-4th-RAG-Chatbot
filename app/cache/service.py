@@ -3,19 +3,23 @@ from __future__ import annotations
 from app.agent.state import GraphState
 from app.cache.key import make_cache_key
 from app.cache.policy import get_cache_ttl, should_cache
-from app.cache.repository import CacheValue, cache
+from app.cache.repository import CacheRepository, CacheValue, cache
 
 
-def lookup_cached_answer(state: GraphState) -> CacheValue | None:
+def lookup_cached_answer(
+    state: GraphState, repository: CacheRepository = cache
+) -> CacheValue | None:
     """LangGraph 실행 전에 캐시를 조회하고 hit 여부를 상태에 기록한다."""
     cache_key = make_cache_key(state)
     state["cache_key"] = cache_key
-    cached_value = cache.get(cache_key)
+    cached_value = repository.get(cache_key)
     state["cached"] = cached_value is not None
     return cached_value
 
 
-def write_answer_cache(state: GraphState) -> bool:
+def write_answer_cache(
+    state: GraphState, repository: CacheRepository = cache
+) -> bool:
     """LangGraph 완료 후 재사용 가능한 최종 답변만 캐시에 저장한다."""
     route = state.get("route")
     if route is None or not should_cache(state):
@@ -28,6 +32,6 @@ def write_answer_cache(state: GraphState) -> bool:
         "tables": state.get("tables", []),
         "route": route,
     }
-    cache.set(cache_key, cache_value, get_cache_ttl(route))
+    repository.set(cache_key, cache_value, get_cache_ttl(route))
     state["cache_key"] = cache_key
     return True
