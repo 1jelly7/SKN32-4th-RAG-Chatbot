@@ -1,56 +1,114 @@
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+from copy import deepcopy
+from dataclasses import dataclass
+from typing import Any, Mapping, Protocol
+
+from pydantic import ValidationError
 
 from app.agent.state import DataDomain
+from app.schemas.mcp import DocumentChunk, DocumentSource, MCPDomain, ToolErrorEnvelope, ToolName, ToolSuccessEnvelope
+
+
+class AsyncMCPPort(Protocol):
+    """MCP transport가 제공해야 하는 최소 비동기 Tool 호출 경계다."""
+
+    async def call_tool(self, tool_name: ToolName, payload: dict[str, Any]) -> object:
+        """Tool 이름과 JSON payload를 전송하고 원본 응답을 반환한다."""
+        ...
+
+
+@dataclass(frozen=True)
+class MCPCall:
+    """Fake MCP가 기록하는 한 번의 Tool 호출이다."""
+
+    tool_name: ToolName
+    payload: dict[str, Any]
+
+
+class FakeMCPPort:
+    """네트워크 없이 결정적 응답과 호출 이력을 제공하는 MCP 대역이다."""
+
+    def __init__(self, responses: Mapping[ToolName, object]) -> None:
+        self._responses = dict(responses)
+        self.calls: list[MCPCall] = []
+
+    async def call_tool(self, tool_name: ToolName, payload: dict[str, Any]) -> object:
+        self.calls.append(MCPCall(tool_name=tool_name, payload=deepcopy(payload)))
+        response = self._responses.get(tool_name)
+        if isinstance(response, BaseException):
+            raise response
+        return deepcopy(response)
+
+
+class MCPClientError(RuntimeError):
+    """MCP 경계에서 분류된 오류의 공통 기반 예외다."""
+
+    def __init__(self, tool_name: ToolName, message: str) -> None:
+        super().__init__(message)
+        self.tool_name = tool_name
+
+
+class MCPMalformedPayloadError(MCPClientError):
+    """Tool envelope 또는 내부 evidence 형식이 계약과 다를 때 발생한다."""
+
+
+class MCPNoResultError(MCPClientError):
+    """Tool이 정상 호출됐지만 결과가 없음을 명시했을 때 발생한다."""
+
+
+class MCPQueryError(MCPClientError):
+    """Tool이 질의 실행 오류를 반환하거나 transport가 실패했을 때 발생한다."""
+
+
+class MCPTimeoutError(MCPClientError):
+    """Tool 호출이 설정된 시간 안에 끝나지 않았을 때 발생한다."""
 
 
 class MCPClient:
-    """애플리케이션이 두 MCP 서버에 접근하는 유일한 어댑터.
+    """세 MCP Tool만 호출하고 응답을 내부 evidence 형식으로 정규화하는 어댑터다."""
 
-    Graph/FastAPI가 FAISS나 MySQL에 직접 접근하지 않도록 도구 이름, 전송 형식, timeout,
-    응답 검증을 이 경계에 모은다.
-    """
-    def __init__(self, document_mcp_url: str, data_mcp_url: str) -> None:
-        """각 서버 endpoint를 검증하고 재사용 가능한 비동기 전송 클라이언트를 준비한다."""
-        ...
+    def __init__(self, port: AsyncMCPPort, timeout_seconds: float = 10.0) -> None:
+        if timeout_seconds <= 0:
+            raise ValueError("MCP timeout_seconds는 0보다 커야 합니다.")
+        self._port = port
+        self._timeout_seconds = timeout_seconds
 
-    async def document_search(
-        self,
-        query: str,
-        top_k: int,
-    ) -> list[dict[str, Any]]:
-        """Document MCP의 search_documents 도구를 호출한다.
+    async def document_search(self, query: str, top_k: int) -> list[dict[str, Any]]:
+        """`search_documents` 성공 envelope를 문서 evidence 목록으로 정규화한다."""
+        envelope = await self._call_success("search_documents", {"query": query, "top_k": top_k}, "document")
+        evidence: list[dict[str, Any]] = []
+        for index, item in enumerate(envelope.data):
+            try:
+                chunk = DocumentChunk.model_validate(item)
+                source = DocumentSource.model_validate(envelope.sources[index])
+            except (IndexError, ValidationError) as exc:
+                raise MCPMalformedPayloadError("search_documents", "문서 evidence 형식이 올바르지 않습니다.") from exc
+            evidence.append(
+                {
+                    "type": "document",
+                    "document_id": source.document_id,
+                    "title": source.title,
+                    "content": chunk.content,
+                    "score": chunk.score,
+                    "page": source.page,
+                }
+            )
+        return evidence
 
-        query/top_k를 정확히 전달하고 응답 chunk의 필수 식별자와 출처 메타데이터를
-        검증한다. 통신 오류·도구 오류·비정상 payload를 구분해 전파한다.
-        """
-        ...
+    async def purchase_query(self, question: str) -> list[dict[str, Any]]:
+        """`query_purchase` 성공 envelope를 구매 database evidence로 정규화한다."""
+        envelope = await self._call_success("query_purchase", {"question": question}, "purchase")
+        return _database_evidence("purchase", envelope)
 
-    async def purchase_query(
-        self,
-        question: str,
-    ) -> list[dict[str, Any]]:
-        """Data MCP의 query_purchase 도구를 호출하고 표준 근거 목록으로 반환한다.
+    async def sales_query(self, question: str) -> list[dict[str, Any]]:
+        """`query_sales` 성공 envelope를 판매 database evidence로 정규화한다."""
+        envelope = await self._call_success("query_sales", {"question": question}, "sales")
+        return _database_evidence("sales", envelope)
 
-        SQL을 클라이언트에서 만들거나 수정하지 않으며, 서버가 반환한 행과 실행 메타데이터
-        외의 내부 정보는 노출하지 않는다.
-        """
-        ...
-
-    async def sales_query(
-        self,
-        question: str,
-    ) -> list[dict[str, Any]]:
-        """Data MCP의 query_sales 도구를 호출하고 표준 근거 목록으로 반환한다."""
-        ...
-
-    async def data_query(
-        self,
-        domain: DataDomain,
-        question: str,
-    ) -> list[dict[str, Any]]:
-        """명시된 도메인의 Data MCP 도구로만 요청을 전달한다."""
+    async def data_query(self, domain: DataDomain, question: str) -> list[dict[str, Any]]:
+        """명시된 데이터 도메인의 Tool만 호출한다."""
         if domain == "purchase":
             return await self.purchase_query(question)
         if domain == "sales":
@@ -61,24 +119,63 @@ class MCPClient:
             return purchase_evidence + sales_evidence
         raise ValueError(f"지원하지 않는 데이터 도메인입니다: {domain}")
 
+    async def _call_success(
+        self,
+        tool_name: ToolName,
+        payload: dict[str, Any],
+        expected_domain: MCPDomain,
+    ) -> ToolSuccessEnvelope:
+        try:
+            raw_response = await asyncio.wait_for(
+                self._port.call_tool(tool_name, payload),
+                timeout=self._timeout_seconds,
+            )
+        except asyncio.TimeoutError as exc:
+            raise MCPTimeoutError(tool_name, "MCP Tool 호출 시간이 초과되었습니다.") from exc
+        except MCPClientError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - 외부 transport 오류를 경계 예외로 정규화
+            raise MCPQueryError(tool_name, "MCP Tool 호출에 실패했습니다.") from exc
 
-async def document_search(
-    query: str,
-    top_k: int = 5,
-) -> list[dict[str, Any]]:
-    """기본 MCPClient를 통한 문서 검색 편의 함수다; 기본 top_k는 정책 상한을 넘지 않는다."""
-    ...
+        envelope = _parse_envelope(tool_name, raw_response)
+        if envelope.domain != expected_domain:
+            raise MCPMalformedPayloadError(tool_name, "MCP Tool domain이 요청과 일치하지 않습니다.")
+        return envelope
 
 
-async def purchase_query(
-    question: str,
-) -> list[dict[str, Any]]:
-    """기본 MCPClient를 통한 구매 데이터 조회 편의 함수다."""
-    ...
+def _parse_envelope(tool_name: ToolName, raw_response: object) -> ToolSuccessEnvelope:
+    """외부 MCP 응답을 success/error envelope로 구분해 검증한다."""
+    if not isinstance(raw_response, dict):
+        raise MCPMalformedPayloadError(tool_name, "MCP Tool 응답은 객체여야 합니다.")
+
+    try:
+        status = raw_response.get("status")
+        if status == "success":
+            return ToolSuccessEnvelope.model_validate(raw_response)
+        if status == "error":
+            error = ToolErrorEnvelope.model_validate(raw_response)
+        else:
+            raise MCPMalformedPayloadError(tool_name, "MCP Tool status가 올바르지 않습니다.")
+    except ValidationError as exc:
+        raise MCPMalformedPayloadError(tool_name, "MCP Tool envelope 형식이 올바르지 않습니다.") from exc
+
+    if error.error_code == "NO_RESULT":
+        raise MCPNoResultError(tool_name, error.message)
+    raise MCPQueryError(tool_name, error.message)
 
 
-async def sales_query(
-    question: str,
-) -> list[dict[str, Any]]:
-    """기본 MCPClient를 통한 판매 데이터 조회 편의 함수다."""
-    ...
+def _database_evidence(domain: MCPDomain, envelope: ToolSuccessEnvelope) -> list[dict[str, Any]]:
+    """SQL을 변경하지 않고 Data MCP의 행과 metadata를 database evidence로 보존한다."""
+    generated_sql = envelope.metadata.get("generated_sql", "")
+    if not isinstance(generated_sql, str):
+        raise MCPMalformedPayloadError("query_purchase" if domain == "purchase" else "query_sales", "generated_sql 형식이 올바르지 않습니다.")
+    return [
+        {
+            "type": "database",
+            "domain": domain,
+            "generated_sql": generated_sql,
+            "rows": envelope.data,
+            "row_count": envelope.metadata.get("row_count", len(envelope.data)),
+            "metadata": envelope.metadata,
+        }
+    ]

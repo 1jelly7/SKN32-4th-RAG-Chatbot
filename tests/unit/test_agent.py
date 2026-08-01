@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent.nodes import route_data_domain, route_question
+from app.agent.nodes import database_retrieval, route_data_domain, route_question, router
+from app.agent.state import DataDomain, GraphState, Route
 
 
 # ------------------------------------------------------------------
@@ -25,20 +26,72 @@ from app.agent.nodes import route_data_domain, route_question
         ("오늘 날씨 어때", "GENERAL"),
     ],
 )
-def test_route_question_classifies_correctly(question, expected):
+def test_route_question_classifies_correctly(question: str, expected: Route) -> None:
     assert route_question(question) == expected
 
 
-def test_route_data_domain_detects_sales():
+def test_route_data_domain_detects_sales() -> None:
     assert route_data_domain("고객별 매출 순위") == "sales"
 
 
-def test_route_data_domain_detects_purchase():
+def test_route_data_domain_detects_purchase() -> None:
     assert route_data_domain("공급업체별 지출 총액") == "purchase"
 
 
-def test_route_data_domain_defaults_to_both_when_ambiguous():
+def test_route_data_domain_defaults_to_both_when_ambiguous() -> None:
     assert route_data_domain("이번 분기 실적 알려줘") == "both"
+
+
+def test_route_data_domain_uses_both_for_purchase_and_sales_terms() -> None:
+    assert route_data_domain("공급업체 구매와 고객 매출을 비교해줘") == "both"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "expected_route", "expected_domain"),
+    [
+        ("오늘 날씨 어때", "GENERAL", None),
+        ("휴가 규정을 알려줘", "DOCUMENT", None),
+        ("공급업체별 지출 총액", "DATABASE", "purchase"),
+        ("고객별 매출 순위", "DATABASE", "sales"),
+        ("구매와 판매 현황을 알려줘", "DATABASE", "both"),
+        ("휴가 규정과 구매 및 판매 현황을 알려줘", "BOTH", "both"),
+    ],
+)
+async def test_router_preserves_route_and_data_domain(
+    question: str,
+    expected_route: Route,
+    expected_domain: DataDomain | None,
+) -> None:
+    state: GraphState = {"question": question}
+
+    result = await router(state)
+
+    assert result["route"] == expected_route
+    assert result.get("data_domain") == expected_domain
+
+
+@pytest.mark.asyncio
+async def test_database_retrieval_preserves_database_origin_and_domain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_purchase_query(question: str) -> list[dict[str, object]]:
+        assert question == "구매와 판매 현황"
+        return [{"type": "database", "domain": "purchase", "rows": []}]
+
+    async def fake_sales_query(question: str) -> list[dict[str, object]]:
+        assert question == "구매와 판매 현황"
+        return [{"type": "database", "domain": "sales", "rows": []}]
+
+    monkeypatch.setattr("app.agent.nodes.query_purchase", fake_purchase_query)
+    monkeypatch.setattr("app.agent.nodes.query_sales", fake_sales_query)
+
+    result = await database_retrieval({"question": "구매와 판매 현황", "data_domain": "both"})
+
+    assert result["database_evidence"] == [
+        {"type": "database", "domain": "purchase", "rows": []},
+        {"type": "database", "domain": "sales", "rows": []},
+    ]
 
 
 # ------------------------------------------------------------------

@@ -1,4 +1,6 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -6,20 +8,27 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.chat import router as chat_router
 from app.api.system import router as system_router
-from app.logging import configure_logging
+from app.core.dependencies import AppDependencies
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
 
-def create_app() -> FastAPI:
+def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
     """설정·로깅·라우터·정적 UI를 일관되게 등록한 FastAPI 앱을 구성한다.
 
-    startup/shutdown에서 공유 MCP/Redis 자원을 수명 관리하고, /api 라우터와 UI 경로의
-    충돌을 방지한다. 생성 함수가 실제 앱 인스턴스와 동등하게 구성되어 테스트에서
-    독립적으로 사용할 수 있어야 한다.
+    lifespan에서 주입된 logging 설정을 적용하고, MCP·LLM·cache 대역은 앱 상태에
+    보관한다. /api 라우터와 UI 경로의 충돌을 방지하며 생성 함수는 테스트에서 독립적으로
+    사용할 수 있어야 한다.
     """
-    configure_logging()
-    application = FastAPI(title="RAG MCP Chatbot")
+    app_dependencies = dependencies or AppDependencies()
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        app_dependencies.configure_logging()
+        yield
+
+    application = FastAPI(title="RAG MCP Chatbot", lifespan=lifespan)
+    application.state.dependencies = app_dependencies
     application.include_router(chat_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
 
