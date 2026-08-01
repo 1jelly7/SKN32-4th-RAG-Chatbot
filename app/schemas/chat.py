@@ -1,3 +1,9 @@
+"""채팅 HTTP 요청·응답의 공개 Pydantic 계약.
+
+내부 evidence를 그대로 노출하지 않고 사용자에게 허용된 출처·표 metadata만 표현한다.
+특히 내부 파일 경로와 provider 자격증명은 이 모델의 필드가 아니다.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -6,6 +12,8 @@ from pydantic import BaseModel, Field
 
 
 class Source(BaseModel):
+    """문서 또는 DB 근거를 공개 식별자와 freshness 정보로 표현한다."""
+
     id: str
     title: str
     source_type: str
@@ -37,11 +45,15 @@ class TableData(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    """비어 있지 않은 질문과 선택적 대화 세션 식별자를 받는다."""
+
     question: str = Field(min_length=1)
     session_id: str | None = None
 
 
 class ChatResponse(BaseModel):
+    """최종 답변과 안전하게 직렬화된 출처·표·캐시 상태를 반환한다."""
+
     answer: str
     sources: list[Source] = Field(default_factory=list)
     tables: list[TableData] = Field(default_factory=list)

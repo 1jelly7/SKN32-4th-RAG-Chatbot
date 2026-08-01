@@ -1,3 +1,5 @@
+"""판매 Data MCP에서 guard된 SELECT만 실행하는 읽기 전용 MySQL adapter."""
+
 from __future__ import annotations
 
 import re

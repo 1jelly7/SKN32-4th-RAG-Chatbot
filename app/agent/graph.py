@@ -1,3 +1,9 @@
+"""캐시 miss 요청만 실행하는 LangGraph 조립 모듈.
+
+``BOTH``는 document→database 순서로 두 근거를 수집한 뒤 단일 evidence 평가 노드에
+합류한다. 캐시 조회·저장은 의도적으로 그래프 밖에 있다.
+"""
+
 from __future__ import annotations
 
 from functools import partial

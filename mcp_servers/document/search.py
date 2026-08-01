@@ -1,3 +1,5 @@
+"""사용자 ACL을 포함하려는 별도 Document MCP 공개 검색 스켈레톤."""
+
 from app.core.security import UserContext
 from mcp_servers.document.types import DocumentChunk
 
@@ -14,4 +16,7 @@ async def search_documents(
     allowed_roles를 포함해야 하고, ACL 필터 전에 결과 수를 줄여 권한 문서가 누락되지 않게
     한다.
     """
+    # TODO(contract clarification): 공식 Tool 입력에는 user_context가 정의돼 있지 않다.
+    # 인증 context 전달·검증과 cache 격리 계약을 확정한 뒤 retrieve→ACL→top_k 순서를
+    # 구현하며 비허용 후보 내용을 오류에도 노출하지 않는다.
     ...

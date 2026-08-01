@@ -1,3 +1,5 @@
+"""MCP 빈 결과·query error·malformed payload·timeout의 HTTP 매핑 계약."""
+
 from __future__ import annotations
 
 import asyncio
@@ -49,6 +51,7 @@ def test_graph_mcp_errors_use_http_contract(
     expected_code: str,
     expected_tool: str,
 ) -> None:
+    """오류 종류를 구분하되 provider 내부 메시지 없이 공개 상태로 변환한다."""
     responses: dict[str, object] = {
         "search_documents": document_success(),
         "query_purchase": database_success("purchase", 100),

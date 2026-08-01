@@ -1,3 +1,5 @@
+"""소유자 결정 전 보존하는 legacy finance 조회 서비스."""
+
 from __future__ import annotations
 
 import time

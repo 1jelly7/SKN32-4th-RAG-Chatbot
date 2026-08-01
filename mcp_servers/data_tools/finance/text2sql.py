@@ -1,3 +1,5 @@
+"""소유자 결정 전 보존하는 legacy finance Text2SQL adapter."""
+
 from __future__ import annotations
 
 from app.core.config import get_settings

@@ -75,6 +75,7 @@ SHEET_TO_TABLE = {
 
 
 def header_to_column(header: str) -> str:
+    """workbook header를 대상 schema의 snake_case column으로 정규화한다."""
     return header.strip().lower()
 
 
@@ -89,6 +90,7 @@ def _normalize_value(value):
 
 
 def load_sheet(cursor, workbook, sheet_name: str) -> int:
+    """한 seed sheet를 대응 table에 적재하고 처리 행 수를 반환한다."""
     table = SHEET_TO_TABLE[sheet_name]
     ws = workbook[sheet_name]
     rows = list(ws.iter_rows(values_only=True))
@@ -105,6 +107,7 @@ def load_sheet(cursor, workbook, sheet_name: str) -> int:
 
 
 def load_into(db_config: dict, workbook, sheet_order: list[str]) -> None:
+    """한 도메인의 sheet 목록을 FK 의존 순서로 transaction 적재한다."""
     connection = pymysql.connect(**db_config)
     try:
         with connection.cursor() as cursor:
@@ -125,6 +128,7 @@ def load_into(db_config: dict, workbook, sheet_order: list[str]) -> None:
 
 
 def main() -> None:
+    """판매·구매 seed sheet를 각 소유 DB에 분리해 배치 적재한다."""
     if len(sys.argv) < 2:
         print("사용법: python scripts/load_sales_purchasing_seed.py <엑셀_파일_경로>")
         sys.exit(1)

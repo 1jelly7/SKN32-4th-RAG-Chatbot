@@ -26,6 +26,7 @@ def required_columns_for(table: str) -> list[str]:
 
 
 def run_all(xlsx_path: Path = DEFAULT_SOURCE) -> None:
+    """판매 workbook의 모든 시트를 FK 의존 순서로 적재한다."""
     table_to_sheet = {table: sheet for sheet, table in SHEET_TO_TABLE.items()}
     for table in TABLE_LOAD_ORDER:
         sheet = table_to_sheet[table]

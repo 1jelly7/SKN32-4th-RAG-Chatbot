@@ -1,3 +1,10 @@
+"""FastAPI 애플리케이션 조립 경계.
+
+라우터, 정적 UI, 주입된 LLM/MCP/cache 의존성과 LangGraph를 하나의 앱 수명주기에
+연결한다. 실제 문서·업무 데이터 접근은 이 모듈이 수행하지 않으며, 캐시 miss 이후의
+조회는 그래프에 주입된 MCP client가 담당한다.
+"""
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -32,6 +39,7 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        """앱 시작 시 주입된 logging만 구성하고 provider 수명주기는 변경하지 않는다."""
         app_dependencies.configure_logging()
         yield
 
@@ -47,14 +55,17 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
 
     @application.get("/")
     def index() -> FileResponse:
+        """번들된 채팅 UI의 진입 HTML을 반환한다."""
         return FileResponse(WEB_DIR / "index.html")
 
     @application.get("/chat.js")
     def chat_js() -> FileResponse:
+        """별도 정적 경로를 기대하는 UI를 위해 채팅 스크립트를 반환한다."""
         return FileResponse(WEB_DIR / "chat.js")
 
     @application.get("/style.css")
     def style_css() -> FileResponse:
+        """별도 정적 경로를 기대하는 UI를 위해 스타일시트를 반환한다."""
         return FileResponse(WEB_DIR / "style.css")
 
     return application

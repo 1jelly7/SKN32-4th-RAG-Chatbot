@@ -1,3 +1,5 @@
+"""실제 MCP·LLM·Redis 없이 FastAPI→Graph 계약을 검증하는 통합 fake 조립기."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -17,6 +19,7 @@ def tool_success(
     sources: list[dict[str, Any]] | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """실제 provider와 같은 success envelope fixture를 만든다."""
     return {
         "status": "success",
         "domain": domain,
@@ -28,6 +31,7 @@ def tool_success(
 
 
 def database_success(domain: str, amount: int) -> dict[str, Any]:
+    """DB provenance와 freshness metadata가 포함된 단일 행 envelope를 만든다."""
     return tool_success(
         domain,
         [{"category": domain, "amount": amount}],
@@ -43,6 +47,7 @@ def database_success(domain: str, amount: int) -> dict[str, Any]:
 
 
 def document_success() -> dict[str, Any]:
+    """내부 file_path 없는 문서 data/source envelope를 만든다."""
     return tool_success(
         "document",
         [{"content": "휴가 규정은 승인 절차를 따릅니다.", "score": 0.9}],
@@ -52,6 +57,7 @@ def document_success() -> dict[str, Any]:
 
 
 def build_fake_application(responses: dict[str, object]) -> tuple[FastAPI, FakeMCPPort, FakeLLMPort]:
+    """호출 기록 가능한 fake provider와 독립 cache를 앱 factory에 주입한다."""
     port = FakeMCPPort(responses)
     llm = FakeLLMPort("fake answer")
     dependencies = AppDependencies(

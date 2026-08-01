@@ -31,6 +31,7 @@ class EmbeddingClient:
 
     @property
     def dimension(self) -> int:
+        """모든 입력 벡터에 적용되는 고정 차원을 반환한다."""
         return self._dimension
 
     def embed(self, texts: list[str]) -> list[list[float]]:

@@ -1,9 +1,13 @@
+"""판매 Text2SQL에 허용된 table·column·업무 용어 Resource."""
+
 from __future__ import annotations
 
 from typing import TypedDict
 
 
 class SchemaResource(TypedDict):
+    """판매 Text2SQL이 사용할 허용 schema와 업무 용어."""
+
     tables: list[str]
     columns: dict[str, list[str]]
     business_glossary: dict[str, str]

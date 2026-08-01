@@ -1,3 +1,5 @@
+"""구매 extract→transform→validate→load를 조합할 미구현 배치 진입점."""
+
 from pathlib import Path
 
 from etl.purchase.types import PipelineResult
@@ -14,4 +16,7 @@ def run_csv_pipeline(
     않은 채 ``load=None``인 결과를 반환한다. 예외에는 source path와 단계명을 포함하되
     원본 민감 데이터는 로그에 기록하지 않는다.
     """
+    # TODO(implementation): 각 단계를 순서대로 호출하고 검증 실패 시 load=None으로
+    # 중단한다. API/Agent에서 호출하지 않으며 처리 행 수·검증 결과만 구매 ETL 로그에
+    # 남긴다. 성공, 검증 중단, 적재 rollback fake test가 완료 조건이다.
     ...

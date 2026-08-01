@@ -1,3 +1,5 @@
+"""5필드 한 줄 로그와 handler 중복 방지 계약을 검증한다."""
+
 import logging
 from pathlib import Path
 

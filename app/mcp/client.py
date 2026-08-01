@@ -1,3 +1,9 @@
+"""MCP transport와 agent evidence 사이의 Host-side 정규화 경계.
+
+허용된 세 Tool만 호출하고 timeout, malformed payload, 빈 결과, 질의 오류를 구분한다.
+SQL을 생성·수정하거나 문서/DB 저장소에 직접 접근하지 않는다.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -28,13 +34,18 @@ class MCPCall:
 
 
 class FakeMCPPort:
-    """네트워크 없이 결정적 응답과 호출 이력을 제공하는 MCP 대역이다."""
+    """네트워크 없이 production call 계약과 호출 이력을 제공하는 MCP 대역이다.
+
+    응답과 payload를 방어적으로 복사해 테스트 변형이 fixture를 오염시키지 않으며,
+    예외 객체는 실제 transport 실패처럼 그대로 발생시킨다.
+    """
 
     def __init__(self, responses: Mapping[ToolName, object]) -> None:
         self._responses = dict(responses)
         self.calls: list[MCPCall] = []
 
     async def call_tool(self, tool_name: ToolName, payload: dict[str, Any]) -> object:
+        """호출을 기록하고 설정된 envelope 또는 예외를 결정적으로 재생한다."""
         self.calls.append(MCPCall(tool_name=tool_name, payload=deepcopy(payload)))
         response = self._responses.get(tool_name)
         if isinstance(response, BaseException):
@@ -126,6 +137,7 @@ class MCPClient:
         payload: dict[str, Any],
         expected_domain: MCPDomain,
     ) -> ToolSuccessEnvelope:
+        """한 Tool 호출에 timeout과 envelope/domain/빈 결과 검증을 적용한다."""
         try:
             raw_response = await asyncio.wait_for(
                 self._port.call_tool(tool_name, payload),

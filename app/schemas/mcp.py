@@ -1,3 +1,9 @@
+"""Host가 MCP Tool 응답을 신뢰하기 전에 검증하는 envelope 모델.
+
+문서·구매·판매 Tool의 공통 success/error 형태를 고정한다. 외부 payload는 이 경계를
+통과한 뒤에만 agent evidence로 정규화된다.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Literal

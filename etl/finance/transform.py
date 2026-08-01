@@ -1,3 +1,9 @@
+"""legacy finance 원천 frame의 복사·형 변환·중복 제거 구현.
+
+정식 구매 계약은 etl.purchase가 소유하므로 새 흐름에서 이 모듈을 purchase 대체물로
+참조하지 않는다.
+"""
+
 from __future__ import annotations
 
 from typing import Any

@@ -1,3 +1,5 @@
+"""FastAPI DI, cache-first 순서, 안전한 Tool 오류 응답의 단위 계약."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,16 +22,19 @@ from app.mcp.client import (
 
 
 class FakeLLMClient(LLMClient):
+    """생성자에서 실제 OpenAI client를 만들지 않는 API 조립용 대역."""
     def __init__(self) -> None:
         pass
 
 
 class FakeMCPClient(MCPClient):
+    """생성자에서 실제 transport를 요구하지 않는 API 조립용 대역."""
     def __init__(self) -> None:
         pass
 
 
 class RecordingCache(MemoryCache):
+    """cache lookup/write 순서와 호출 횟수를 기록하는 저장소 대역."""
     def __init__(self) -> None:
         super().__init__()
         self.events: list[str] = []
@@ -48,6 +53,7 @@ class RecordingCache(MemoryCache):
 
 
 class CountingGraph:
+    """cache miss에서만 호출돼야 하는 downstream 작업 횟수를 기록한다."""
     def __init__(self, events: list[str] | None = None) -> None:
         self.events = events
         self.graph_calls = 0
@@ -70,6 +76,7 @@ class CountingGraph:
 
 
 class ErrorGraph:
+    """API 오류 매핑을 위해 지정된 경계 예외를 발생시킨다."""
     def __init__(self, error: Exception) -> None:
         self.error = error
 

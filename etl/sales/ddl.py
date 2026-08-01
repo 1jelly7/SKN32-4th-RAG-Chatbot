@@ -19,6 +19,7 @@ def _column_ddl(col: dict) -> str:
 
 
 def build_create_table_sql(table_name: str) -> str:
+    """판매 schema 정의 한 건을 idempotent CREATE TABLE SQL로 변환한다."""
     meta = SALES_SCHEMA[table_name]
     columns = meta["columns"]
     pk = meta["pk"]
@@ -40,6 +41,7 @@ def build_create_table_sql(table_name: str) -> str:
 
 
 def build_all_ddl() -> str:
+    """FK 의존 순서로 모든 판매 테이블 DDL을 생성한다."""
     statements = [
         "-- 판매(Sales) 도메인 테이블 DDL",
         "-- 생성 기준: ERP_Schema_v2_Corrected Column Dictionary",

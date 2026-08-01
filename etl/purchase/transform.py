@@ -1,3 +1,5 @@
+"""구매 원천 frame을 복사해 schema 변환과 중복 제거를 적용한다."""
+
 from __future__ import annotations
 
 from typing import Any

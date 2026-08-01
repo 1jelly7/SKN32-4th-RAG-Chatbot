@@ -1,3 +1,5 @@
+"""내부 문서 DB에서 본문이 아닌 등록 파일 경로만 조회·관리한다."""
+
 from __future__ import annotations
 
 import pymysql

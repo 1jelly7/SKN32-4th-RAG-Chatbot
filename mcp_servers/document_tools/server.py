@@ -1,3 +1,5 @@
+"""문서 DB 경로 조회와 RAG 검색을 search_documents Tool로 공개한다."""
+
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
@@ -18,8 +20,9 @@ def create_server() -> Any:
     async def search_documents_tool(query: str, top_k: int = 5) -> dict:
         """사내 문서(PDF/TXT/Markdown)에서 질문과 관련된 근거를 검색합니다.
 
-        docs/interface.md의 공통 응답 형식(status/domain/message/data/sources/metadata)에
-        맞춰 반환합니다. file_path는 절대 응답에 포함하지 않습니다.
+        규정·정책·가이드처럼 사내 문서 근거가 필요한 질문에만 사용한다. 반환 envelope의
+        data는 근거 내용/점수, sources는 공개 문서 식별자를 뜻한다. 업무 수치 조회나
+        임의 파일 접근에는 사용하지 않고 file_path는 절대 응답에 포함하지 않는다.
         """
         if not query or not query.strip():
             return {
@@ -35,6 +38,9 @@ def create_server() -> Any:
         try:
             chunks = await search_documents(query, top_k=top_k)
         except Exception as exc:  # noqa: BLE001 - 사용자에게는 일반화된 오류만 노출합니다.
+            # TODO(implementation): raw 예외 문자열을 metadata에 싣지 않고 서버 내부의
+            # 비밀정보 없는 구조화 로그로만 남긴다. 공개 envelope에는 INTERNAL_ERROR와
+            # 일반화된 message만 포함하는 회귀 테스트가 완료 조건이다.
             return {
                 "status": "error",
                 "domain": "document",

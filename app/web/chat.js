@@ -1,3 +1,5 @@
+// ChatResponse를 답변·출처·표·차트로 변환하는 vanilla UI 경계입니다.
+// 서버가 제거한 내부 경로와 자격증명을 별도 endpoint에서 다시 조회하지 않습니다.
 const form = document.querySelector('#chat-form');
 const input = document.querySelector('#question');
 const messages = document.querySelector('#messages');
@@ -10,6 +12,7 @@ function routeBadge(route) {
   return `<span class="badge badge-${route}">${labels[route] || route}</span>`;
 }
 
+// 공개 Source 필드만 사용하며 document/database provenance를 아이콘으로 구분합니다.
 function renderSources(sources) {
   if (!sources || sources.length === 0) return '';
   const items = sources.map(s => {
@@ -46,6 +49,7 @@ function renderChartPlaceholder(table) {
   return { html: `<div class="chart-wrap"><canvas id="${canvasId}"></canvas></div>`, canvasId };
 }
 
+// 서버가 지정한 label/value 컬럼이 모두 있을 때만 제한된 행으로 차트를 그립니다.
 function drawChart(canvasId, table) {
   const labelIdx = table.columns.indexOf(table.label_column);
   const valueIdx = table.columns.indexOf(table.value_column);

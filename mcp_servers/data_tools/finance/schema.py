@@ -1,9 +1,13 @@
+"""소유자 결정 전 보존하는 legacy finance schema Resource."""
+
 from __future__ import annotations
 
 from typing import TypedDict
 
 
 class SchemaResource(TypedDict):
+    """legacy finance Text2SQL의 schema와 업무 용어 표현."""
+
     tables: list[str]
     columns: dict[str, list[str]]
     business_glossary: dict[str, str]

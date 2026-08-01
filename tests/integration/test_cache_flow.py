@@ -1,3 +1,5 @@
+"""BOTH 부분 성공과 cache short-circuit를 외부 서비스 없이 검증한다."""
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -7,6 +9,7 @@ from tests.integration.chat_fakes import build_fake_application, database_succes
 
 @pytest.mark.integration
 def test_both_success_is_cached_without_additional_port_or_llm_calls() -> None:
+    """두 번째 동일 요청이 MCP·LLM 호출을 한 번도 추가하지 않는 계약을 고정한다."""
     application, port, llm = build_fake_application(
         {
             "search_documents": document_success(),
@@ -33,6 +36,7 @@ def test_both_success_is_cached_without_additional_port_or_llm_calls() -> None:
 
 @pytest.mark.integration
 def test_both_keeps_document_result_when_database_tool_fails() -> None:
+    """한 Tool 실패가 다른 도메인의 유효 evidence를 지우지 않게 한다."""
     application, port, llm = build_fake_application(
         {
             "search_documents": document_success(),
@@ -55,6 +59,7 @@ def test_both_keeps_document_result_when_database_tool_fails() -> None:
 
 @pytest.mark.integration
 def test_both_returns_insufficient_response_when_all_tools_fail() -> None:
+    """모든 Tool 실패를 근거 있는 부분 응답으로 가장하지 않게 한다."""
     application, port, llm = build_fake_application(
         {
             "search_documents": MCPNoResultError("search_documents", "not found"),

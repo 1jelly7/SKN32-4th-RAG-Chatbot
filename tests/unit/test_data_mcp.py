@@ -1,3 +1,5 @@
+"""Host MCP client의 envelope 정규화와 오류 분류 contract test."""
+
 from __future__ import annotations
 
 import asyncio
@@ -80,6 +82,7 @@ def test_document_search_normalizes_data_and_sources() -> None:
     ],
 )
 def test_purchase_query_distinguishes_mcp_errors(response: object, error_type: type[Exception]) -> None:
+    """malformed, NO_RESULT, QUERY_ERROR, timeout이 서로 다른 내부 예외로 유지되게 한다."""
     port = FakeMCPPort(
         {
             "search_documents": _success("document", []),
@@ -93,6 +96,7 @@ def test_purchase_query_distinguishes_mcp_errors(response: object, error_type: t
 
 
 def test_fake_mcp_returns_defensive_response_copy() -> None:
+    """fake 결과 변형이 production fixture 의미를 오염시키지 않게 한다."""
     response = _success("purchase", [{"amount": 100}])
     port = FakeMCPPort(
         {

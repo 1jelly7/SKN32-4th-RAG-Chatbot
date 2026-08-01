@@ -1,3 +1,5 @@
+"""문서 DB가 반환한 지원 파일 경로만 RAG 입력으로 로드한다."""
+
 from pathlib import Path
 
 from ingestion.loaders import load_markdown, load_pdf, load_text

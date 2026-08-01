@@ -1,3 +1,9 @@
+"""소유자 결정 전 보존하는 legacy finance 읽기 adapter.
+
+정식 구매 Tool은 mcp_servers.data_tools.purchase가 소유하므로 새 backend 흐름에서 이
+모듈을 query_purchase 대체물로 참조하지 않는다.
+"""
+
 from __future__ import annotations
 
 import re

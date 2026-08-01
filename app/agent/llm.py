@@ -1,3 +1,9 @@
+"""검증된 evidence만 답변 모델에 전달하는 비동기 LLM 경계.
+
+provider 호출 전에 내부 경로와 자격증명 후보를 재귀적으로 제거한다. API key가 없는
+로컬 데모는 provider 성공을 가장하지 않고 전달받은 근거의 제한된 요약만 만든다.
+"""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -34,6 +40,7 @@ class FakeLLMPort:
         self.calls: list[LLMCall] = []
 
     async def complete(self, prompt: str, context: list[dict[str, Any]]) -> str:
+        """응답을 반환하고 방어적 context 사본을 호출 이력에 기록한다."""
         self.calls.append(LLMCall(prompt=prompt, context=deepcopy(context)))
         return self._response
 
@@ -52,6 +59,7 @@ class LLMClient:
 
     @property
     def is_demo_mode(self) -> bool:
+        """외부 OpenAI client가 구성되지 않아 로컬 요약을 사용할지 반환한다."""
         return self._client is None
 
     async def complete(self, prompt: str, context: list[dict[str, Any]]) -> str:

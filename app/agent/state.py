@@ -1,3 +1,9 @@
+"""LangGraph 노드 사이에서 공유하는 route, evidence, 응답 상태 계약.
+
+``BOTH``의 문서·DB 근거는 평가 전까지 별도 필드에 보존한다. 캐시 필드는 키 생성용
+freshness 입력을 운반할 뿐 캐시 저장소 접근 책임을 그래프에 부여하지 않는다.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,6 +30,8 @@ class EvidencePolicy:
 
 
 class GraphState(TypedDict, total=False):
+    """라우팅부터 근거 평가·답변 합성까지 누적되는 부분 상태."""
+
     question: str
     session_id: str | None
     request_id: str

@@ -1,3 +1,5 @@
+"""소유자 결정 전 보존하는 legacy finance 검증 스켈레톤."""
+
 import pandas as pd
 
 from etl.finance.types import ValidationReport
@@ -10,4 +12,6 @@ def validate(frame: pd.DataFrame, required_columns: list[str]) -> ValidationRepo
     조용히 제거하지 않는다. ``is_valid``는 오류 임계치 정책에 따라 결정되며 load 단계는
     false일 때 실행되지 않아야 한다.
     """
+    # TODO(contract clarification): legacy 유지 여부와 필수값·코드 규칙을 확정한 뒤
+    # 행을 삭제하지 않는 ValidationReport와 검증 중단 테스트를 구현한다.
     ...

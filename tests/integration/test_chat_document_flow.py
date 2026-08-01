@@ -1,3 +1,5 @@
+"""FastAPI→Graph→fake Document MCP→응답 직렬화의 mock 통합 계약."""
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -6,6 +8,7 @@ from tests.integration.chat_fakes import build_fake_application, database_succes
 
 @pytest.mark.integration
 def test_document_question_flows_from_api_to_document_fake_and_response() -> None:
+    """문서 route가 공개 출처를 보존하고 내부 file_path를 노출하지 않게 한다."""
     application, port, llm = build_fake_application(
         {
             "search_documents": document_success(),

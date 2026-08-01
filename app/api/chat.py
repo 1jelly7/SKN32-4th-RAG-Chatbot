@@ -1,3 +1,10 @@
+"""캐시 우선 채팅 HTTP 오케스트레이션 경계.
+
+검증된 요청으로 캐시를 먼저 조회하고 miss만 LangGraph에 전달한다. 이 모듈은 MCP,
+LLM, MySQL, FAISS를 직접 호출하지 않으며 외부 Tool 예외를 비밀정보 없는 공개 오류
+계약으로 변환한다.
+"""
+
 from __future__ import annotations
 
 import uuid
@@ -26,7 +33,11 @@ def _tool_error_response(status_code: int, error_code: str, detail: str) -> JSON
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, http_request: Request) -> ChatResponse | JSONResponse:
-    """캐시 조회, Graph 실행, 캐시 저장 순서로 채팅 요청을 처리한다."""
+    """캐시 조회, Graph 실행, 검증된 응답 저장 순서로 채팅 요청을 처리한다.
+
+    캐시 hit는 즉시 반환해 Graph와 그 하위 LLM/MCP 호출을 모두 차단한다. miss에서만
+    request별 state를 만들며, Tool 오류의 내부 메시지는 응답에 전달하지 않는다.
+    """
     request_id = str(uuid.uuid4())
     state: GraphState = {
         "question": request.question,
@@ -38,6 +49,7 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse | JS
 
     cached_value = lookup_cached_answer(state, cache_repository)
     if cached_value is not None:
+        # 동일 freshness 입력의 hit는 외부 provider 호출을 금지하는 완전한 단락점이다.
         return ChatResponse(
             answer=cached_value.get("answer", ""),
             sources=[Source(**source) for source in cached_value.get("sources", [])],

@@ -1,3 +1,5 @@
+"""cache key freshness 재료와 그래프 외부 lookup/write 계약을 검증한다."""
+
 from app.cache.key import make_cache_key
 from app.cache.repository import MemoryCache
 from app.cache.service import lookup_cached_answer, write_answer_cache

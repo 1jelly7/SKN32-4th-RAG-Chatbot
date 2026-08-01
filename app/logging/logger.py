@@ -1,3 +1,9 @@
+"""소유권 문서의 5필드 한 줄 형식으로 앱 파일 로그를 구성한다.
+
+handler를 중복 등록하지 않으며 호출자는 질문 원문, 전체 근거, 자격증명을 message나
+추가 필드에 전달하지 않아야 한다.
+"""
+
 import logging
 from pathlib import Path
 

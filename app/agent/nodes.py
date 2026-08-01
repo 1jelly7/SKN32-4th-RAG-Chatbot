@@ -1,3 +1,9 @@
+"""LangGraph의 라우팅, MCP 조회, 답변 직렬화 노드.
+
+조회 노드는 주입된 MCP client만 사용하고 문서 파일·FAISS·SQL에 직접 접근하지 않는다.
+문서/DB evidence는 평가 전까지 분리하며 답변 노드는 검증된 evidence만 LLM에 전달한다.
+"""
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -228,6 +234,7 @@ def _build_tables(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _build_sources(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """채택된 evidence를 내부 경로 없는 공개 출처 목록으로 변환한다."""
     sources: list[dict[str, Any]] = []
     for item in evidence:
         if item.get("type") == "document":
@@ -261,6 +268,7 @@ def _build_sources(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _metadata_value(item: dict[str, Any], *keys: str) -> Any:
+    """evidence metadata에서 우선순위에 따라 첫 유효 값을 읽는다."""
     metadata = item.get("metadata")
     if not isinstance(metadata, dict):
         return None
@@ -272,4 +280,5 @@ def _metadata_value(item: dict[str, Any], *keys: str) -> Any:
 
 
 def _is_sensitive_field_name(field_name: object) -> bool:
+    """표 응답에서 제거할 내부 경로·자격증명 계열 필드인지 판정한다."""
     return isinstance(field_name, str) and any(part in field_name.casefold() for part in SENSITIVE_FIELD_PARTS)

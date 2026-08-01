@@ -1,9 +1,12 @@
+"""Document MCP가 경로 조회를 우회해 임의 파일을 읽지 않는 순서 계약."""
+
 import asyncio
 
 import mcp_servers.document_tools.search as search_module
 
 
-def test_document_search_resolves_database_paths_before_loading(monkeypatch):
+def test_document_search_resolves_database_paths_before_loading(monkeypatch) -> None:
+    """문서 DB 경로 조회→해당 파일 로드→RAG 순서를 회귀로 고정한다."""
     calls: list[str] = []
     path_record = {
         "document_id": "doc-1",

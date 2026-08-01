@@ -1,3 +1,5 @@
+"""route별 TTL과 최종 응답의 캐시 가능 여부를 결정한다."""
+
 from app.agent.state import GraphState, Route
 
 

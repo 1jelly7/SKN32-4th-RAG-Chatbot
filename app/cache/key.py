@@ -1,3 +1,5 @@
+"""질문과 모든 freshness 입력으로 비가역 answer-cache 키를 생성한다."""
+
 from __future__ import annotations
 
 import hashlib

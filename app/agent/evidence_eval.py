@@ -1,3 +1,9 @@
+"""문서와 데이터 근거를 합쳐 결정적 품질 상태를 판정한다.
+
+새 사실을 생성하지 않고 relevance, confidence, metadata, freshness 정책과 명시적 사실
+충돌만 평가하며, 채택된 근거만 답변 합성 단계로 전달한다.
+"""
+
 from __future__ import annotations
 
 import json
@@ -12,7 +18,12 @@ async def evidence_eval(
     state: GraphState,
     policy: EvidencePolicy | None = None,
 ) -> GraphState:
-    """분리된 문서·데이터 근거를 정책에 따라 결정적으로 판정한다."""
+    """분리된 문서·데이터 근거를 정책에 따라 결정적으로 판정한다.
+
+    낮은 품질은 ``INSUFFICIENT`` 또는 부분 채택으로 처리하고, ``CONTRADICTED``는
+    명시적 반증이나 동일 fact의 상이한 값에만 사용한다. 계약 문서가 허용하는 1회
+    보완 검색은 현재 이 함수에 구현돼 있지 않다.
+    """
     document_evidence = state.get("document_evidence") or []
     database_evidence = state.get("database_evidence") or []
     all_evidence = document_evidence + database_evidence

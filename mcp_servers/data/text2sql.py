@@ -1,3 +1,5 @@
+"""인증 context와 allowlist schema를 받는 범용 Text2SQL 스켈레톤."""
+
 from app.core.security import UserContext
 from mcp_servers.data.schema import SchemaResource
 
@@ -13,4 +15,7 @@ async def generate_sql(
     권한 필터의 추가가 필요한 구조로 출력시킨다. 생성 결과는 신뢰하지 않고 반드시
     sql_guard.validate_sql을 거친 뒤에만 실행 가능하다.
     """
+    # TODO(contract clarification): 정식 query_purchase/query_sales와 이 범용 Tool의
+    # 관계, tenant filter 표현, LLM 출력 schema를 확정한다. 생성 SQL은 반드시
+    # sql_guard를 통과해야 하며 이 계층이 직접 실행해서는 안 된다.
     ...

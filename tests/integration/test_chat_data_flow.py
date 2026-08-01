@@ -1,3 +1,5 @@
+"""purchase/sales 선택과 복수 도메인 조회의 mock 통합 계약."""
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,6 +17,7 @@ from tests.integration.chat_fakes import build_fake_application, database_succes
 def test_single_domain_database_questions_call_only_the_selected_tool(
     question: str, expected_domain: str, expected_tool: str
 ) -> None:
+    """명확한 도메인 질문이 관련 없는 Data Tool을 호출하지 않게 한다."""
     application, port, llm = build_fake_application(
         {
             "search_documents": document_success(),
@@ -38,6 +41,7 @@ def test_single_domain_database_questions_call_only_the_selected_tool(
 
 @pytest.mark.integration
 def test_ambiguous_database_question_calls_purchase_and_sales() -> None:
+    """도메인이 모호한 DB 질문에서 두 provenance가 모두 보존되게 한다."""
     application, port, llm = build_fake_application(
         {
             "search_documents": document_success(),
