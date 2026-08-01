@@ -48,6 +48,8 @@ python -m pytest tests/unit/test_etl.py
 - 웹 UI는 `app/web/`의 vanilla HTML/CSS/JavaScript다. React 컴포넌트, TypeScript, 별도 상태 관리·데이터 패칭 라이브러리는 현재 패턴이 아니다. API 호출과 응답/표/차트 렌더링은 `app/web/chat.js`에 둔다.
 - 테스트는 `tests/unit/test_<기능>.py`, `tests/integration/test_<흐름>.py`에 두고 `pytest` 함수와 `@pytest.mark.parametrize`/`@pytest.mark.asyncio`를 사용한다. 외부 연결은 결정적 fake/mock 또는 `tmp_path`로 대체하고, 실제 로컬 MySQL이 필요한 검증은 명시적으로 skip한다. 기존 contract/acceptance 테스트를 삭제하거나 약화하지 않는다.
 - 자동 포매터는 없지만 구현 코드의 기존 형식인 4칸 들여쓰기, 한 줄 하나의 명확한 동작, 짧은 한국어 docstring/comment를 따른다. 광범위한 `except Exception`은 외부 경계의 부분 실패 처리처럼 필요한 경우에만 이유와 `# noqa: BLE001`을 함께 둔다.
+- 새 코드의 주석과 docstring은 프로젝트에 참여하지 않은 개발자도 이해할 수 있도록 Python 표준 스타일로 작성한다. 구현 자체를 반복하기보다 책임, 입력·출력, 외부 경계, 중요한 분기와 제약의 이유를 간결하고 정확하게 설명한다. 변경하지 않는 기존 주석을 정리·재작성하는 일은 별도 요청 없이는 하지 않는다.
+- MCP Tool 및 Tool 호출 경계에는 경량 모델이 올바른 Tool을 선택할 수 있도록 docstring을 반드시 둔다. docstring에는 Tool의 목적, 사용해야 하는 질문 또는 입력, 반환 evidence/envelope의 의미, 사용하면 안 되는 경우와 도메인·읽기 전용 같은 핵심 제약을 명시한다. API key·비밀번호·내부 `file_path` 등 비밀정보나 내부 경로는 docstring·주석에 쓰지 않는다.
 
 ## 4. 금지 구역 (Guardrails)
 
