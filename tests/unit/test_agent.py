@@ -33,8 +33,8 @@ def test_route_data_domain_detects_sales():
     assert route_data_domain("고객별 매출 순위") == "sales"
 
 
-def test_route_data_domain_detects_finance():
-    assert route_data_domain("공급업체별 지출 총액") == "finance"
+def test_route_data_domain_detects_purchase():
+    assert route_data_domain("공급업체별 지출 총액") == "purchase"
 
 
 def test_route_data_domain_defaults_to_both_when_ambiguous():
@@ -164,7 +164,7 @@ def test_build_tables_extracts_columns_and_rows():
     evidence = [
         {
             "type": "database",
-            "domain": "finance",
+            "domain": "purchase",
             "generated_sql": "SELECT vendor_name, total FROM x;",
             "rows": [{"vendor_name": "A사", "total": 100}, {"vendor_name": "B사", "total": 200}],
         }
@@ -182,7 +182,12 @@ def test_build_tables_converts_decimal_to_float():
     from app.agent.nodes import _build_tables
 
     evidence = [
-        {"type": "database", "domain": "finance", "generated_sql": "x", "rows": [{"amount": Decimal("123.45")}]}
+        {
+            "type": "database",
+            "domain": "purchase",
+            "generated_sql": "x",
+            "rows": [{"amount": Decimal("123.45")}],
+        }
     ]
     tables = _build_tables(evidence)
 
@@ -214,7 +219,7 @@ def test_build_tables_prefers_last_numeric_column_as_value():
     evidence = [
         {
             "type": "database",
-            "domain": "finance",
+            "domain": "purchase",
             "generated_sql": "x",
             "rows": [{"vendor": "A", "po_count": 3, "total_spend": 50000}],
         }
@@ -227,7 +232,7 @@ def test_build_tables_prefers_last_numeric_column_as_value():
 def test_build_tables_not_chartable_without_label_column():
     from app.agent.nodes import _build_tables
 
-    evidence = [{"type": "database", "domain": "finance", "generated_sql": "x", "rows": [{"count": 5, "total": 10}]}]
+    evidence = [{"type": "database", "domain": "purchase", "generated_sql": "x", "rows": [{"count": 5, "total": 10}]}]
     tables = _build_tables(evidence)
 
     assert tables[0]["chartable"] is False
@@ -244,6 +249,6 @@ def test_build_tables_skips_document_evidence():
 def test_build_tables_skips_empty_rows():
     from app.agent.nodes import _build_tables
 
-    evidence = [{"type": "database", "domain": "finance", "generated_sql": "x", "rows": []}]
+    evidence = [{"type": "database", "domain": "purchase", "generated_sql": "x", "rows": []}]
     tables = _build_tables(evidence)
     assert tables == []

@@ -17,7 +17,7 @@ class Source(BaseModel):
 class TableData(BaseModel):
     """DB 조회 결과를 표/차트로 그릴 수 있는 형태입니다."""
 
-    domain: str  # "finance" 또는 "sales"
+    domain: str  # "purchase", "sales" 또는 "both"
     sql: str
     columns: list[str]
     rows: list[list[Any]]

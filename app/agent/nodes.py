@@ -6,14 +6,14 @@ from typing import Any
 
 from app.agent.llm import complete
 from app.agent.prompts import ANSWER_PROMPT
-from app.agent.state import GraphState, Route
+from app.agent.state import DataDomain, GraphState, Route
 
 # MCP 프로토콜(별도 서버 프로세스 + 네트워크 통신)은 아직 연결하지 않았습니다.
 # 대신 Document MCP/Data MCP가 노출하기로 한 함수를 같은 프로세스에서 직접 호출합니다.
 # 나중에 app/mcp/client.py가 완성되면, 아래 import를 실제 MCP 클라이언트 호출로만
 # 바꾸면 되도록 함수 시그니처(입력/출력)를 MCP Tool 계약과 동일하게 맞춰뒀습니다.
 from mcp_servers.document_tools.search import search_documents
-from mcp_servers.data_tools.finance.query import query_finance
+from mcp_servers.data_tools.purchase.query import query_purchase
 from mcp_servers.data_tools.sales.query import query_sales
 
 
@@ -41,15 +41,15 @@ def route_question(question: str) -> Route:
     return "GENERAL"
 
 
-def route_data_domain(question: str) -> str:
-    """DATABASE/BOTH 경로일 때 finance(구매/지출)와 sales(판매) 중 어느 도메인인지 판별한다."""
+def route_data_domain(question: str) -> DataDomain:
+    """DATABASE/BOTH 경로일 때 purchase(구매/지출)와 sales(판매) 도메인을 판별한다."""
     normalized = question.casefold()
     sales_terms = ("매출", "고객", "판매", "재고", "vip", "여신", "수주")
-    finance_terms = ("구매", "지출", "공급업체", "발주", "미지급", "벤더", "재무")
-    if any(t in normalized for t in sales_terms) and not any(t in normalized for t in finance_terms):
+    purchase_terms = ("구매", "지출", "공급업체", "발주", "미지급", "벤더", "재무")
+    if any(t in normalized for t in sales_terms) and not any(t in normalized for t in purchase_terms):
         return "sales"
-    if any(t in normalized for t in finance_terms) and not any(t in normalized for t in sales_terms):
-        return "finance"
+    if any(t in normalized for t in purchase_terms) and not any(t in normalized for t in sales_terms):
+        return "purchase"
     # 둘 다 걸리거나 둘 다 안 걸리면 두 도메인 다 조회해서 병합합니다.
     return "both"
 
@@ -59,7 +59,7 @@ async def router(state: GraphState) -> GraphState:
     question = state.get("question", "")
     state["route"] = route_question(question)
     if state["route"] in ("DATABASE", "BOTH"):
-        state["data_domain"] = route_data_domain(question)  # type: ignore[assignment]
+        state["data_domain"] = route_data_domain(question)
     return state
 
 
@@ -92,8 +92,8 @@ async def document_retrieval(state: GraphState) -> GraphState:
 async def database_retrieval(state: GraphState) -> GraphState:
     """Data MCP를 통해서만 업무 데이터를 조회해 database_evidence에 저장한다.
 
-    state.data_domain에 따라 query_finance 또는 query_sales를 명시적으로 선택하고 자연어
-    질문을 전달한다. SQL·MySQL에는 직접 접근하지 않는다(query_finance/query_sales
+    state.data_domain에 따라 query_purchase 또는 query_sales를 명시적으로 선택하고 자연어
+    질문을 전달한다. SQL·MySQL에는 직접 접근하지 않는다(query_purchase/query_sales
     내부에서만 접근). 조회 결과의 실행 시각·SQL 요약·행 수 같은 메타데이터를 보존해
     이후 근거 평가와 출처 표시가 가능해야 한다.
     """
@@ -102,8 +102,8 @@ async def database_retrieval(state: GraphState) -> GraphState:
 
     evidence: list[dict] = []
     try:
-        if domain in ("finance", "both"):
-            evidence.extend(await query_finance(question))
+        if domain in ("purchase", "both"):
+            evidence.extend(await query_purchase(question))
         if domain in ("sales", "both"):
             evidence.extend(await query_sales(question))
     except Exception as exc:  # noqa: BLE001

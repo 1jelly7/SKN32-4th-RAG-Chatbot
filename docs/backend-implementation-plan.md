@@ -51,7 +51,7 @@ Backend / Integration의 기본 수정 범위:
 |---|---|---|---|
 | FastAPI | 부분 완료 | app factory, health, 정적 UI, `POST /api/chat` | 의존성 주입, readiness, 구조화 오류 매핑 |
 | LangGraph | MVP 완료 | GENERAL/DOCUMENT/DATABASE/BOTH 순차 흐름, evidence 후 answer | MCP client 주입, 실패·충돌 경로 강화 |
-| 라우팅 | 부분 완료 | 키워드 기반 네 route, legacy finance/sales/both 선택 | purchase/sales 계약으로 마이그레이션, `DataDomain` 타입 정합성 |
+| 라우팅 | 부분 완료 | 키워드 기반 네 route와 purchase/sales/both 선택 | C0 완료, 후속 라우팅 정책 보강 |
 | Evidence | 부분 완료 | 빈 근거·DB 오류 기반 3단계 판정 | freshness/confidence/metadata/충돌 및 `CONTRADICTED` 판정 |
 | LLM/응답 | 부분 완료 | API key 없는 demo 응답, source/table/chart 직렬화 | fake 주입, source 계약 전체 필드, 오류 테스트 |
 | Cache | 부분 완료 | Graph 외부 MemoryCache, cache-first API, TTL | Redis adapter, 실제 version/freshness 공급, hit 시 외부 미호출 API 테스트 |
@@ -59,14 +59,14 @@ Backend / Integration의 기본 수정 범위:
 | MCP 서버 | 소유자 구현 진행 | Document server, `query_purchase`, `query_sales` 경계 존재 | backend는 직접 확장하지 않고 확정 transport에 연결 |
 | 통합 테스트 | 미구현 | cache repository roundtrip만 실질 검증 | document/data/BOTH/API cache 흐름의 fake 기반 테스트 |
 
-현재 `app/agent/nodes.py`는 전환 단계로 `mcp_servers.document_tools.search`, legacy `data_tools.finance`, `data_tools.sales`를 같은 프로세스에서 직접 호출한다. 새 기능은 이 임시 결합을 확대하지 않고 purchase/sales 계약의 `app/mcp/client.py` 주입 경계로 이동시키는 방향으로 구현한다.
+현재 `app/agent/nodes.py`는 전환 단계로 `mcp_servers.document_tools.search`, `data_tools.purchase`, `data_tools.sales`를 같은 프로세스에서 직접 호출한다. 새 기능은 이 임시 결합을 확대하지 않고 purchase/sales 계약의 `app/mcp/client.py` 주입 경계로 이동시키는 방향으로 구현한다.
 
-현재 확정된 데이터 계약은 `purchase`와 `sales`이며 Tool 이름은 `query_purchase`, `query_sales`다. 코드와 기존 계약 문서에 남아 있는 `finance`, `query_finance`, `finance_db_database`는 호환 계약이 아니라 제거해야 할 legacy 명칭이다. C0에서 backend와 계약 문서를 먼저 동기화한다.
+현재 확정된 데이터 계약은 `purchase`와 `sales`이며 Tool 이름은 `query_purchase`, `query_sales`다. 복수 조회는 `both`로 표현한다. C0에서 backend와 계약 문서를 이 명칭으로 동기화했다.
 
 ## 5. 의존성 및 권장 순서
 
 ```text
-C0 purchase/sales 명칭 동기화 [NOT_STARTED]
+C0 purchase/sales 명칭 동기화 [DONE]
   -> B0 현재 계약 고정 [DONE]
   -> B1 테스트 가능한 dependency injection [PARTIAL]
       -> B2 MCP Port/Fake/envelope [NOT_STARTED]
@@ -83,13 +83,13 @@ C0 purchase/sales 명칭 동기화 [NOT_STARTED]
 
 ### C0 — purchase/sales 계약 명칭 동기화
 
-- 상태: `NOT_STARTED`
+- 상태: `DONE`
 - 확정 계약: 데이터 도메인은 `purchase`, `sales`, 복수 조회 의미의 `both`이고 Tool은 `query_purchase`, `query_sales`다.
-- 남은 작업:
-  - backend의 `DataDomain`, 라우팅, MCP client, 설정과 테스트에서 legacy `finance`를 `purchase`로 교체한다.
-  - `docs/interface.md`, `docs/architecture.md`, `docs/ownership.md`, `docs/test-scenarios.md`의 데이터 계약과 소유 경로를 purchase/sales로 동기화한다.
-  - 이미 존재하는 `mcp_servers/data_tools/purchase/`의 소유자 구현은 이 태스크에서 수정하지 않고 backend 경계에서 사용한다.
-  - `etl/finance/`, `database/finance/` 같은 legacy 경로를 임의로 삭제·이동하지 않는다. 별도 소유자 결정 전에는 참조 제거와 위험 기록만 수행한다.
+- 완료 내용:
+  - backend의 `DataDomain`, 라우팅, MCP client, 설정과 테스트를 `purchase`/`sales`/`both`로 동기화했다.
+  - `docs/interface.md`, `docs/architecture.md`, `docs/ownership.md`, `docs/test-scenarios.md`의 데이터 계약과 소유 경로를 purchase/sales로 동기화했다.
+  - `mcp_servers/data_tools/purchase/`의 소유자 구현은 수정하지 않고 backend 경계에서 사용한다.
+  - 기존 도메인 디렉터리는 소유자 결정 전 삭제·이동하지 않으며 backend와 계약 문서에서 참조하지 않는다.
 - 수정 허용: backend 소유 `app/` 경로, 관련 backend 테스트, 위 계약 문서
 - 수정 금지: `mcp_servers/data_tools/{purchase,sales}/`, `etl/`, `database/`, 실제 데이터·생성물
 - 검증:
@@ -143,10 +143,9 @@ C0 purchase/sales 명칭 동기화 [NOT_STARTED]
 ### B3 — 라우팅 및 데이터 도메인 정합성
 
 - 상태: `PARTIAL`
-- 구현됨: 네 route의 결정적 키워드 라우팅과 legacy finance/sales/모호 질의의 복수 조회
+- 구현됨: 네 route의 결정적 키워드 라우팅, purchase/sales/모호 질의의 복수 조회, `DataDomain`의 `both` 표현
 - 남은 작업:
-  - `route_data_domain()`이 반환하는 `both`와 `GraphState.DataDomain`의 단일 값 타입 불일치를 제거한다.
-  - C0 이후 purchase/sales 키워드가 동시에 있거나 모두 없는 DATABASE 질의를 복수 도메인으로 명시한다.
+  - purchase/sales 키워드가 동시에 있거나 모두 없는 DATABASE 질의의 복수 도메인 정책을 회귀 테스트로 고정한다.
   - 각 도메인 evidence에 origin/domain을 보존하는 테스트를 추가한다.
 - 수정 허용: `app/agent/state.py`, `app/agent/nodes.py`, `tests/unit/test_agent.py`
 - 검증:
@@ -251,10 +250,10 @@ C0 purchase/sales 명칭 동기화 [NOT_STARTED]
 
 ## 7. 다음 실행 우선순위
 
-1. C0에서 legacy finance 명칭을 purchase/sales 계약으로 동기화한다.
+1. C0에서 purchase/sales 계약 명칭 동기화를 완료했다.
 2. B1에서 app factory의 MCP/LLM/cache/logging 주입 방식을 확정한다.
 3. B2에서 실제 transport와 분리된 Port/Fake/envelope validator를 구현한다.
-4. B3의 `DataDomain` 타입 불일치를 해결하고 B4의 evidence 규칙을 테스트로 고정한다.
+4. B3의 복수 도메인 라우팅 정책과 B4의 evidence 규칙을 테스트로 고정한다.
 5. B6에서 Graph의 same-process import를 주입 client로 교체한다.
 6. B7의 API 오류·cache version 공급을 완성한다.
 7. B8 placeholder를 실제 fake 기반 통합 흐름으로 교체한 뒤 B9 전체 회귀를 실행한다.
@@ -291,8 +290,7 @@ C0 purchase/sales 명칭 동기화 [NOT_STARTED]
 |---|---|---|
 | MCP client가 스켈레톤 | Graph가 소유자 모듈에 직접 결합 | B2/B6에서 주입 client로 전환 |
 | envelope와 내부 `list[dict]` 불일치 | 오류·metadata 유실 가능 | 경계 validator와 contract fixture 추가 |
-| legacy `finance` 명칭 잔존 | purchase 계약과 코드·문서 불일치 | C0에서 `purchase`로 동기화 |
-| `DataDomain`에 `both` 없음 | 타입 무시 주석과 런타임 표현 불일치 | 복수 도메인 타입을 명시적으로 모델링 |
+| 기존 도메인 디렉터리 잔존 | 소유자 결정 전 삭제·이동 금지 | backend와 계약 문서에서 참조하지 않음 |
 | evidence 규칙이 단순함 | freshness·충돌을 정확히 판정하지 못함 | 정책값과 B4 회귀 테스트 추가 |
 | cache version 값 미공급 | 오래된 답변 키 재사용 가능 | index/freshness 공급자를 API 진입 전에 주입 |
 | logging이 app import 시 파일 handler 구성 | 읽기 전용 환경에서 테스트 실패 가능 | B1에서 테스트용 logging 경계 제공 |

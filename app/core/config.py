@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     local_embedding_dimension: int = 384
 
     # Data MCP가 조회할 도메인별 DB 이름입니다. (읽기 계정/호스트는 mysql_read_*를 재사용)
-    finance_db_database: str = "purchase"
+    purchase_db_database: str = "purchase"
     sales_db_database: str = "sales"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

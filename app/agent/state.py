@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal, TypedDict
 
 Route = Literal["GENERAL", "DOCUMENT", "DATABASE", "BOTH"]
-DataDomain = Literal["finance", "sales"]
+DataDomain = Literal["purchase", "sales", "both"]
 EvidenceStatus = Literal[
     "SUPPORTED",
     "PARTIALLY_SUPPORTED",
