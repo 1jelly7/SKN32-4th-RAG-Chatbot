@@ -99,8 +99,8 @@ async def test_database_retrieval_preserves_database_origin_and_domain(
     port = FakeMCPPort(
         {
             "search_documents": _tool_success("document", []),
-            "query_purchase": _tool_success("purchase", []),
-            "query_sales": _tool_success("sales", []),
+            "query_purchase": _tool_success("purchase", [{"amount": 100}]),
+            "query_sales": _tool_success("sales", [{"revenue": 200}]),
         }
     )
     mcp_client = MCPClient(port)
@@ -243,6 +243,24 @@ async def test_evidence_eval_marks_only_explicit_or_fact_value_conflicts_contrad
     )
 
     assert result["evidence_status"] == "CONTRADICTED"
+    assert result["evidence"] == []
+
+
+@pytest.mark.asyncio
+async def test_answer_synthesis_does_not_call_llm_for_contradicted_evidence() -> None:
+    fake_llm = FakeLLMPort("should not be used")
+    state: GraphState = {
+        "route": "DOCUMENT",
+        "evidence_status": "CONTRADICTED",
+        "evidence": [{"type": "document", "content": "상충 근거"}],
+    }
+
+    result = await answer_synthesis(state, fake_llm)
+
+    assert "근거를 찾지 못해" in result["answer"]
+    assert result["sources"] == []
+    assert result["tables"] == []
+    assert fake_llm.calls == []
 
 
 @pytest.mark.asyncio
@@ -252,7 +270,7 @@ async def test_database_retrieval_keeps_sales_evidence_when_purchase_fails(
         {
             "search_documents": _tool_success("document", []),
             "query_purchase": RuntimeError("구매 조회 실패"),
-            "query_sales": _tool_success("sales", []),
+            "query_sales": _tool_success("sales", [{"revenue": 200}]),
         }
     )
     mcp_client = MCPClient(port)

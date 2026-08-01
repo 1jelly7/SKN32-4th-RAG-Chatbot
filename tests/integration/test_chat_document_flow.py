@@ -34,7 +34,7 @@ def test_document_question_flows_from_api_to_document_fake_and_response() -> Non
             "table_name": None,
             "query_id": None,
             "freshness_seconds": None,
-            "source_version": None,
+            "source_version": "fixture-index-v1",
         }
     ]
     assert [call.tool_name for call in port.calls] == ["search_documents"]

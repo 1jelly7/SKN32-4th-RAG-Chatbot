@@ -7,7 +7,7 @@ from typing import Any
 from app.agent.llm import AsyncLLMPort, complete
 from app.agent.prompts import ANSWER_PROMPT
 from app.agent.state import DataDomain, GraphState, Route
-from app.mcp.client import MCPClient
+from app.mcp.client import MCPClient, MCPClientError
 
 SENSITIVE_FIELD_PARTS = ("api_key", "password", "secret", "token", "file_path")
 
@@ -76,9 +76,12 @@ async def document_retrieval(
     question = state.get("question", "")
     try:
         state["document_evidence"] = await mcp_client.document_search(question, top_k=4)
-    except Exception as exc:  # noqa: BLE001 - 실패해도 다른 경로 결과로 부분 응답 가능해야 함
+    except MCPClientError as exc:
+        if state.get("route") != "BOTH":
+            raise
         state["document_evidence"] = []
-        state.setdefault("_errors", []).append(f"document_retrieval 실패: {exc}")
+        state.setdefault("_errors", []).append("document_retrieval 실패")
+        state.setdefault("_mcp_errors", []).append(exc)
     return state
 
 
@@ -100,20 +103,36 @@ async def database_retrieval(
 
     question = state.get("question", "")
     domain = state.get("data_domain", "both")
+    allows_partial_result = domain == "both" or state.get("route") == "BOTH"
 
     evidence: list[dict[str, Any]] = []
+    retrieval_errors: list[MCPClientError] = []
     if domain in ("purchase", "both"):
         try:
             evidence.extend(await mcp_client.purchase_query(question))
-        except Exception as exc:  # noqa: BLE001 - 다른 도메인 조회 결과는 보존해야 함
-            state.setdefault("_errors", []).append(f"purchase_retrieval 실패: {exc}")
+        except MCPClientError as exc:
+            if not allows_partial_result:
+                raise
+            state.setdefault("_errors", []).append("purchase_retrieval 실패")
+            retrieval_errors.append(exc)
     if domain in ("sales", "both"):
         try:
             evidence.extend(await mcp_client.sales_query(question))
-        except Exception as exc:  # noqa: BLE001 - 다른 도메인 조회 결과는 보존해야 함
-            state.setdefault("_errors", []).append(f"sales_retrieval 실패: {exc}")
+        except MCPClientError as exc:
+            if not allows_partial_result:
+                raise
+            state.setdefault("_errors", []).append("sales_retrieval 실패")
+            retrieval_errors.append(exc)
 
     state["database_evidence"] = evidence
+    if evidence or state.get("document_evidence"):
+        return state
+
+    previous_errors = state.get("_mcp_errors", [])
+    if previous_errors:
+        raise previous_errors[0]
+    if retrieval_errors:
+        raise retrieval_errors[0]
     return state
 
 
@@ -132,9 +151,10 @@ async def answer_synthesis(
     evidence = state.get("evidence", [])
     evidence_status = state.get("evidence_status", "SUPPORTED")
 
-    if route != "GENERAL" and evidence_status == "INSUFFICIENT":
+    if route != "GENERAL" and evidence_status in ("INSUFFICIENT", "CONTRADICTED"):
         state["answer"] = "관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
         state["sources"] = []
+        state["tables"] = []
         return state
 
     answer = await complete(ANSWER_PROMPT, evidence, llm)

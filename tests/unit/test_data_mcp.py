@@ -63,7 +63,7 @@ def test_document_search_normalizes_data_and_sources() -> None:
 
     evidence = asyncio.run(MCPClient(port).document_search("휴가", 3))
 
-    assert evidence == [{"type": "document", "document_id": "policy-1", "title": "휴가 규정", "content": "휴가 신청 절차", "score": 0.9, "page": 3}]
+    assert evidence == [{"type": "document", "document_id": "policy-1", "title": "휴가 규정", "content": "휴가 신청 절차", "score": 0.9, "page": 3, "metadata": {}}]
     assert len(port.calls) == 1
     assert port.calls[0].tool_name == "search_documents"
     assert port.calls[0].payload == {"query": "휴가", "top_k": 3}
@@ -106,3 +106,33 @@ def test_fake_mcp_returns_defensive_response_copy() -> None:
     evidence[0]["rows"][0]["amount"] = 999
 
     assert response["data"][0]["amount"] == 100
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "method"),
+    [
+        ("search_documents", "document_search"),
+        ("query_purchase", "purchase_query"),
+    ],
+)
+def test_success_envelope_with_empty_data_is_no_result(
+    tool_name: str,
+    method: str,
+) -> None:
+    port = FakeMCPPort(
+        {
+            "search_documents": _success("document", []),
+            "query_purchase": _success("purchase", []),
+            "query_sales": _success("sales", [{"revenue": 1}]),
+        }
+    )
+    client = MCPClient(port)
+
+    with pytest.raises(MCPNoResultError):
+        if method == "document_search":
+            asyncio.run(client.document_search("휴가", 3))
+        else:
+            asyncio.run(client.purchase_query("구매 현황"))
+
+    assert port.calls[0].tool_name == tool_name
+    assert port.calls[0].payload

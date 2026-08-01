@@ -27,9 +27,10 @@ async def evidence_eval(
     has_rejected_evidence = len(accepted_evidence) != len(all_evidence)
     has_tool_error = bool(state.get("_errors")) or any(item.get("error") for item in database_evidence)
 
-    state["evidence"] = accepted_evidence
+    has_contradiction = _has_explicit_contradiction(all_evidence) or _has_conflicting_fact_values(all_evidence)
+    state["evidence"] = [] if has_contradiction else accepted_evidence
 
-    if _has_explicit_contradiction(all_evidence) or _has_conflicting_fact_values(all_evidence):
+    if has_contradiction:
         state["evidence_status"] = "CONTRADICTED"
     elif not accepted_evidence:
         state["evidence_status"] = "INSUFFICIENT"

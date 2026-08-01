@@ -40,6 +40,7 @@ class GraphState(TypedDict, total=False):
     database_evidence: list[dict[str, Any]]
     evidence_policy: EvidencePolicy
     _errors: list[str]
+    _mcp_errors: list[Exception]
     evidence: list[dict[str, Any]]
     evidence_status: EvidenceStatus
     sources: list[dict[str, Any]]

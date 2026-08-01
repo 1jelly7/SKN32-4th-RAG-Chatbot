@@ -93,6 +93,7 @@ class MCPClient:
                     "content": chunk.content,
                     "score": chunk.score,
                     "page": source.page,
+                    "metadata": envelope.metadata,
                 }
             )
         return evidence
@@ -140,6 +141,8 @@ class MCPClient:
         envelope = _parse_envelope(tool_name, raw_response)
         if envelope.domain != expected_domain:
             raise MCPMalformedPayloadError(tool_name, "MCP Tool domain이 요청과 일치하지 않습니다.")
+        if not envelope.data:
+            raise MCPNoResultError(tool_name, "MCP Tool이 조회 결과를 반환하지 않았습니다.")
         return envelope
 
 
