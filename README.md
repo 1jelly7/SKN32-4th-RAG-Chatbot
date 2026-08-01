@@ -143,7 +143,7 @@ skn32_3rd_pj_rag_mcp_chatbot/
 │   │   └── types.py                  # 문서 경로·청크·인덱스 타입
 │   └── data_tools/
 │       ├── server.py                 # 도메인 Tool 등록·공통 실행
-│       ├── finance/                  # 재무 담당: query_finance, Text2SQL, read-only MySQL
+│       ├── purchase/                 # 구매 담당: query_purchase, Text2SQL, read-only MySQL
 │       └── sales/                    # 판매 담당: query_sales, Text2SQL, read-only MySQL
 │
 ├── ingestion/                        # 문서 -> FAISS 배치 인덱싱
@@ -154,11 +154,11 @@ skn32_3rd_pj_rag_mcp_chatbot/
 │   └── index.py                      # FAISS 및 metadata 저장·버전 갱신
 │
 ├── etl/                              # 원천 정형 데이터 -> MySQL 적재 배치
-│   ├── finance/                      # 재무 담당: ETL, UPSERT, 실행 이력
+│   ├── purchase/                     # 구매 담당: ETL, UPSERT, 실행 이력
 │   └── sales/                        # 판매 담당: ETL, UPSERT, 실행 이력
 │
 ├── database/
-│   ├── finance/                      # 재무 테이블·View DDL, 용어집
+│   ├── purchase/                     # 구매 테이블·View DDL, 용어집
 │   └── sales/                        # 판매 테이블·View DDL, 용어집
 │
 ├── data/                             # Git 미추적 실제/산출 데이터
@@ -175,7 +175,7 @@ skn32_3rd_pj_rag_mcp_chatbot/
 ├── logs/                             # 임시 텍스트 로그 저장소(현재 Git 미추적)
 │   ├── app.log.txt                   # 통합 흐름
 │   ├── rag.log.txt                   # RAG 실행
-│   ├── etl_finance.log.txt           # 재무 ETL
+│   ├── etl_purchase.log.txt          # 구매 ETL
 │   └── etl_sales.log.txt             # 판매 ETL
 │
 └── tests/                            # pytest 단일 테스트 루트
@@ -189,7 +189,7 @@ skn32_3rd_pj_rag_mcp_chatbot/
     │   ├── test_agent.py             # router/evidence/state 노드
     │   ├── test_cache.py             # cache key/TTL/hit/miss
     │   ├── test_document_mcp.py      # 문서 DB 경로 조회·파일 로드·RAG 순서
-    │   ├── test_data_mcp.py          # 재무·판매 Tool dispatch
+    │   ├── test_data_mcp.py          # 구매·판매 Tool dispatch
     │   ├── test_ingestion.py         # loader/chunk/embedding/index
     │   └── test_etl.py               # extract/transform/validate/load
     └── integration/
@@ -254,13 +254,13 @@ normalized_question + conversation context hash
 
 ### `mcp_servers/data_tools/`
 
-`query_finance(question)`와 `query_sales(question)`는 각 도메인 소유 모듈에서 구현한다.
+`query_purchase(question)`와 `query_sales(question)`는 각 도메인 소유 모듈에서 구현한다.
 공통 서버는 두 도메인의 Tool 등록과 요청 전달만 담당한다.
 
 ```text
 mcp_servers/data_tools/
 ├── server.py                 # 통합: Tool 등록·도메인 전달
-├── finance/                  # 재무: query_finance, schema, text2sql, mysql
+├── purchase/                 # 구매: query_purchase, schema, text2sql, mysql
 └── sales/                    # 판매: query_sales, schema, text2sql, mysql
 ```
 
@@ -281,7 +281,7 @@ mcp_servers/data_tools/
 문서 변경 시 인덱스 버전을 증가시키고 cache key에서 이 버전을 사용한다. 문서 DB의 경로
 또는 실제 파일이 변경되면 이전 버전 키가 재사용되지 않게 한다.
 
-### `etl/finance/`, `etl/sales/`
+### `etl/purchase/`, `etl/sales/`
 
 ETL은 챗봇 조회와 분리된 배치 작업이다.
 
@@ -324,8 +324,8 @@ DOCUMENT_DB_DATABASE=documents
 | 계정 | 접근 방식 | 사용하는 코드 |
 |---|---|---|
 | `document_reader` | 문서 식별자·파일 경로 읽기 | `mcp_servers/document_tools/document_db.py` |
-| `chatbot_reader` | 업무 데이터 읽기 | `mcp_servers/data_tools/{finance,sales}/mysql.py` |
-| `etl_writer` | 업무 데이터 적재 | `etl/{finance,sales}/load.py` |
+| `chatbot_reader` | 업무 데이터 읽기 | `mcp_servers/data_tools/{purchase,sales}/mysql.py` |
+| `etl_writer` | 업무 데이터 적재 | `etl/{purchase,sales}/load.py` |
 | Redis 계정 | 지정 namespace의 get/set/delete | `app/cache/repository.py` |
 
 ## 8. 테스트 기준
@@ -354,3 +354,35 @@ pytest tests/unit              # 빠른 단위 테스트
 pytest tests/integration       # 통합 테스트
 pytest tests/unit/test_etl.py  # ETL 기능만
 ```
+
+## 판매(Sales) 도메인 ETL 실행 방법
+
+### 1. 사전 준비
+
+`.env`에 아래 값을 채운다.
+```env
+MYSQL_WRITE_HOST=localhost
+MYSQL_WRITE_USER=etl_writer
+MYSQL_WRITE_PASSWORD=
+MYSQL_DATABASE=sales
+```
+
+### 2. DB 생성 (최초 1회, 관리자 계정으로 실행)
+```bash
+mysql -u root -p < database/sales/create_sales_db.sql
+```
+`.env`의 `MYSQL_WRITE_USER`/`MYSQL_WRITE_PASSWORD`와 스크립트 안 계정 정보를 동일하게 맞춘다.
+
+### 3. 테이블 생성
+```bash
+mysql -u etl_writer -p sales < database/sales/ddl.sql
+```
+
+### 4. 원천 데이터 배치
+`ERP_Sales_Data_Full.xlsx`를 `data/raw/source_data/`에 둔다.
+
+### 5. ETL 실행
+```bash
+python -m etl.sales.run_all data/raw/source_data/ERP_Sales_Data_Full.xlsx
+```
+실행 로그는 `logs/etl_sales.log.txt`에서 확인한다. 동일 원천으로 재실행해도 UPSERT라 행 수는 늘지 않는다(멱등성).

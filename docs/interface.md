@@ -16,7 +16,7 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 | 문서 파일 로드 | `mcp_servers/document_tools/file_loader.py` | RAG 담당 | 로더 조합 구현 |
 | 문서 검색 | `mcp_servers/document_tools/search.py` | RAG 담당 | 경로 조회 → 파일 로드 → RAG 순서 구현 |
 | 공통 데이터 서버 | `mcp_servers/data_tools/server.py` | 통합 담당 | Tool 등록 스켈레톤 |
-| 재무 조회 | `mcp_servers/data_tools/finance/` | 재무 담당 | 도메인 인터페이스 스켈레톤 |
+| 구매 조회 | `mcp_servers/data_tools/purchase/` | 구매 담당 | 도메인 인터페이스 스켈레톤 |
 | 판매 조회 | `mcp_servers/data_tools/sales/` | 판매 담당 | 도메인 인터페이스 스켈레톤 |
 | 근거 평가 | `app/agent/evidence_eval.py` | 통합 담당 | 경계 분리 단계 |
 
@@ -27,7 +27,7 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 
 1. **캐시 조회**: 정규화된 질문과 버전 정보로 캐시를 조회한다.
 2. **Router**: 질문을 `GENERAL`, `DOCUMENT`, `DATABASE`, `BOTH`로 분류한다.
-3. **MCP Tool 호출**: 분류에 따라 `search_documents`, `query_finance`, `query_sales`를 호출한다.
+3. **MCP Tool 호출**: 분류에 따라 `search_documents`, `query_purchase`, `query_sales`를 호출한다.
 4. **evidence_eval**: 반환된 근거가 질문에 답하기에 충분한지 검증한다.
 5. **답변 합성**: 검증된 근거만으로 최종 답변을 생성한다.
 6. **캐시 저장**: 재사용 가능한 최종 응답을 저장한다.
@@ -47,7 +47,7 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 ```json
 {
   "status": "success",
-  "domain": "document | finance | sales | both",
+  "domain": "document | purchase | sales | both",
   "message": null,
   "data": [],
   "sources": [],
@@ -60,7 +60,7 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 ```json
 {
   "status": "error",
-  "domain": "document | finance | sales | both",
+  "domain": "document | purchase | sales | both",
   "message": "사용자에게 표시 가능한 오류 설명",
   "error_code": "INVALID_INPUT | NO_RESULT | QUERY_ERROR | EVIDENCE_INSUFFICIENT | INTERNAL_ERROR",
   "data": [],
@@ -115,11 +115,11 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 검색 결과가 없으면 `error_code="NO_RESULT"`, 경로 조회·파일 로드·인덱스 처리에 실패하면
 `error_code="INTERNAL_ERROR"`를 반환한다.
 
-## Tool 2: 재무 데이터 조회
+## Tool 2: 구매 데이터 조회
 
-- Tool 이름: `query_finance`
-- 구현 경로: `mcp_servers/data_tools/finance/`
-- 담당: 재무 담당
+- Tool 이름: `query_purchase`
+- 구현 경로: `mcp_servers/data_tools/purchase/`
+- 담당: 구매 담당
 
 ### 입력
 
@@ -130,7 +130,7 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 ### 처리 순서
 
 ```text
-재무 스키마·용어집 제공 -> SELECT SQL 생성 -> read-only MySQL 실행
+구매 스키마·용어집 제공 -> SELECT SQL 생성 -> read-only MySQL 실행
 -> 결과와 실행 metadata 반환
 ```
 
@@ -159,7 +159,7 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 |---|---|---|
 | 일반 질문 | 없음 | LLM 단독 응답 |
 | 문서 질문 | `search_documents` | 단일 결과 사용 |
-| 재무 질문 | `query_finance` | 단일 결과 사용 |
+| 구매 질문 | `query_purchase` | 단일 결과 사용 |
 | 판매 질문 | `query_sales` | 단일 결과 사용 |
 | 문서+수치 질문 | 관련 Tool 모두 호출 | 도메인별 근거를 보존해 병합 |
 

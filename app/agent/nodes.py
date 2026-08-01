@@ -12,7 +12,7 @@ def route_question(question: str) -> Route:
     """
     normalized = question.casefold()
     document_terms = ("정책", "규정", "가이드", "매뉴얼", "문서")
-    database_terms = ("매출", "현황", "집계", "실적", "기간", "재무", "판매")
+    database_terms = ("구매", "구매액", "공급처", "매출", "현황", "집계", "실적", "기간", "판매")
     has_document = any(term in normalized for term in document_terms)
     has_database = any(term in normalized for term in database_terms)
     if has_document and has_database:
@@ -42,7 +42,7 @@ async def document_retrieval(state: GraphState) -> GraphState:
 async def database_retrieval(state: GraphState) -> GraphState:
     """Data MCP를 통해서만 업무 데이터를 조회해 database_evidence에 저장한다.
 
-    state.data_domain에 따라 query_finance 또는 query_sales를 명시적으로 선택하고 자연어
+    state.data_domain에 따라 query_purchase 또는 query_sales를 명시적으로 선택하고 자연어
     질문을 전달한다. SQL·MySQL에는 직접 접근하지 않는다. 조회 결과의
     실행 시각·SQL 요약·행 수 같은 메타데이터를 보존해 이후 근거 평가와 출처 표시가
     가능해야 한다.

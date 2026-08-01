@@ -1,6 +1,6 @@
 import pandas as pd
 
-from etl.finance.types import LoadResult
+from etl.purchase.types import LoadResult
 
 
 class ETLMySQLClient:
