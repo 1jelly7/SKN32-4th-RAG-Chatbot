@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
+    #!/usr/bin/env python3
 """
 ERP 구매 분석 데이터를 MySQL 데이터베이스에 적재하는 메인 ETL 스크립트
 
 구성:
-- 데이터 소스: data/raw/ERP_Purchasing_Analytics.xlsx
+- 데이터 소스: data/raw/source_data/ERP_Purchasing_Analytics.xlsx
 - 대상 데이터베이스: MySQL purchase 데이터베이스
 - 사용자: JangGGo
 """
@@ -57,7 +57,7 @@ def main():
 
     # 엑셀 파일 경로 설정 (프로젝트 루트 기준)
     BASE_DIR = Path(__file__).parent.parent.parent
-    data_path = BASE_DIR / 'data' / 'raw' / 'ERP_Purchasing_Analytics.xlsx'
+    data_path = BASE_DIR / 'data' / 'raw' / 'source_data' / 'ERP_Purchasing_Analytics.xlsx'
 
     # 데이터 파일 존재 여부 확인
     if not data_path.exists():
