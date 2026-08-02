@@ -59,6 +59,7 @@ def header_to_column(header: str) -> str:
 
 
 def load_sheet(cursor, workbook, sheet_name: str) -> int:
+    """한 구매 sheet를 대응 allowlisted table에 FK 순서를 지켜 적재한다."""
     table = SHEET_TO_TABLE[sheet_name]
     ws = workbook[sheet_name]
 
@@ -79,6 +80,7 @@ def load_sheet(cursor, workbook, sheet_name: str) -> int:
 
 
 def main() -> None:
+    """구매 workbook 경로를 검증하고 부모→자식 순서로 배치 적재한다."""
     if len(sys.argv) < 2:
         print("사용법: python scripts/load_purchase_data.py <엑셀_파일_경로>")
         sys.exit(1)

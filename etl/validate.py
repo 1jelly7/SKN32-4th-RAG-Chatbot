@@ -1,3 +1,5 @@
+"""범용 ETL의 미구현 적재 전 검증 경계."""
+
 import pandas as pd
 
 from etl.types import ValidationReport
@@ -10,4 +12,6 @@ def validate(frame: pd.DataFrame, required_columns: list[str]) -> ValidationRepo
     조용히 제거하지 않는다. ``is_valid``는 오류 임계치 정책에 따라 결정되며 load 단계는
     false일 때 실행되지 않아야 한다.
     """
+    # TODO(contract clarification): 도메인별 필수값·코드·참조 규칙과 오류 임계치를
+    # 확정한 뒤 행을 삭제하지 않는 ValidationReport를 구현한다.
     ...

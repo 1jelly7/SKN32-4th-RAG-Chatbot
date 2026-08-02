@@ -1,39 +1,26 @@
+"""구매 Text2SQL에 허용된 table·column·업무 용어를 제공한다."""
+
 from __future__ import annotations
 
 from typing import TypedDict
 
 
 class SchemaResource(TypedDict):
+    """구매 Text2SQL이 추측 없이 참조할 수 있는 allowlist schema다."""
+
     tables: list[str]
     columns: dict[str, list[str]]
     business_glossary: dict[str, str]
 
 
 def get_schema_resource() -> SchemaResource:
-<<<<<<<< HEAD:mcp_servers/data_tools/purchase/schema.py
-    """Text2SQL에 구매 테이블·컬럼·업무 용어를 제공하는 MCP Resource를 만든다.
-========
-    """Text2SQL에 재무(구매/지출) 테이블·컬럼·업무 용어를 제공하는 MCP Resource를 만든다.
->>>>>>>> origin/develop:mcp_servers/data_tools/finance/schema.py
-
-    반환 구조는 LLM이 임의 스키마를 추측하지 않도록 충분히 구체적이되 실제 연결
-    정보(host/user/password)는 포함하지 않는다. purchase DB(재무/구매 지출 데이터)의
-    실제 테이블 구조를 그대로 반영합니다.
-    """
+    """구매 소유 DDL에 대응하는 공개 가능한 schema와 용어집을 반환한다."""
     return {
         "tables": [
-            "vendors",
-            "purchase_requisitions",
-            "purchase_requisition_lines",
-            "purchase_orders",
-            "purchase_order_lines",
-            "goods_receipts",
-            "goods_receipt_lines",
-            "vendor_invoices",
-            "vendor_invoice_lines",
-            "procurement_reports",
-            "vendor_contracts",
-            "vendor_ratings",
+            "vendors", "purchase_requisitions", "purchase_requisition_lines",
+            "purchase_orders", "purchase_order_lines", "goods_receipts",
+            "goods_receipt_lines", "vendor_invoices", "vendor_invoice_lines",
+            "procurement_reports", "vendor_contracts", "vendor_ratings",
             "invoice_matching",
         ],
         "columns": {
@@ -51,9 +38,9 @@ def get_schema_resource() -> SchemaResource:
             "지출": "purchase_orders.total_amount 또는 vendor_invoices.total_amount 합계",
             "공급업체": "vendors 테이블",
             "미지급금": "vendor_invoices.outstanding_amount",
-            "발주": "purchase_orders (구매 주문)",
-            "입고": "goods_receipts (물품 수령)",
-            "3-way 매칭": "invoice_matching (발주-입고-청구서 대사)",
+            "발주": "purchase_orders",
+            "입고": "goods_receipts",
+            "3-way 매칭": "invoice_matching",
             "공급업체 평가": "vendor_ratings.overall_score",
         },
     }

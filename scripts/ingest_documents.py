@@ -39,6 +39,7 @@ def _load_by_extension(path: Path):
 
 
 async def main() -> None:
+    """문서 DB 등록 경로 전체를 읽어 새 FAISS 인덱스를 배치 생성한다."""
     # CLI는 API 요청 경로가 아니라 배치로만 문서 인덱싱을 실행해야 한다. 내부 문서 DB에서
     # 파일 경로를 조회한 뒤 load -> chunk/metadata -> embed -> build_index 순서로 호출하고,
     # 성공한 index_version·chunk_count만 요약 출력한다.

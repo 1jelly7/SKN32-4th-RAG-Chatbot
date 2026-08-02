@@ -1,7 +1,14 @@
+"""도메인 ETL pipeline을 선택해 실행할 미구현 통합 CLI."""
+
 def main() -> None:
-    # 이 CLI는 ETL 배치의 입력 경로·대상 allowlisted table·필수 컬럼을 받아 pipeline을 호출한다.
-    # validation 실패 시 DB load를 시도하지 않고 비영(0이 아닌) 종료 상태와 오류 요약을 남긴다.
-    # 채팅 read-only 계정이 아닌 ETL 전용 쓰기 계정 설정만 사용하며 자격증명은 출력하지 않는다.
+    """검증된 입력으로 purchase 또는 sales 배치만 선택해 실행한다."""
+    # TODO(implementation): 도메인, 원천 경로, allowlisted table을 CLI에서 검증한 뒤 해당
+    # pipeline을 호출한다. validation 실패 시 load하지 않고 비영 종료 상태를 반환하며,
+    # 채팅 read-only 계정이나 ETL을 API 요청 경로에서 사용하지 않는다.
+    # Completion criteria:
+    # - purchase/sales dispatch와 잘못된 table/path를 fake로 검증한다.
+    # - 처리 행 수·단계·검증 결과만 출력하고 자격증명/원본 행은 출력하지 않는다.
+    # - 도메인 pipeline 실패의 종료 코드가 자동화에서 구분 가능하다.
     ...
 
 

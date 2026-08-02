@@ -32,7 +32,7 @@ python -m pytest tests/integration
 python -m pytest tests/unit/test_etl.py
 ```
 
-`pytest.ini`는 `tests/`, `test_*.py`, `unit`/`integration` marker와 async auto mode를 정의한다. 현재 `tests/integration/test_chat_document_flow.py`, `test_chat_data_flow.py`, `test_etl_mysql_flow.py`는 placeholder이므로 통과해도 실제 외부 통합 완료를 뜻하지 않는다. 린트·포맷·타입 검사·빌드 도구 설정과 CI 설정은 현재 없으므로 임의의 명령을 추가하지 않는다.
+`pytest.ini`는 `tests/`, `test_*.py`, `unit`/`integration` marker와 async auto mode를 정의한다. 현재 `tests/integration/test_chat_document_flow.py`, `test_chat_data_flow.py`는 외부 서비스를 쓰지 않는 fake 기반 계약 테스트이고, `test_etl_mysql_flow.py`만 placeholder다. 어느 테스트도 그 자체로 실제 원격 MCP·DB·FAISS 통합 완료를 뜻하지 않는다. 린트·포맷·타입 검사·빌드 도구 설정과 CI 설정은 현재 없으므로 임의의 명령을 추가하지 않는다.
 
 `app/core/config.py`의 `Settings`가 환경 변수의 실행 기준이며 `.env.example`이 비밀값 없는 변수 템플릿이다. 로컬에서는 이를 `.env`로 복사한 뒤 `OPENAI_*`, `REDIS_URL`, `MYSQL_READ_*`, `MYSQL_WRITE_*`, `MYSQL_DATABASE`, `DOCUMENT_MCP_URL`, `DATA_MCP_URL`, `FAISS_PATH`, `DOCUMENT_DB_*`를 팀이 제공한 값으로 채운다. 단위 테스트는 가능한 한 API key, 네트워크, MySQL, Redis, FAISS 없이 실행한다.
 
@@ -48,6 +48,8 @@ python -m pytest tests/unit/test_etl.py
 - 웹 UI는 `app/web/`의 vanilla HTML/CSS/JavaScript다. React 컴포넌트, TypeScript, 별도 상태 관리·데이터 패칭 라이브러리는 현재 패턴이 아니다. API 호출과 응답/표/차트 렌더링은 `app/web/chat.js`에 둔다.
 - 테스트는 `tests/unit/test_<기능>.py`, `tests/integration/test_<흐름>.py`에 두고 `pytest` 함수와 `@pytest.mark.parametrize`/`@pytest.mark.asyncio`를 사용한다. 외부 연결은 결정적 fake/mock 또는 `tmp_path`로 대체하고, 실제 로컬 MySQL이 필요한 검증은 명시적으로 skip한다. 기존 contract/acceptance 테스트를 삭제하거나 약화하지 않는다.
 - 자동 포매터는 없지만 구현 코드의 기존 형식인 4칸 들여쓰기, 한 줄 하나의 명확한 동작, 짧은 한국어 docstring/comment를 따른다. 광범위한 `except Exception`은 외부 경계의 부분 실패 처리처럼 필요한 경우에만 이유와 `# noqa: BLE001`을 함께 둔다.
+- 새 코드의 주석과 docstring은 프로젝트에 참여하지 않은 개발자도 이해할 수 있도록 Python 표준 스타일로 작성한다. 구현 자체를 반복하기보다 책임, 입력·출력, 외부 경계, 중요한 분기와 제약의 이유를 간결하고 정확하게 설명한다. 변경하지 않는 기존 주석을 정리·재작성하는 일은 별도 요청 없이는 하지 않는다.
+- MCP Tool 및 Tool 호출 경계에는 경량 모델이 올바른 Tool을 선택할 수 있도록 docstring을 반드시 둔다. docstring에는 Tool의 목적, 사용해야 하는 질문 또는 입력, 반환 evidence/envelope의 의미, 사용하면 안 되는 경우와 도메인·읽기 전용 같은 핵심 제약을 명시한다. API key·비밀번호·내부 `file_path` 등 비밀정보나 내부 경로는 docstring·주석에 쓰지 않는다.
 
 ## 4. 금지 구역 (Guardrails)
 

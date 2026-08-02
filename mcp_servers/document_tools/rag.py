@@ -1,3 +1,5 @@
+"""조회된 문서 후보만 임시 FAISS 인덱스로 검색하는 RAG 실행 경계."""
+
 from __future__ import annotations
 
 import shutil

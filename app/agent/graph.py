@@ -1,14 +1,23 @@
+"""캐시 miss 요청만 실행하는 LangGraph 조립 모듈.
+
+``BOTH``는 document→database 순서로 두 근거를 수집한 뒤 단일 evidence 평가 노드에
+합류한다. 캐시 조회·저장은 의도적으로 그래프 밖에 있다.
+"""
+
 from __future__ import annotations
 
+from functools import partial
 from typing import Literal
 
 from langgraph.graph import END, StateGraph
 
 from app.agent.evidence_eval import evidence_eval
+from app.agent.llm import AsyncLLMPort
 from app.agent.nodes import answer_synthesis, database_retrieval, document_retrieval, router
 from app.agent.state import GraphState
+from app.mcp.client import MCPClient
 
-GraphTransition = Literal["end", "router", "document", "database", "answer"]
+GraphTransition = Literal["end", "router", "document", "database", "evidence", "retry", "answer"]
 
 
 def after_router(state: GraphState) -> str:
@@ -37,7 +46,35 @@ def after_document(state: GraphState) -> str:
     return "evidence"
 
 
-def build_graph() -> object:
+def after_evidence(state: GraphState) -> str:
+    """근거 부족일 때만 한 번의 보강 조회를 허용한다."""
+    if state.get("evidence_status") == "INSUFFICIENT" and state.get("evidence_retry_count", 0) < 1:
+        return "retry"
+    return "answer"
+
+
+async def prepare_evidence_retry(state: GraphState) -> GraphState:
+    """재시도 횟수를 증가시키고 이전 조회 결과·오류를 비운다."""
+    state["evidence_retry_count"] = state.get("evidence_retry_count", 0) + 1
+    state["document_evidence"] = []
+    state["database_evidence"] = []
+    state["evidence"] = []
+    state["_errors"] = []
+    state["_mcp_errors"] = []
+    return state
+
+
+def after_retry(state: GraphState) -> str:
+    """원래 route와 동일한 retrieval 경로로 보강 조회를 돌려보낸다."""
+    if state.get("route") in ("DOCUMENT", "BOTH"):
+        return "document"
+    return "database"
+
+
+def build_graph(
+    mcp_client: MCPClient | None = None,
+    llm: AsyncLLMPort | None = None,
+) -> object:
     """명세의 StateGraph를 조립하고 컴파일된 실행 객체를 반환한다.
 
     캐시 miss 상태만 이 그래프에 진입하므로 시작점은 router다. 검색 결과는
@@ -49,10 +86,11 @@ def build_graph() -> object:
     graph = StateGraph(GraphState)
 
     graph.add_node("router", router)
-    graph.add_node("document", document_retrieval)
-    graph.add_node("database", database_retrieval)
+    graph.add_node("document", partial(document_retrieval, mcp_client=mcp_client))
+    graph.add_node("database", partial(database_retrieval, mcp_client=mcp_client))
     graph.add_node("evidence", evidence_eval)
-    graph.add_node("answer", answer_synthesis)
+    graph.add_node("retry", prepare_evidence_retry)
+    graph.add_node("answer", partial(answer_synthesis, llm=llm))
 
     graph.set_entry_point("router")
 
@@ -67,7 +105,16 @@ def build_graph() -> object:
         {"database": "database", "evidence": "evidence"},
     )
     graph.add_edge("database", "evidence")
-    graph.add_edge("evidence", "answer")
+    graph.add_conditional_edges(
+        "evidence",
+        after_evidence,
+        {"retry": "retry", "answer": "answer"},
+    )
+    graph.add_conditional_edges(
+        "retry",
+        after_retry,
+        {"document": "document", "database": "database"},
+    )
     graph.add_edge("answer", END)
 
     return graph.compile()
@@ -76,8 +123,13 @@ def build_graph() -> object:
 _compiled_graph = None
 
 
-def get_graph():
+def get_graph(
+    mcp_client: MCPClient | None = None,
+    llm: AsyncLLMPort | None = None,
+) -> object:
     """컴파일된 그래프를 매 요청마다 새로 빌드하지 않도록 캐싱해서 반환한다."""
+    if mcp_client is not None or llm is not None:
+        return build_graph(mcp_client, llm)
     global _compiled_graph
     if _compiled_graph is None:
         _compiled_graph = build_graph()

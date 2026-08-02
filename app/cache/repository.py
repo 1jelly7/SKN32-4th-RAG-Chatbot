@@ -1,3 +1,5 @@
+"""answer cache의 동기 저장소 Protocol과 메모리/Redis 구현 경계."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -59,6 +61,13 @@ class RedisCache:
     """운영용 Redis 어댑터; MemoryCache와 동일한 값·TTL·무효화 의미론을 제공한다."""
     def __init__(self, redis_url: str) -> None:
         """Redis 클라이언트를 생성하되 연결 비밀번호를 로그에 남기지 않는다."""
+        # TODO(implementation): MemoryCache와 같은 방어적 복사·TTL·멱등 삭제 의미론을
+        # namespace가 적용된 Redis 명령으로 구현한다. 손상 payload는 miss로 처리하고
+        # 연결 정보는 오류나 로그에 포함하지 않는다.
+        # Completion criteria:
+        # - set은 직렬화 값과 만료 시간을 한 연산으로 기록한다.
+        # - get은 만료·손상·부재를 None으로 정규화한다.
+        # - fake Redis로 round-trip, TTL, delete, 손상값 회귀를 검증한다.
         ...
 
     def get(self, key: str) -> CacheValue | None:

@@ -19,6 +19,7 @@ load_dotenv()
 
 @dataclass(frozen=True)
 class MySQLWriteConfig:
+    """판매 ETL 쓰기 연결에 필요한 최소 설정."""
     host: str
     user: str
     password: str
@@ -27,6 +28,7 @@ class MySQLWriteConfig:
 
     @classmethod
     def from_env(cls) -> "MySQLWriteConfig":
+        """환경 변수에서 필수 쓰기 설정을 검증해 구성한다."""
         host = os.getenv("MYSQL_WRITE_HOST", "localhost")
         user = os.getenv("MYSQL_WRITE_USER")
         password = os.getenv("MYSQL_WRITE_PASSWORD")

@@ -21,6 +21,10 @@ from mcp_servers.document_tools.document_db import DocumentPathRepository
 
 
 def main() -> None:
+    """지원 문서 경로 metadata를 document_paths에 배치 등록한다.
+
+    채팅 요청 경로에서 호출하지 않으며 원문 본문을 문서 DB에 저장하지 않는다.
+    """
     settings = get_settings()
     repository = DocumentPathRepository(
         host=settings.document_db_host,

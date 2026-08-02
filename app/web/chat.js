@@ -1,39 +1,53 @@
+// ChatResponse를 답변·출처·표·차트로 변환하는 vanilla UI 경계입니다.
+// 서버가 제거한 내부 경로와 자격증명을 별도 endpoint에서 다시 조회하지 않습니다.
 const form = document.querySelector('#chat-form');
 const input = document.querySelector('#question');
 const messages = document.querySelector('#messages');
 
 let chartCounter = 0;
 
+// 사용자 입력과 provider 응답은 모두 비신뢰 문자열이므로 HTML 템플릿에 넣기 전에 escape합니다.
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 function routeBadge(route) {
   if (!route) return '';
   const labels = { GENERAL: '일반', DOCUMENT: '문서', DATABASE: 'DB', BOTH: '문서+DB' };
-  return `<span class="badge badge-${route}">${labels[route] || route}</span>`;
+  if (!Object.hasOwn(labels, route)) return '';
+  return `<span class="badge badge-${route}">${labels[route]}</span>`;
 }
 
+// 공개 Source 필드만 사용하며 document/database provenance를 아이콘으로 구분합니다.
 function renderSources(sources) {
   if (!sources || sources.length === 0) return '';
   const items = sources.map(s => {
     const icon = s.source_type === 'document' ? '📄' : '🗄️';
     const scoreText = s.score != null ? ` (score ${s.score.toFixed(3)})` : '';
-    return `<li>${icon} ${s.title}${scoreText}</li>`;
+    return `<li>${icon} ${escapeHtml(s.title)}${scoreText}</li>`;
   }).join('');
   return `<details class="sources"><summary>참고 출처 (${sources.length})</summary><ul>${items}</ul></details>`;
 }
 
 // DB 조회 결과를 표(<table>)로 렌더링합니다.
 function renderTable(table) {
-  const headerHtml = table.columns.map(c => `<th>${c}</th>`).join('');
+  const headerHtml = table.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
   const rowsHtml = table.rows.map(row =>
-    `<tr>${row.map(cell => `<td>${cell ?? ''}</td>`).join('')}</tr>`
+    `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`
   ).join('');
   return `
     <div class="table-wrap">
-      <div class="table-meta">${table.domain} 데이터 · ${table.rows.length}건</div>
+      <div class="table-meta">${escapeHtml(table.domain)} 데이터 · ${table.rows.length}건</div>
       <table class="data-table">
         <thead><tr>${headerHtml}</tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>
-      <details class="sql-detail"><summary>생성된 SQL 보기</summary><pre>${table.sql}</pre></details>
+      <details class="sql-detail"><summary>생성된 SQL 보기</summary><pre>${escapeHtml(table.sql)}</pre></details>
     </div>`;
 }
 
@@ -46,6 +60,7 @@ function renderChartPlaceholder(table) {
   return { html: `<div class="chart-wrap"><canvas id="${canvasId}"></canvas></div>`, canvasId };
 }
 
+// 서버가 지정한 label/value 컬럼이 모두 있을 때만 제한된 행으로 차트를 그립니다.
 function drawChart(canvasId, table) {
   const labelIdx = table.columns.indexOf(table.label_column);
   const valueIdx = table.columns.indexOf(table.value_column);
@@ -74,11 +89,11 @@ form.addEventListener('submit', async (e) => {
   const question = input.value;
   if (!question.trim()) return;
 
-  messages.innerHTML += `<div class="msg user"><b>나</b>${question}</div>`;
+  messages.insertAdjacentHTML('beforeend', `<div class="msg user"><b>나</b>${escapeHtml(question)}</div>`);
   input.value = '';
 
   const loadingId = `loading-${Date.now()}`;
-  messages.innerHTML += `<div class="msg bot" id="${loadingId}">답변 생성 중...</div>`;
+  messages.insertAdjacentHTML('beforeend', `<div class="msg bot" id="${loadingId}">답변 생성 중...</div>`);
   messages.scrollTop = messages.scrollHeight;
 
   try {
@@ -90,7 +105,7 @@ form.addEventListener('submit', async (e) => {
     const data = await res.json();
 
     if (!res.ok) {
-      document.getElementById(loadingId).outerHTML = `<div class="msg bot error">서버 오류: ${data.detail || res.status}</div>`;
+      document.getElementById(loadingId).outerHTML = `<div class="msg bot error">서버 오류: ${escapeHtml(data.detail || res.status)}</div>`;
       return;
     }
 
@@ -111,7 +126,7 @@ form.addEventListener('submit', async (e) => {
     document.getElementById(loadingId).outerHTML = `
       <div class="msg bot">
         <div class="meta">${routeBadge(data.route)}${cachedBadge}</div>
-        <div class="answer">${data.answer.replace(/\n/g, '<br>')}</div>
+        <div class="answer">${escapeHtml(data.answer).replace(/\n/g, '<br>')}</div>
         ${renderSources(data.sources)}
         ${tablesHtml}
       </div>`;
@@ -119,7 +134,7 @@ form.addEventListener('submit', async (e) => {
     // DOM에 canvas가 실제로 삽입된 뒤에 Chart.js를 실행해야 합니다.
     chartPlaceholders.forEach(({ canvasId, table }) => drawChart(canvasId, table));
   } catch (err) {
-    document.getElementById(loadingId).outerHTML = `<div class="msg bot error">오류: ${err.message}</div>`;
+    document.getElementById(loadingId).outerHTML = `<div class="msg bot error">오류: ${escapeHtml(err.message)}</div>`;
   }
   messages.scrollTop = messages.scrollHeight;
 });

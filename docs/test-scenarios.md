@@ -2,25 +2,30 @@
 
 ## 목적
 
-현재 자동 검증과 목표 수용 시나리오를 구분한다. 현재 코드베이스는 스켈레톤 단계이므로
-목표 시나리오를 모두 구현했다는 뜻이 아니다.
+현재 자동 검증과 아직 외부 인프라가 필요한 목표 수용 시나리오를 구분한다. fake 기반
+chat 흐름 통과는 실제 원격 MCP·DB·FAISS 연결 완료를 뜻하지 않는다.
 
 ## 현재 자동 검증
 
-2026-07-31 기준 예상 자동 테스트는 다음 범위를 검증한다.
+2026-08-02 기준 자동 테스트는 다음 범위를 검증한다.
 
-| 테스트 파일 | 검증 범위 |
-|---|---|
-| `tests/unit/test_agent.py` | 문서·데이터 키워드 라우팅 |
-| `tests/unit/test_cache.py`, `tests/integration/test_cache_flow.py` | 질문·대화 문맥별 키와 Graph 외부 캐시 |
-| `tests/unit/test_api.py` | `/api/health` |
-| `tests/unit/test_document_mcp.py` | 문서 DB 경로 조회 → 파일 로드 → RAG 호출 순서 |
-| `tests/unit/test_data_mcp.py` | 구매·판매 Tool dispatch |
-| `tests/unit/test_etl.py` | 구매 ETL 변환의 중복 제거 |
-| `tests/unit/test_logging.py` | 5필드 로그 포맷 |
+| 테스트 파일 | 검증 범위                                                    |
+|---|--------------------------------------------------------------|
+| `tests/unit/test_agent.py` | route/domain 판정, evidence 상태, BOTH fan-in, 1회 보강 조회 |
+| `tests/unit/test_cache.py`, `tests/integration/test_cache_flow.py` | 질문·세션 문맥별 키와 Graph 외부 cache short-circuit         |
+| `tests/unit/test_api.py` | `/api/health`, session cache 격리, 공개 오류 매핑            |
+| `tests/unit/test_document_mcp.py` | 문서 DB 경로 조회 → 파일 로드 → RAG 호출 순서                |
+| `tests/unit/test_data_mcp.py` | 구매·판매 Tool dispatch, 공통 envelope와 오류 분류 |
+| `tests/unit/test_etl.py` | legacy finance 및 구매·판매 ETL 변환 계약 |
+| `tests/unit/test_logging.py` | 5필드 로그 포맷                                              |
+| `tests/integration/test_chat_document_flow.py` | fake Document MCP 기반 API→Graph 흐름                        |
+| `tests/integration/test_chat_data_flow.py` | fake purchase/sales MCP 기반 API→Graph 흐름                  |
+| `tests/integration/test_chat_error_flow.py` | empty/query/malformed/timeout HTTP 매핑                      |
 
-`test_chat_document_flow.py`, `test_chat_data_flow.py`, `test_etl_mysql_flow.py`는 아직
-placeholder이므로 실제 통합 완료의 근거로 사용하지 않는다.
+chat integration 테스트는 외부 서비스가 없는 in-process fake 기반 계약 테스트다.
+`test_etl_mysql_flow.py`만 placeholder이므로 ETL 외부 통합 완료의 근거로 사용하지 않는다.
+`RUN_LOCAL_MYSQL_TESTS=1` opt-in agent 테스트는 same-process Data MCP 뒤의 sales DB 조회만
+검증하며 Document MCP 또는 ETL 통합을 증명하지 않는다.
 
 ## 공통 테스트 데이터
 
@@ -28,7 +33,7 @@ placeholder이므로 실제 통합 완료의 근거로 사용하지 않는다.
 |---|---|
 | 문서 DB | 문서 식별자·제목·파일 경로·갱신 시각 레코드 3건 이상 |
 | 문서 파일 | 문서 DB 경로와 일치하는 PDF/TXT/Markdown 3건 이상 |
-| 구매 | 구매 금액·공급처별 집계 샘플 데이터 |
+| 구매 | 공급업체별 구매 금액 샘플 데이터 |
 | 판매 | 월별·상품별 매출 샘플 데이터 |
 | 질문 | 문서 2개, 구매 2개, 판매 2개, BOTH 1개, 실패 질문 2개 |
 
@@ -49,12 +54,14 @@ placeholder이므로 실제 통합 완료의 근거로 사용하지 않는다.
 ### TS-U03: 구매 질의 Tool
 
 - `query_purchase`가 구매 스키마와 읽기 전용 DB 연결을 사용한다.
-- 결과에 사용된 View와 조회 시각을 metadata로 반환한다.
+- envelope metadata에 생성 SQL, 행 수, 실행 시간을 반환한다. freshness와 source version은
+  공급자가 제공하기 전까지 완료된 계약으로 간주하지 않는다.
 
 ### TS-U04: 판매 질의 Tool
 
 - `query_sales`가 판매 스키마와 읽기 전용 DB 연결을 사용한다.
-- 결과에 사용된 View와 조회 시각을 metadata로 반환한다.
+- envelope metadata에 생성 SQL, 행 수, 실행 시간을 반환한다. freshness와 source version은
+  공급자가 제공하기 전까지 완료된 계약으로 간주하지 않는다.
 
 ### TS-U05: 캐시 처리
 
@@ -66,6 +73,16 @@ placeholder이므로 실제 통합 완료의 근거로 사용하지 않는다.
 
 - 관련성이 낮거나 부족한 근거는 `INSUFFICIENT`로 판정한다.
 - 서로 충돌하는 근거는 `CONTRADICTED`로 판정한다.
+- `INSUFFICIENT`는 같은 retrieval 경로를 한 번만 보강하고 이후 422
+  `EVIDENCE_INSUFFICIENT`로 종료한다.
+- `CONTRADICTED`는 보강 조회하지 않고 성공 응답의 `evidence_status`로 구별한다.
+
+### TS-U06A: MCP 오류 분류
+
+- `INVALID_INPUT`, `NO_RESULT`, `QUERY_ERROR`, `EVIDENCE_INSUFFICIENT`, `INTERNAL_ERROR`는
+  Host client에서 서로 다른 의미로 보존한다.
+- timeout은 HTTP 504와 `TIMEOUT`으로 반환하며 query error로 축약하지 않는다.
+- malformed envelope는 provider 오류 메시지를 노출하지 않고 `INTERNAL_ERROR`로 처리한다.
 
 ### TS-U07: ETL 멱등성 및 실행 이력
 

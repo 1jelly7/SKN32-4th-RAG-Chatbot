@@ -1,3 +1,5 @@
+"""FAISS 인덱스와 동일 순서의 chunk metadata를 검증·검색한다."""
+
 from __future__ import annotations
 
 import json

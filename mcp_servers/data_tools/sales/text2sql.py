@@ -1,3 +1,5 @@
+"""판매 질문을 제한된 SELECT 초안으로 변환하는 Text2SQL adapter."""
+
 from __future__ import annotations
 
 from app.core.config import get_settings
