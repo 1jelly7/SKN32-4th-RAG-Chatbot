@@ -1,3 +1,5 @@
+"""문서 DB 경로 조회→파일 로드→RAG 순서를 고정하는 Document MCP 서비스."""
+
 from mcp_servers.document_tools.document_db import lookup_document_paths
 from mcp_servers.document_tools.file_loader import load_document_files
 from mcp_servers.document_tools.rag import retrieve

@@ -1,3 +1,8 @@
+"""프로세스 생존 여부만 공개하는 시스템 API.
+
+외부 MCP·DB·Redis의 준비 상태는 포함하지 않아 liveness와 readiness 의미를 섞지 않는다.
+"""
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -5,6 +10,8 @@ router = APIRouter(tags=["system"])
 
 
 class HealthResponse(BaseModel):
+    """프로세스가 HTTP 요청을 받을 수 있음을 나타내는 최소 응답."""
+
     status: str
 
 

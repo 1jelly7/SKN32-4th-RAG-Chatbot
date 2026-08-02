@@ -62,7 +62,10 @@
 | `DATABASE` | 수치, 현황, 집계, 기간별 실적, 고객/매출 질문 | Data MCP 호출 |
 | `BOTH` | 문서 정책과 실제 수치·현황이 함께 필요한 질문 | 두 MCP 호출 후 근거 통합 |
 
-초기에는 키워드·규칙 기반 라우팅을 우선 구현한다. 규칙으로 모호한 질문만 저비용 LLM 라우터를 호출한다. `BOTH` 경로는 반드시 구현하되, 첫 MVP에서는 두 결과를 순차 수집해도 된다.
+현재 라우터는 키워드·규칙 기반으로만 동작한다. 문서·데이터 키워드가 모두 없으면
+`GENERAL`, 데이터 도메인이 모호하면 purchase와 sales를 모두 조회한다. 저비용 LLM
+라우터는 아직 구현하지 않았으며 도입 전 fallback·비용·오류 계약을 먼저 확정해야 한다.
+`BOTH`는 document 다음 database 순서로 두 결과를 수집한다.
 
 ## 4. Evidence Eval 기준
 
@@ -82,7 +85,10 @@
 - 문서 정책과 DB 집계 조건의 정의/기간/단위 충돌
 - 최종 답변 문장과 출처의 연결 여부
 
-판정 결과는 `SUPPORTED`, `PARTIALLY_SUPPORTED`, `INSUFFICIENT`, `CONTRADICTED`처럼 구조화한다. 근거가 부족하면 최대 1회 재검색/재생성하고, 그 이후에는 근거 부족을 명시한다.
+판정 결과는 `SUPPORTED`, `PARTIALLY_SUPPORTED`, `INSUFFICIENT`, `CONTRADICTED`로
+구조화한다. `INSUFFICIENT`이면 같은 retrieval 경로를 한 번만 보강 조회하고, 이후에도
+부족하면 HTTP 422와 `EVIDENCE_INSUFFICIENT`를 반환한다. `CONTRADICTED`는 재시도하지
+않고 성공 응답의 `evidence_status`와 경고 답변으로 구별한다.
 
 ## 5. 디렉토리 구조와 책임
 
@@ -129,7 +135,7 @@ skn32_3rd_pj_rag_mcp_chatbot/
 │   │   └── client.py                 # Document/Data MCP Tool 호출 어댑터
 │   └── web/
 │       ├── index.html                # 최소 단일 채팅 화면
-│       ├── chat.js                   # API 호출·응답·출처 렌더링
+│       ├── chat.js                   # API 호출 및 비신뢰 응답 escape 후 출처·표 렌더링
 │       └── style.css                 # 최소 UI 스타일
 │
 ├── mcp_servers/                      # 사내 지식 접근 MCP Server들
@@ -205,7 +211,7 @@ skn32_3rd_pj_rag_mcp_chatbot/
 
 - 입력: `question`, 선택적 `session_id`.
 - `graph.ainvoke()`에 초기 상태를 전달한다.
-- 출력: `answer`, `sources`, `cached`, 필요 시 `route` 및 `request_id`.
+- 출력: `answer`, `sources`, `tables`, `cached`, `route`, `evidence_status`, `request_id`.
 - 스트리밍은 MVP 완료 후 Server-Sent Events로 추가한다.
 
 ### `app/agent/graph.py`, `nodes.py`, `evidence_eval.py`
@@ -330,7 +336,11 @@ DOCUMENT_DB_DATABASE=documents
 
 ## 8. 테스트 기준
 
-테스트는 `tests/` 한 곳에 둔다. `tests/conftest.py`는 공통 fixture를 제공한다. 단위 테스트는 OpenAI, Redis, MCP, MySQL을 mock으로 대체하고, 통합 테스트만 테스트용 실제 인프라 또는 로컬 서버를 이용한다.
+테스트는 `tests/` 한 곳에 둔다. 단위 테스트는 OpenAI, Redis, MCP, MySQL을 fake/mock으로
+대체한다. 현재 chat integration 테스트도 외부 서비스를 사용하지 않는 in-process fake
+기반 계약 테스트다. 실제 MySQL 검증은 `RUN_LOCAL_MYSQL_TESTS=1`일 때 same-process
+Data MCP를 주입하는 opt-in 테스트만 실행하며, ETL의 실제 MySQL 통합 테스트는 아직
+placeholder다.
 
 ### 필수 단위 테스트
 
@@ -354,3 +364,35 @@ pytest tests/unit              # 빠른 단위 테스트
 pytest tests/integration       # 통합 테스트
 pytest tests/unit/test_etl.py  # ETL 기능만
 ```
+
+## 판매(Sales) 도메인 ETL 실행 방법
+
+### 1. 사전 준비
+
+`.env`에 아래 값을 채운다.
+```env
+MYSQL_WRITE_HOST=localhost
+MYSQL_WRITE_USER=etl_writer
+MYSQL_WRITE_PASSWORD=
+MYSQL_DATABASE=sales
+```
+
+### 2. DB 생성 (최초 1회, 관리자 계정으로 실행)
+```bash
+mysql -u root -p < database/sales/create_sales_db.sql
+```
+`.env`의 `MYSQL_WRITE_USER`/`MYSQL_WRITE_PASSWORD`와 스크립트 안 계정 정보를 동일하게 맞춘다.
+
+### 3. 테이블 생성
+```bash
+mysql -u etl_writer -p sales < database/sales/ddl.sql
+```
+
+### 4. 원천 데이터 배치
+`ERP_Sales_Data_Full.xlsx`를 `data/raw/source_data/`에 둔다.
+
+### 5. ETL 실행
+```bash
+python -m etl.sales.run_all data/raw/source_data/ERP_Sales_Data_Full.xlsx
+```
+실행 로그는 `logs/etl_sales.log.txt`에서 확인한다. 동일 원천으로 재실행해도 UPSERT라 행 수는 늘지 않는다(멱등성).

@@ -67,13 +67,16 @@ skn32_3rd_pj_rag_mcp_chatbot/
 ## 현재 구현 단계와 디렉터리 규칙
 
 - `app/core/`에는 환경 설정만 둔다. 공통 로그는 `app/logging/`만 사용한다.
-- `app/agent/evidence_eval.py`는 노드에서 분리돼 있으나, 실제 판정 로직은 아직
-  스켈레톤이다.
-- 구매의 기존 공통 ETL 스켈레톤은 `etl/purchase/`로 이동했다. `etl/sales/`는 판매
-  소유의 독립 스켈레톤으로 새로 만들었다. 두 디렉터리는 서로의 테이블·적재 규칙을
-  직접 import하거나 수정하지 않는다.
+- `app/agent/evidence_eval.py`는 relevance·confidence·metadata·freshness와 명시적
+  contradiction을 결정적으로 판정한다. 기준 변경은 도메인 담당자와 함께 검토한다.
+- 구매 ETL은 `etl/purchase/`에, 판매 ETL은 `etl/sales/`에 각각 분리한다. 두
+  디렉터리는 서로의 테이블·적재 규칙을 직접 import하거나 수정하지 않는다. 기존
+  도메인 디렉터리는 소유자 결정 전 삭제·이동하지 않으며 backend 계약에서 참조하지 않는다.
 - `mcp_servers/data_tools/purchase/`와 `sales/`는 도메인별 `query_*`, `schema.py`,
   `text2sql.py`, `mysql.py`를 소유한다. `server.py`만 공통 영역이다.
+- `mcp_servers/document_tools/`와 `mcp_servers/data_tools/`만 현재 공식 Tool 경계다.
+  `mcp_servers/document/`와 `mcp_servers/data/`는 ACL·tenant 계약이 확정되지 않은 설계
+  스켈레톤이므로 새 backend 흐름에서 import하거나 공식 구현과 혼용하지 않는다.
 - Document MCP는 내부 문서 DB에서 파일 경로를 조회한 뒤 해당 경로의 파일만 읽는다.
   파일 경로 조회와 파일 로드 흐름은 RAG 담당이 함께 변경한다.
 - 로그 파일은 생성 산출물이므로 `.gitignore`의 `logs/*.log.txt` 규칙으로 제외하며,
