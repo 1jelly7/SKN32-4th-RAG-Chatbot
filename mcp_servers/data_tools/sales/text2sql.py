@@ -12,7 +12,7 @@ SYSTEM_PROMPT = (
     "결과 건수를 제한하기 위해 LIMIT을 포함하세요. SQL 코드만 출력하고 설명은 하지 마세요."
 )
 
-# 더 구체적인 질문 패턴을 먼저 검사합니다 (finance/text2sql.py와 동일한 원칙).
+# 구체적인 질문 패턴을 먼저 검사해 범용 템플릿이 선매칭되는 것을 방지합니다.
 _FALLBACK_TEMPLATES: list[tuple[tuple[str, ...], str]] = [
     (
         ("vip",),

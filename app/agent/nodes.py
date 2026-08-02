@@ -28,7 +28,7 @@ def route_question(question: str) -> Route:
     normalized = question.casefold()
     document_terms = ("정책", "규정", "가이드", "매뉴얼", "문서", "지침", "절차", "휴가", "휴직", "취업규칙")
     database_terms = (
-        "매출", "현황", "집계", "실적", "기간", "재무", "판매", "구매", "지출",
+        "매출", "현황", "집계", "실적", "기간", "판매", "구매", "지출",
         "고객", "공급업체", "재고", "vip", "발주", "미수금", "미지급",
     )
     has_document = any(term in normalized for term in document_terms)
@@ -46,7 +46,7 @@ def route_data_domain(question: str) -> DataDomain:
     """DATABASE/BOTH 경로일 때 purchase(구매/지출)와 sales(판매) 도메인을 판별한다."""
     normalized = question.casefold()
     sales_terms = ("매출", "고객", "판매", "재고", "vip", "여신", "수주")
-    purchase_terms = ("구매", "지출", "공급업체", "발주", "미지급", "벤더", "재무")
+    purchase_terms = ("구매", "지출", "공급업체", "발주", "미지급", "벤더")
     if any(t in normalized for t in sales_terms) and not any(t in normalized for t in purchase_terms):
         return "sales"
     if any(t in normalized for t in purchase_terms) and not any(t in normalized for t in sales_terms):

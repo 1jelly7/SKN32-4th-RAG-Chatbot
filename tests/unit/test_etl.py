@@ -1,4 +1,4 @@
-"""legacy finance transform의 최소 중복 제거 회귀 테스트.
+"""구매 ETL transform의 최소 중복 제거 회귀 테스트.
 
 정식 purchase/sales ETL 통합 완료를 증명하지 않으며 외부 MySQL을 사용하지 않는다.
 """

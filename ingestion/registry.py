@@ -192,7 +192,7 @@ class DocumentRegistry:
         """문서 1건의 메타데이터를 등록하거나 갱신합니다.
 
         allowed_roles를 생략하면 baseline role("user")만 부여해 전 직원 공개로 취급합니다.
-        특정 role만 접근하게 하려면 allowed_roles=["hr", "finance"]처럼 명시적으로 지정하세요.
+        특정 role만 접근하게 하려면 allowed_roles=["hr", "purchase"]처럼 명시적으로 지정하세요.
         is_active는 기본적으로 True입니다 - 즉, 이미 비활성화(is_active=False)된 문서를
         다시 upsert하면 별도 지정이 없는 한 다시 활성화됩니다. 문서를 비활성화만 하고
         싶다면 upsert_metadata(filename, is_active=False, ...)처럼 명시적으로 호출하세요.

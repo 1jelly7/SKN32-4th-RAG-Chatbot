@@ -32,9 +32,9 @@ CREATE TABLE IF NOT EXISTS document_registry (
     category         VARCHAR(100),
     version_date     DATE,
 
-    -- 접근 가능한 role을 콤마로 구분해 저장합니다. (예: "user,hr,finance")
-    -- mcp_servers/document/acl.py는 "allowed_roles가 없거나 손상되면 기본 거부"
-    -- 원칙이므로, 이 컬럼은 NULL을 허용하지 않고 항상 명시적인 값을 가지도록 합니다.
+    -- 접근 가능한 role을 콤마로 구분해 저장합니다. (예: "user,hr,purchase")
+    -- 접근 제어 계층은 allowed_roles가 없거나 손상되면 기본 거부해야 하므로, 이 컬럼은
+    -- NULL을 허용하지 않고 항상 명시적인 값을 가지도록 합니다.
     -- 전 직원 공개 문서는 baseline role(예: "user")을 반드시 포함해야 합니다.
     allowed_roles    VARCHAR(255) NOT NULL DEFAULT 'user',
 

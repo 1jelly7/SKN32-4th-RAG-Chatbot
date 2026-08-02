@@ -16,7 +16,7 @@ chat 흐름 통과는 실제 원격 MCP·DB·FAISS 연결 완료를 뜻하지 �
 | `tests/unit/test_api.py` | `/api/health`, session cache 격리, 공개 오류 매핑            |
 | `tests/unit/test_document_mcp.py` | 문서 DB 경로 조회 → 파일 로드 → RAG 호출 순서                |
 | `tests/unit/test_data_mcp.py` | 구매·판매 Tool dispatch, 공통 envelope와 오류 분류 |
-| `tests/unit/test_etl.py` | legacy finance 및 구매·판매 ETL 변환 계약 |
+| `tests/unit/test_etl.py` | 구매·판매 ETL 변환 계약 |
 | `tests/unit/test_logging.py` | 5필드 로그 포맷                                              |
 | `tests/integration/test_chat_document_flow.py` | fake Document MCP 기반 API→Graph 흐름                        |
 | `tests/integration/test_chat_data_flow.py` | fake purchase/sales MCP 기반 API→Graph 흐름                  |

@@ -75,8 +75,7 @@ skn32_3rd_pj_rag_mcp_chatbot/
 - `mcp_servers/data_tools/purchase/`와 `sales/`는 도메인별 `query_*`, `schema.py`,
   `text2sql.py`, `mysql.py`를 소유한다. `server.py`만 공통 영역이다.
 - `mcp_servers/document_tools/`와 `mcp_servers/data_tools/`만 현재 공식 Tool 경계다.
-  `mcp_servers/document/`와 `mcp_servers/data/`는 ACL·tenant 계약이 확정되지 않은 설계
-  스켈레톤이므로 새 backend 흐름에서 import하거나 공식 구현과 혼용하지 않는다.
+  중복 패키지나 폐기된 도메인 별칭을 만들거나 backend 흐름에서 혼용하지 않는다.
 - Document MCP는 내부 문서 DB에서 파일 경로를 조회한 뒤 해당 경로의 파일만 읽는다.
   파일 경로 조회와 파일 로드 흐름은 RAG 담당이 함께 변경한다.
 - 로그 파일은 생성 산출물이므로 `.gitignore`의 `logs/*.log.txt` 규칙으로 제외하며,

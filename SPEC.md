@@ -708,7 +708,7 @@ SQL을 제대로 해석하는 도구(`sqlparse` 등)가 필요한데, 이번 범
 
 | # | 항목 | 상대방 | 내용 |
 |---|---|---|---|
-| C-01 | `nodes.py`가 import 에러 냄 | 통합 담당 | [app/agent/nodes.py:17](app/agent/nodes.py:17)이 `mcp_servers.data_tools.finance.query`를 불러오는데 그 폴더는 `purchase`로 이름이 바뀌어서 **지금 브랜치에서 아예 실행이 안 됨** |
+| C-01 | 구매 import 경로 정리 | 통합 담당 | 해결: Agent는 `MCPClient.purchase_query()`를 통해 정본 purchase Tool을 호출하며 앱 진입점 import로 경로를 검증한다. |
 | C-02 | `.env`에 읽기 계정 정보 추가 | 통합 담당 | `MYSQL_READ_HOST/USER/PASSWORD`가 없어서 지금은 조회 자체가 안 됨 |
 | C-03 | 사용자 입력·SQL·답변에 이스케이프 처리 없음 (보안) | 통합 담당 | [chat.js](app/web/chat.js)가 사용자 입력·DB 값·LLM 답변을 아무 처리 없이 그대로 화면에 꽂아넣는다. `<script>` 같은 걸 입력하면 그대로 실행됨. **SQL과 표를 더 많이 보여줄수록 이 문제가 커짐** — 시급 |
 | C-04 | 두 번째 질문부터 이전 표·그래프가 깨짐 | 통합 담당 | [chat.js](app/web/chat.js)가 `innerHTML +=` 방식으로 채팅 내용을 계속 새로 그려서, 이미 그려진 화면이 통째로 다시 그려짐 |
@@ -718,7 +718,7 @@ SQL을 제대로 해석하는 도구(`sqlparse` 등)가 필요한데, 이번 범
 | C-08 | 화면에 전체 행 보여주기 반영 | 통합 담당 | D-13(화면 전체) 구현하려면 8.3절의 `rows_for_llm` 분리를 `answer_synthesis`가 실제로 써야 함 |
 | C-09 | 조회 캐시가 데이터 갱신을 못 따라감 | 통합 담당 | [app/cache/key.py:20](app/cache/key.py:20)이 캐시 키 재료로 쓰는 `database_freshness_bucket` 값을 아무도 채워주지 않아서 항상 비어있음. ETL로 데이터를 새로 넣어도 최대 5분간 예전 표가 그대로 나올 수 있음 |
 | C-10 | `metadata` 항목 확장 | 통합 담당 | [docs/interface.md](docs/interface.md)의 `metadata`에 `views_used`, `data_coverage`, `retry_count` 추가 반영 필요 |
-| C-11 | `mcp_servers/data/` 폴더 정리 | 통합 담당 | `data_tools/`와 별개로 `mcp_servers/data/`라는 폴더가 하나 더 있음. 어느 쪽이 최종본인지 확인 필요 |
+| C-11 | Data MCP 중복 패키지 정리 | 통합 담당 | 해결: `data_tools/`를 유일한 정본으로 확정하고 미등록 설계 스켈레톤을 제거했다. |
 
 ### 14.2 나중에 처리 (그래프/차트 — 지금은 보류)
 

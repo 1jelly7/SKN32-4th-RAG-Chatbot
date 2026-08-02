@@ -1,10 +1,11 @@
 # Project Progress
 
-> Last updated: 2026-08-02 13:04 KST
+> Last updated: 2026-08-02 17:44 KST
 > Source logs: `docs/progress/<role>/YYYY-MM-DD.md`
 
 ## Current Verified State
 
+- 2026-08-02 MCP 정본 경로와 purchase 명칭 통합은 앱·MCP 진입점 import, 관련 테스트 74 passed/1 skipped, 전체 pytest 120 passed/2 skipped로 검증되었다. 근거: `docs/progress/integration/2026-08-02.md` Session 2.
 - 2026-08-02 통합 변경은 `skn_3rd` 환경에서 전체 `pytest` 120건 통과, 2건 skip 및 `compileall` 통과로 검증되었다. 근거: `docs/progress/integration/2026-08-02.md`, 커밋 `526ae78`.
 - 채팅 API의 `evidence_status`와 `tables` 공개 계약, 오류 코드 매핑 및 `BOTH` 근거 수집 순서가 문서와 테스트에 반영되었다. 원격 MCP 환경에서의 동작은 아직 검증되지 않았다.
 - 구매 Text2SQL 및 purchase/sales 공통 MCP envelope의 SELECT-only 방어는 단위 테스트(22 passed)와 전체 회귀에 포함되었다. 실제 DB 연결 계약 테스트는 미검증이다.
@@ -40,7 +41,7 @@
 |---|---|---|---|---|
 | 2026-08-02 | Agent는 provider를 직접 호출하지 않고 `InProcessMCPPort`를 통해 같은 프로세스의 Tool service를 호출한다. | 원격 transport 도입 전에도 비동기 Tool 계약을 유지하기 위해서다. | 원격 MCP transport·격리·운영 수명주기 검증이 별도로 필요하다. | `docs/progress/integration/2026-08-02.md` |
 | 2026-08-02 | 세션 원문 대신 결정적 해시를 cache key material로 사용한다. | 세션별 동일 질문을 격리하면서 원문을 키에 남기지 않기 위해서다. | Redis 기반 실제 무효화 검증이 남아 있다. | `docs/progress/integration/2026-08-02.md` |
-| 2026-08-02 | 공식 backend Tool 경계를 `mcp_servers/document_tools/`와 `mcp_servers/data_tools/`로 한정한다. | 현재 문서화된 MCP 계약과 소유권 경계를 명확히 하기 위해서다. | 중복 실험 스켈레톤의 계약 확정 여부는 후속 결정이 필요하다. | `docs/progress/integration/2026-08-02.md` |
+| 2026-08-02 | 공식 backend Tool 경계를 `mcp_servers/document_tools/`와 `mcp_servers/data_tools/`로 한정하고 정본 외 중복 패키지를 제거한다. | 현재 앱 진입점·Tool 등록·계약 테스트·문서가 모두 정본 경계를 사용하며 중복 경로에는 사용 가능한 추가 기능이 없었다. | 원격 transport와 ACL·tenant 확장은 정본 경계에서 별도 계약 검토가 필요하다. | `docs/progress/integration/2026-08-02.md` Session 2 |
 
 ## Blockers and Open Questions
 
@@ -83,6 +84,7 @@
 
 ## Recent Source Logs
 
+- `docs/progress/integration/2026-08-02.md` Session 2 — MCP 정본 경로와 purchase 명칭 통합, 전체 회귀 120 passed/2 skipped 확인.
 - `docs/progress/integration/2026-08-02.md` — 감사 항목 14건 반영, 전체 회귀 120 passed 확인 및 외부 통합 미검증 사항 기록.
 - `docs/progress/backend/` — 일별 로그 없음; 현재 상태 확인 필요.
 - `docs/progress/rag/` — 일별 로그 없음; 현재 상태 확인 필요.

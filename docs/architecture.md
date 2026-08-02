@@ -60,6 +60,6 @@ document→database 순서로 수집한 뒤 평가한다. 현재 기본 Host tra
 
 `mcp_servers/data_tools/`의 purchase/sales Tool 등록과 read-only 조회 경계는 구현돼 있다.
 원격 MCP URL transport, Redis adapter, 문서 배치 인덱스 재사용·version 전파 및 실제 외부
-서비스 통합은 아직 완료되지 않았다. `mcp_servers/document/`와 `mcp_servers/data/`는
-공식 Tool에 등록되지 않은 ACL/범용 설계 스켈레톤이며 backend는 각각
-`document_tools`와 `data_tools`만 사용한다.
+서비스 통합은 아직 완료되지 않았다. MCP 구현의 정본은 `document_tools`와
+`data_tools`이며 backend도 이 두 패키지만 사용한다. 별도 ACL·tenant 계약은 현재
+인터페이스에 정의되지 않았으므로 정본 Tool 경계 안에서 계약 검토 후 도입해야 한다.
