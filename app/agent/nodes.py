@@ -12,8 +12,9 @@ from typing import Any
 
 from app.agent.llm import AsyncLLMPort, complete
 from app.agent.prompts import ANSWER_PROMPT
+from app.agent.query_classification import classify_question, requires_verified_context
 from app.agent.state import DataDomain, GraphState, Route
-from app.mcp.client import MCPClient, MCPClientError
+from app.mcp.client import MCPClient, MCPClientError, MCPNoResultError
 
 SENSITIVE_FIELD_PARTS = ("api_key", "password", "secret", "token", "file_path")
 
@@ -58,7 +59,19 @@ def route_data_domain(question: str) -> DataDomain:
 async def router(state: GraphState) -> GraphState:
     """question을 분류해 route 필드에 기록하고 기존 상태를 보존한다."""
     question = state.get("question", "")
+    labels = classify_question(question)
+    state["query_labels"] = sorted(labels)
+    state["retrieval_diagnostics"] = {
+        "has_documents": False,
+        "has_relevant_documents": False,
+        "top_score": None,
+        "reranker_score": None,
+        "retrieval_error": False,
+        "index_unavailable": False,
+    }
     state["route"] = route_question(question)
+    if "INTERNAL_KNOWLEDGE" in labels and state["route"] == "GENERAL":
+        state["route"] = "DOCUMENT"
     if state["route"] in ("DATABASE", "BOTH"):
         state["data_domain"] = route_data_domain(question)
     return state
@@ -82,6 +95,9 @@ async def document_retrieval(
     question = state.get("question", "")
     try:
         state["document_evidence"] = await mcp_client.document_search(question, top_k=4)
+    except MCPNoResultError:
+        # A completed search with no documents is an answerability signal, not a service outage.
+        state["document_evidence"] = []
     except MCPClientError as exc:
         if state.get("route") != "BOTH":
             raise
@@ -156,9 +172,10 @@ async def answer_synthesis(
     route = state.get("route", "GENERAL")
     evidence = state.get("evidence", [])
     evidence_status = state.get("evidence_status", "SUPPORTED")
+    labels = set(state.get("query_labels", ["GENERAL_KNOWLEDGE"]))
 
     if route != "GENERAL" and evidence_status == "INSUFFICIENT":
-        state["answer"] = "관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+        state["answer"] = _insufficient_evidence_answer(labels)
         state["sources"] = []
         state["tables"] = []
         return state
@@ -169,7 +186,13 @@ async def answer_synthesis(
         state["tables"] = []
         return state
 
-    answer = await complete(ANSWER_PROMPT, evidence, llm)
+    if requires_verified_context(labels) and not evidence:
+        state["answer"] = _insufficient_evidence_answer(labels)
+        state["sources"] = []
+        state["tables"] = []
+        return state
+
+    answer = await complete(ANSWER_PROMPT, evidence, state.get("question", ""), llm)
     if evidence_status == "PARTIALLY_SUPPORTED":
         answer += "\n\n(일부 근거에 조회 오류가 있어, 확인된 부분만 반영한 답변입니다.)"
 
@@ -177,6 +200,19 @@ async def answer_synthesis(
     state["sources"] = _build_sources(evidence)
     state["tables"] = _build_tables(evidence)
     return state
+
+
+def _insufficient_evidence_answer(labels: set[str]) -> str:
+    """Provide a type-specific fallback without claiming that retrieval has failed."""
+    if "FRESHNESS_SENSITIVE" in labels:
+        return "최신 출처를 확인할 수 없어 현재 값이나 최신 사실을 단정할 수 없습니다. 확인 가능한 공식 출처를 제공해 주세요."
+    if "HIGH_STAKES" in labels:
+        return "법률·의료·금융처럼 검증이 중요한 질문입니다. 확인된 근거 없이 결론을 단정할 수 없으니 관련 조항이나 전문가 검토를 확인해 주세요."
+    if "CITATION_REQUIRED" in labels:
+        return "요청하신 주장을 뒷받침할 검증 가능한 출처를 찾지 못했습니다. 출처 범위나 문서명을 알려 주시면 다시 확인하겠습니다."
+    if "INTERNAL_KNOWLEDGE" in labels:
+        return "현재 제공된 사내 자료에서 해당 내용을 확인하지 못했습니다. 최신 규정 문서 또는 담당 부서에 확인해 주세요."
+    return "질문의 의미를 정확히 파악하지 못했습니다. 대상이나 조건을 조금 더 구체적으로 알려 주세요."
 
 
 def _json_safe(value: Any) -> Any:

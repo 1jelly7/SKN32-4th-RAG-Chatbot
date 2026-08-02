@@ -72,7 +72,7 @@ def test_both_returns_insufficient_response_when_all_tools_fail() -> None:
         response = client.post("/api/chat", json={"question": "휴가 규정과 매출 알려줘"})
 
     body = response.json()
-    assert response.status_code == 404
-    assert body["error_code"] == "NO_RESULT"
+    assert response.status_code == 502
+    assert body["error_code"] == "QUERY_ERROR"
     assert [call.tool_name for call in port.calls] == ["search_documents", "query_sales"]
     assert llm.calls == []

@@ -4,7 +4,7 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
-from mcp_servers.document_tools.search import search_documents
+from mcp_servers.document_tools.search import DocumentSearchUnavailableError, search_documents
 
 
 def create_server() -> Any:
@@ -16,7 +16,7 @@ def create_server() -> Any:
 
     server = MCPServer(name="document-mcp", version="0.1.0")
 
-    @server.tool()
+    @server.tool(name="search_documents")
     async def search_documents_tool(query: str, top_k: int = 5) -> dict:
         """사내 문서(PDF/TXT/Markdown)에서 질문과 관련된 근거를 검색합니다.
 
@@ -37,7 +37,17 @@ def create_server() -> Any:
 
         try:
             chunks = await search_documents(query, top_k=top_k)
-        except Exception as exc:  # noqa: BLE001 - 사용자에게는 일반화된 오류만 노출합니다.
+        except DocumentSearchUnavailableError:
+            return {
+                "status": "error",
+                "domain": "document",
+                "message": "문서 조회 서비스를 현재 사용할 수 없습니다.",
+                "error_code": "QUERY_ERROR",
+                "data": [],
+                "sources": [],
+                "metadata": {},
+            }
+        except Exception:  # noqa: BLE001 - 사용자에게는 일반화된 오류만 노출합니다.
             # TODO(implementation): raw 예외 문자열을 metadata에 싣지 않고 서버 내부의
             # 비밀정보 없는 구조화 로그로만 남긴다. 공개 envelope에는 INTERNAL_ERROR와
             # 일반화된 message만 포함하는 회귀 테스트가 완료 조건이다.
@@ -48,7 +58,7 @@ def create_server() -> Any:
                 "error_code": "INTERNAL_ERROR",
                 "data": [],
                 "sources": [],
-                "metadata": {"detail": str(exc)},
+                "metadata": {},
             }
 
         if not chunks:

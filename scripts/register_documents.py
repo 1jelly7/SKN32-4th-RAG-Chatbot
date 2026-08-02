@@ -37,6 +37,11 @@ def main() -> None:
     repository.ensure_schema()
 
     documents_dir = PROJECT_ROOT / "data" / "raw" / "documents"
+    if not documents_dir.is_dir():
+        print(f"문서 디렉터리를 찾을 수 없습니다: {documents_dir}")
+        print("원본 문서를 준비한 뒤 이 스크립트를 다시 실행하세요.")
+        return
+
     documents = load_documents(documents_dir)
 
     if not documents:

@@ -19,7 +19,7 @@ SENSITIVE_KEY_PARTS = ("api_key", "password", "secret", "token", "file_path")
 class AsyncLLMPort(Protocol):
     """검증된 근거만 사용해 답변을 완성하는 비동기 LLM 경계다."""
 
-    async def complete(self, prompt: str, context: list[dict[str, Any]]) -> str:
+    async def complete(self, prompt: str, context: list[dict[str, Any]], question: str) -> str:
         """프롬프트와 안전하게 정규화된 근거로 답변을 생성한다."""
         ...
 
@@ -30,6 +30,7 @@ class LLMCall:
 
     prompt: str
     context: list[dict[str, Any]]
+    question: str
 
 
 class FakeLLMPort:
@@ -39,9 +40,9 @@ class FakeLLMPort:
         self._response = response
         self.calls: list[LLMCall] = []
 
-    async def complete(self, prompt: str, context: list[dict[str, Any]]) -> str:
+    async def complete(self, prompt: str, context: list[dict[str, Any]], question: str) -> str:
         """응답을 반환하고 방어적 context 사본을 호출 이력에 기록한다."""
-        self.calls.append(LLMCall(prompt=prompt, context=deepcopy(context)))
+        self.calls.append(LLMCall(prompt=prompt, context=deepcopy(context), question=question))
         return self._response
 
 
@@ -62,10 +63,10 @@ class LLMClient:
         """외부 OpenAI client가 구성되지 않아 로컬 요약을 사용할지 반환한다."""
         return self._client is None
 
-    async def complete(self, prompt: str, context: list[dict[str, Any]]) -> str:
+    async def complete(self, prompt: str, context: list[dict[str, Any]], question: str) -> str:
         """프롬프트와 검증·정규화된 근거로 텍스트 완료를 요청한다."""
         if self._client is None:
-            return DEMO_NOTICE + _format_context_as_demo_answer(context)
+            return DEMO_NOTICE + _format_context_as_demo_answer(context, question)
 
         context_text = "\n\n".join(
             f"[근거 {index + 1} | {item.get('type', 'unknown')}] {_stringify_evidence(item)}"
@@ -76,7 +77,10 @@ class LLMClient:
                 model=self._model,
                 messages=[
                     {"role": "system", "content": prompt},
-                    {"role": "user", "content": f"근거:\n{context_text}" if context_text else "근거 없음"},
+                    {
+                        "role": "user",
+                        "content": f"Question:\n{question}\n\nVerified context:\n{context_text}",
+                    },
                 ],
                 temperature=0.2,
                 timeout=30,
@@ -118,9 +122,9 @@ def _stringify_evidence(item: dict[str, Any]) -> str:
     return str(item.get("content", item))
 
 
-def _format_context_as_demo_answer(context: list[dict[str, Any]]) -> str:
+def _format_context_as_demo_answer(context: list[dict[str, Any]], question: str) -> str:
     if not context:
-        return "근거를 찾지 못했습니다."
+        return f"Question: {question}\n\nThe demo mode cannot generate an LLM answer."
     return "\n".join(
         f"{index}. {_stringify_evidence(item)[:300]}"
         for index, item in enumerate(context, start=1)
@@ -141,7 +145,8 @@ def _get_default_client() -> LLMClient:
 async def complete(
     prompt: str,
     context: list[dict[str, Any]],
+    question: str,
     llm: AsyncLLMPort | None = None,
 ) -> str:
     """주입된 LLM 또는 기본 client에 안전한 근거 사본을 전달한다."""
-    return await (llm or _get_default_client()).complete(prompt, sanitize_evidence(context))
+    return await (llm or _get_default_client()).complete(prompt, sanitize_evidence(context), question)

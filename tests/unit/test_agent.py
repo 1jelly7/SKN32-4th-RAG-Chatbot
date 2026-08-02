@@ -140,6 +140,25 @@ async def test_evidence_eval_supported_when_evidence_present():
 
 
 @pytest.mark.asyncio
+async def test_evidence_eval_uses_calibrated_document_score_threshold() -> None:
+    from app.agent.evidence_eval import evidence_eval
+
+    state: GraphState = {
+        "route": "DOCUMENT",
+        "document_evidence": [
+            {"type": "document", "content": "휴가 규정", "score": 0.13},
+            {"type": "document", "content": "낮은 점수", "score": 0.10},
+        ],
+        "database_evidence": [],
+    }
+
+    result = await evidence_eval(state)
+
+    assert result["evidence_status"] == "SUPPORTED"
+    assert result["evidence"] == [state["document_evidence"][0]]
+
+
+@pytest.mark.asyncio
 async def test_evidence_eval_general_route_skips_check():
     from app.agent.evidence_eval import evidence_eval
 
@@ -298,7 +317,7 @@ async def test_graph_calls_only_allowed_mcp_tools_for_each_route(
     expected_calls: list[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_complete(prompt: str, context: list[dict[str, Any]], llm: object = None) -> str:
+    async def fake_complete(prompt: str, context: list[dict[str, Any]], question: str, llm: object = None) -> str:
         return "답변"
 
     monkeypatch.setattr("app.agent.nodes.complete", fake_complete)
@@ -323,7 +342,7 @@ async def test_graph_calls_only_allowed_mcp_tools_for_each_route(
 async def test_graph_both_fans_in_document_and_partial_database_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_complete(prompt: str, context: list[dict[str, Any]], llm: object = None) -> str:
+    async def fake_complete(prompt: str, context: list[dict[str, Any]], question: str, llm: object = None) -> str:
         return "부분 답변"
 
     monkeypatch.setattr("app.agent.nodes.complete", fake_complete)
@@ -596,3 +615,73 @@ def test_build_tables_skips_empty_rows():
     evidence = [{"type": "database", "domain": "purchase", "generated_sql": "x", "rows": []}]
     tables = _build_tables(evidence)
     assert tables == []
+
+
+def test_query_classifier_keeps_stable_general_knowledge_answerable() -> None:
+    from app.agent.query_classification import classify_question, requires_verified_context
+
+    labels = classify_question("사과는 무슨 색인가?")
+
+    assert labels == {"GENERAL_KNOWLEDGE"}
+    assert requires_verified_context(labels) is False
+
+
+@pytest.mark.asyncio
+async def test_general_answer_receives_question_without_retrieval_context() -> None:
+    from app.agent.prompts import ANSWER_PROMPT
+
+    fake_llm = FakeLLMPort("사과는 일반적으로 빨간색입니다.")
+
+    result = await answer_synthesis(
+        {
+            "question": "사과는 무슨 색인가?",
+            "route": "GENERAL",
+            "query_labels": ["GENERAL_KNOWLEDGE"],
+            "evidence": [],
+            "evidence_status": "SUPPORTED",
+        },
+        fake_llm,
+    )
+
+    assert result["answer"] == "사과는 일반적으로 빨간색입니다."
+    assert fake_llm.calls[0].question == "사과는 무슨 색인가?"
+    assert fake_llm.calls[0].prompt == ANSWER_PROMPT
+    assert "not the only source of knowledge" in ANSWER_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_freshness_question_without_source_uses_specific_safe_fallback() -> None:
+    fake_llm = FakeLLMPort("should not be called")
+
+    result = await answer_synthesis(
+        {
+            "question": "오늘 기준 미국 기준금리는?",
+            "route": "GENERAL",
+            "query_labels": ["FRESHNESS_SENSITIVE"],
+            "evidence": [],
+            "evidence_status": "SUPPORTED",
+        },
+        fake_llm,
+    )
+
+    assert "최신 출처" in result["answer"]
+    assert fake_llm.calls == []
+
+
+@pytest.mark.asyncio
+async def test_empty_internal_search_is_not_reported_as_mcp_failure() -> None:
+    port = FakeMCPPort(
+        {
+            "search_documents": _tool_success("document", []),
+            "query_purchase": _tool_success("purchase", [{"amount": 100}]),
+            "query_sales": _tool_success("sales", [{"revenue": 200}]),
+        }
+    )
+
+    result = await build_graph(MCPClient(port), FakeLLMPort("should not be called")).ainvoke(
+        {"question": "우리 회사 복리후생 규정은?"}
+    )
+
+    assert result["evidence_status"] == "INSUFFICIENT"
+    assert "사내 자료" in result["answer"]
+    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]

@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
+from app.agent.query_classification import QueryLabel
+
 Route = Literal["GENERAL", "DOCUMENT", "DATABASE", "BOTH"]
 DataDomain = Literal["purchase", "sales", "both"]
 EvidenceStatus = Literal[
@@ -24,6 +26,7 @@ class EvidencePolicy:
     """근거 품질 평가에 주입하는 결정적 정책값이다."""
 
     min_relevance: float = 0.5
+    min_document_score: float = 0.12
     min_confidence: float = 0.5
     required_metadata_keys: tuple[str, ...] = ()
     max_freshness_seconds: float | None = None
@@ -35,6 +38,7 @@ class GraphState(TypedDict, total=False):
     question: str
     session_id: str | None
     request_id: str
+    query_labels: list[QueryLabel]
     route: Route
     data_domain: DataDomain
     cache_key: str
@@ -52,6 +56,7 @@ class GraphState(TypedDict, total=False):
     evidence: list[dict[str, Any]]
     evidence_status: EvidenceStatus
     evidence_reason: str
+    retrieval_diagnostics: dict[str, object]
     evidence_retry_count: int
     sources: list[dict[str, Any]]
     tables: list[dict[str, Any]]
