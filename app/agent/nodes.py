@@ -22,8 +22,8 @@ def route_question(question: str) -> Route:
     """질문을 GENERAL/DOCUMENT/DATABASE/BOTH 중 하나로 분류한다.
 
     1차 MVP는 정책·규정·가이드 같은 문서 키워드와 매출·현황·집계·기간 실적 같은
-    데이터 키워드를 결정적으로 판별한다. 두 요구가 함께 있으면 BOTH를, 모호한 경우는
-    명세에 따라 비용이 큰 LLM 라우터로만 보완한다. 빈 문자열은 호출 전에 검증한다.
+    데이터 키워드를 결정적으로 판별한다. 두 요구가 함께 있으면 BOTH를 반환하며,
+    키워드가 없는 질문은 GENERAL로 분류한다. 현재 구현은 LLM fallback을 호출하지 않는다.
     """
     normalized = question.casefold()
     document_terms = ("정책", "규정", "가이드", "매뉴얼", "문서", "지침", "절차", "휴가", "휴직", "취업규칙")
@@ -157,8 +157,14 @@ async def answer_synthesis(
     evidence = state.get("evidence", [])
     evidence_status = state.get("evidence_status", "SUPPORTED")
 
-    if route != "GENERAL" and evidence_status in ("INSUFFICIENT", "CONTRADICTED"):
+    if route != "GENERAL" and evidence_status == "INSUFFICIENT":
         state["answer"] = "관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+        state["sources"] = []
+        state["tables"] = []
+        return state
+
+    if route != "GENERAL" and evidence_status == "CONTRADICTED":
+        state["answer"] = "서로 모순되는 근거가 확인되어 신뢰할 수 있는 단일 답변을 만들 수 없습니다. 담당자 확인이 필요합니다."
         state["sources"] = []
         state["tables"] = []
         return state

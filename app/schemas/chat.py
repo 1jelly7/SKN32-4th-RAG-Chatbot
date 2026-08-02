@@ -59,6 +59,12 @@ class ChatResponse(BaseModel):
     tables: list[TableData] = Field(default_factory=list)
     cached: bool
     route: str | None = None
+    evidence_status: Literal[
+        "SUPPORTED",
+        "PARTIALLY_SUPPORTED",
+        "INSUFFICIENT",
+        "CONTRADICTED",
+    ] | None = None
     request_id: str | None = None
 
 
@@ -71,5 +77,6 @@ class ErrorResponse(BaseModel):
         "NO_RESULT",
         "QUERY_ERROR",
         "EVIDENCE_INSUFFICIENT",
+        "TIMEOUT",
         "INTERNAL_ERROR",
     ]

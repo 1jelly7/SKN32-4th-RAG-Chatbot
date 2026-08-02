@@ -53,6 +53,52 @@ class FakeMCPPort:
         return deepcopy(response)
 
 
+class InProcessMCPPort:
+    """현재 전환 단계의 MCP Tool을 같은 프로세스에서 호출하는 transport다.
+
+    import와 외부 연결은 실제 호출 시점까지 지연한다. FastAPI/Agent가 문서 저장소나
+    MySQL을 직접 접근하지 않도록 각 소유 Tool service만 dispatch한다.
+    """
+
+    async def call_tool(self, tool_name: ToolName, payload: dict[str, Any]) -> object:
+        """허용된 Tool 이름만 각 MCP 소유 경계로 전달한다."""
+        if tool_name in ("query_purchase", "query_sales"):
+            from mcp_servers.data_tools.server import execute_data_tool
+
+            return await execute_data_tool(tool_name, str(payload.get("question", "")))
+        if tool_name == "search_documents":
+            from mcp_servers.document_tools.search import search_documents
+
+            query = str(payload.get("query", ""))
+            top_k = payload.get("top_k", 5)
+            if not query.strip() or not isinstance(top_k, int) or top_k <= 0:
+                return {
+                    "status": "error", "domain": "document",
+                    "message": "문서 검색 입력이 올바르지 않습니다.",
+                    "error_code": "INVALID_INPUT", "data": [], "sources": [], "metadata": {},
+                }
+            try:
+                chunks = await search_documents(query, top_k)
+            except Exception:  # noqa: BLE001 - 내부 상세를 Host 경계 밖으로 노출하지 않는다.
+                return {
+                    "status": "error", "domain": "document",
+                    "message": "문서 검색 중 오류가 발생했습니다.",
+                    "error_code": "INTERNAL_ERROR", "data": [], "sources": [], "metadata": {},
+                }
+            if not chunks:
+                return {
+                    "status": "error", "domain": "document", "message": "관련 문서가 없습니다.",
+                    "error_code": "NO_RESULT", "data": [], "sources": [], "metadata": {"result_count": 0},
+                }
+            return {
+                "status": "success", "domain": "document", "message": None,
+                "data": [{"content": item["content"], "score": item["score"]} for item in chunks],
+                "sources": [{"document_id": item["document_id"], "title": item["title"]} for item in chunks],
+                "metadata": {"result_count": len(chunks)},
+            }
+        raise ValueError(f"지원하지 않는 MCP Tool입니다: {tool_name}")
+
+
 class MCPClientError(RuntimeError):
     """MCP 경계에서 분류된 오류의 공통 기반 예외다."""
 
@@ -71,6 +117,18 @@ class MCPNoResultError(MCPClientError):
 
 class MCPQueryError(MCPClientError):
     """Tool이 질의 실행 오류를 반환하거나 transport가 실패했을 때 발생한다."""
+
+
+class MCPInvalidInputError(MCPClientError):
+    """Tool이 요청 payload를 처리할 수 없다고 명시했을 때 발생한다."""
+
+
+class MCPEvidenceInsufficientError(MCPClientError):
+    """Tool은 정상 동작했지만 답변에 필요한 근거가 부족할 때 발생한다."""
+
+
+class MCPInternalError(MCPClientError):
+    """Tool 내부 장애가 질의 오류와 구분돼야 할 때 발생한다."""
 
 
 class MCPTimeoutError(MCPClientError):
@@ -176,6 +234,12 @@ def _parse_envelope(tool_name: ToolName, raw_response: object) -> ToolSuccessEnv
 
     if error.error_code == "NO_RESULT":
         raise MCPNoResultError(tool_name, error.message)
+    if error.error_code == "INVALID_INPUT":
+        raise MCPInvalidInputError(tool_name, error.message)
+    if error.error_code == "EVIDENCE_INSUFFICIENT":
+        raise MCPEvidenceInsufficientError(tool_name, error.message)
+    if error.error_code == "INTERNAL_ERROR":
+        raise MCPInternalError(tool_name, error.message)
     raise MCPQueryError(tool_name, error.message)
 
 

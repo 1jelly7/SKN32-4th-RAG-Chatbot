@@ -51,6 +51,8 @@ class GraphState(TypedDict, total=False):
     _mcp_errors: list[Exception]
     evidence: list[dict[str, Any]]
     evidence_status: EvidenceStatus
+    evidence_reason: str
+    evidence_retry_count: int
     sources: list[dict[str, Any]]
     tables: list[dict[str, Any]]
     answer: str

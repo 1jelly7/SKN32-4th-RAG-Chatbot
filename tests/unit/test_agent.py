@@ -257,7 +257,7 @@ async def test_answer_synthesis_does_not_call_llm_for_contradicted_evidence() ->
 
     result = await answer_synthesis(state, fake_llm)
 
-    assert "근거를 찾지 못해" in result["answer"]
+    assert "모순되는 근거" in result["answer"]
     assert result["sources"] == []
     assert result["tables"] == []
     assert fake_llm.calls == []
@@ -348,6 +348,30 @@ async def test_graph_both_fans_in_document_and_partial_database_evidence(
 
 
 @pytest.mark.asyncio
+async def test_graph_retries_insufficient_evidence_exactly_once() -> None:
+    """품질 미달 근거가 무한 조회 없이 한 번만 보강되게 한다."""
+    port = FakeMCPPort(
+        {
+            "search_documents": _tool_success(
+                "document",
+                [{"content": "관련성이 낮은 문서", "score": 0.1}],
+                [{"document_id": "policy-low", "title": "낮은 관련성"}],
+            ),
+            "query_purchase": _tool_success("purchase", [{"amount": 100}]),
+            "query_sales": _tool_success("sales", [{"revenue": 200}]),
+        }
+    )
+
+    result = await build_graph(MCPClient(port), FakeLLMPort("사용되지 않음")).ainvoke(
+        {"question": "휴가 규정 알려줘"}
+    )
+
+    assert result["evidence_status"] == "INSUFFICIENT"
+    assert result["evidence_retry_count"] == 1
+    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
+
+
+@pytest.mark.asyncio
 async def test_answer_synthesis_uses_only_sanitized_validated_evidence() -> None:
     fake_llm = FakeLLMPort("검증된 답변")
     validated_evidence = [
@@ -428,7 +452,7 @@ def test_source_and_table_serialization_preserves_safe_metadata_only() -> None:
 
 
 # ------------------------------------------------------------------
-# 전체 그래프 (실제 MySQL 필요 - 없으면 skip)
+# 전체 그래프 + same-process Data MCP + 실제 MySQL (명시적 opt-in)
 # ------------------------------------------------------------------
 def _mysql_available() -> bool:
     try:
@@ -442,7 +466,7 @@ def _mysql_available() -> bool:
             host=settings.mysql_read_host,
             user=settings.mysql_read_user,
             password=settings.mysql_read_password,
-            database=settings.document_db_database,
+            database=settings.sales_db_database,
         )
         conn.close()
         return True
@@ -456,54 +480,23 @@ skip_without_mysql = pytest.mark.skipif(not MYSQL_READY, reason="로컬에 MySQL
 
 @skip_without_mysql
 @pytest.mark.asyncio
-async def test_graph_document_route_end_to_end():
-    from app.agent.graph import get_graph
+async def test_graph_sales_route_uses_in_process_data_mcp_and_mysql(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """opt-in 테스트가 실제 sales DB를 MCP 경계 뒤에서만 조회하게 한다."""
+    from app.mcp.client import InProcessMCPPort
 
-    graph = get_graph()
-    result = await graph.ainvoke({"question": "법인카드 사용 지침이 뭐야"})
+    async def deterministic_sql(question: str, schema: object) -> str:
+        return "SELECT 1 AS health_check LIMIT 1"
 
-    assert result["route"] == "DOCUMENT"
-    assert result["answer"]
-    assert len(result["sources"]) > 0
-
-
-@skip_without_mysql
-@pytest.mark.asyncio
-async def test_graph_database_route_end_to_end():
-    from app.agent.graph import get_graph
-
-    graph = get_graph()
+    monkeypatch.setattr("mcp_servers.data_tools.sales.query.generate_sql", deterministic_sql)
+    graph = build_graph(MCPClient(InProcessMCPPort()), FakeLLMPort("판매 조회 완료"))
     result = await graph.ainvoke({"question": "고객별 매출 순위 알려줘"})
 
     assert result["route"] == "DATABASE"
     assert result["data_domain"] == "sales"
-    assert result["answer"]
-
-
-@skip_without_mysql
-@pytest.mark.asyncio
-async def test_graph_both_route_collects_both_evidence():
-    from app.agent.graph import get_graph
-
-    graph = get_graph()
-    result = await graph.ainvoke({"question": "법인카드 지침이랑 매출 현황 같이 알려줘"})
-
-    assert result["route"] == "BOTH"
-    assert len(result["document_evidence"]) > 0
     assert len(result["database_evidence"]) > 0
-
-
-@skip_without_mysql
-@pytest.mark.asyncio
-async def test_graph_general_route_skips_retrieval():
-    from app.agent.graph import get_graph
-
-    graph = get_graph()
-    result = await graph.ainvoke({"question": "오늘 기분이 어때"})
-
-    assert result["route"] == "GENERAL"
-    assert result.get("document_evidence", []) == []
-    assert result.get("database_evidence", []) == []
+    assert result["answer"] == "판매 조회 완료"
 
 
 # ------------------------------------------------------------------

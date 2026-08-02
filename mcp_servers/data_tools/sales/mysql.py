@@ -33,7 +33,10 @@ class ReadOnlyMySQLClient:
 
     def query(self, sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
         """guard를 통과한 단일 SELECT를 timeout과 읽기 전용 세션으로 실행한다."""
-        normalized = sql.strip().rstrip(";")
+        stripped = sql.strip()
+        normalized = stripped.rstrip(";")
+        if ";" in normalized or "--" in normalized or "/*" in normalized or "#" in normalized:
+            raise ValueError("단일 SELECT 문만 실행할 수 있습니다.")
         if not normalized.upper().startswith("SELECT"):
             raise ValueError("SELECT 문만 실행할 수 있습니다.")
         for keyword in _FORBIDDEN_KEYWORDS:

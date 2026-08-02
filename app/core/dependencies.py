@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from app.agent.llm import AsyncLLMPort
 from app.cache.repository import CacheRepository, MemoryCache
 from app.logging import configure_logging
-from app.mcp.client import MCPClient
+from app.mcp.client import InProcessMCPPort, MCPClient
 
 
 @dataclass
@@ -20,6 +20,6 @@ class AppDependencies:
     """
 
     llm: AsyncLLMPort | None = None
-    mcp: MCPClient | None = None
+    mcp: MCPClient | None = field(default_factory=lambda: MCPClient(InProcessMCPPort()))
     cache: CacheRepository = field(default_factory=MemoryCache)
     configure_logging: Callable[[], None] = configure_logging

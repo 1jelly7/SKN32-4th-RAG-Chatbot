@@ -9,12 +9,17 @@ import pytest
 
 from app.mcp.client import (
     FakeMCPPort,
+    MCPEvidenceInsufficientError,
     MCPClient,
+    MCPInternalError,
+    MCPInvalidInputError,
     MCPMalformedPayloadError,
     MCPNoResultError,
     MCPQueryError,
     MCPTimeoutError,
 )
+from mcp_servers.data_tools.purchase.mysql import ReadOnlyMySQLClient as PurchaseMySQLClient
+from mcp_servers.data_tools.sales.mysql import ReadOnlyMySQLClient as SalesMySQLClient
 
 
 def _success(
@@ -77,6 +82,9 @@ def test_document_search_normalizes_data_and_sources() -> None:
         ("not-an-envelope", MCPMalformedPayloadError),
         (_success("sales", []), MCPMalformedPayloadError),
         ({"status": "error", "domain": "purchase", "message": "결과 없음", "error_code": "NO_RESULT"}, MCPNoResultError),
+        ({"status": "error", "domain": "purchase", "message": "잘못된 입력", "error_code": "INVALID_INPUT"}, MCPInvalidInputError),
+        ({"status": "error", "domain": "purchase", "message": "근거 부족", "error_code": "EVIDENCE_INSUFFICIENT"}, MCPEvidenceInsufficientError),
+        ({"status": "error", "domain": "purchase", "message": "내부 오류", "error_code": "INTERNAL_ERROR"}, MCPInternalError),
         ({"status": "error", "domain": "purchase", "message": "실패", "error_code": "QUERY_ERROR"}, MCPQueryError),
         (asyncio.TimeoutError(), MCPTimeoutError),
     ],
@@ -140,3 +148,70 @@ def test_success_envelope_with_empty_data_is_no_result(
 
     assert port.calls[0].tool_name == tool_name
     assert port.calls[0].payload
+
+
+def test_data_server_wraps_purchase_rows_in_common_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
+    """공식 구매 service 결과가 Host가 검증할 envelope로 변환되게 한다."""
+    from mcp_servers.data_tools import server
+
+    async def fake_query(question: str) -> list[dict[str, Any]]:
+        assert question == "구매 현황"
+        return [{
+            "type": "database", "domain": "purchase", "generated_sql": "SELECT 1",
+            "row_count": 1, "rows": [{"amount": 100}], "elapsed_ms": 1.0,
+        }]
+
+    monkeypatch.setattr(server, "run_purchase_query", fake_query)
+    result = asyncio.run(server.execute_data_tool("query_purchase", "구매 현황"))
+
+    assert result["status"] == "success"
+    assert result["domain"] == "purchase"
+    assert result["data"] == [{"amount": 100}]
+    assert result["metadata"]["generated_sql"] == "SELECT 1"
+
+
+def test_data_server_distinguishes_empty_and_query_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """빈 결과와 provider 실패가 서로 다른 표준 오류로 유지되게 한다."""
+    from mcp_servers.data_tools import server
+
+    async def empty_query(_: str) -> list[dict[str, Any]]:
+        return [{"domain": "sales", "generated_sql": "SELECT 1", "rows": []}]
+
+    monkeypatch.setattr(server, "run_sales_query", empty_query)
+    empty = asyncio.run(server.execute_data_tool("query_sales", "판매 현황"))
+
+    async def failed_query(_: str) -> list[dict[str, Any]]:
+        raise RuntimeError("private provider detail")
+
+    monkeypatch.setattr(server, "run_sales_query", failed_query)
+    failed = asyncio.run(server.execute_data_tool("query_sales", "판매 현황"))
+
+    assert empty["error_code"] == "NO_RESULT"
+    assert failed["error_code"] == "QUERY_ERROR"
+    assert "private provider detail" not in str(failed)
+
+
+@pytest.mark.parametrize(
+    "client_type",
+    [
+        pytest.param(PurchaseMySQLClient, id="purchase"),
+        pytest.param(SalesMySQLClient, id="sales"),
+    ],
+)
+@pytest.mark.parametrize("sql", ["UPDATE orders SET status='x'", "SELECT 1; SELECT 2", "SELECT /* bypass */ 1"])
+def test_domain_mysql_clients_reject_non_single_select_before_connect(
+    client_type: type,
+    sql: str,
+) -> None:
+    """공식 purchase/sales adapter가 쓰기·다중·주석 SQL을 DB 연결 전에 거부한다."""
+    client = client_type("host", "user", "password", "database")
+
+    with pytest.raises(ValueError):
+        client.query(sql)
+
+
+def test_data_mcp_server_can_register_official_domain_tools() -> None:
+    """MCP server 조립이 import만 성공하는 스켈레톤으로 퇴행하지 않게 한다."""
+    from mcp_servers.data_tools.server import create_server
+
+    assert create_server() is not None

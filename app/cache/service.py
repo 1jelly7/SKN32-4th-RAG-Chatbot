@@ -45,6 +45,8 @@ def write_answer_cache(
         "tables": state.get("tables", []),
         "route": route,
     }
+    if state.get("evidence_status") is not None:
+        cache_value["evidence_status"] = state["evidence_status"]
     repository.set(cache_key, cache_value, get_cache_ttl(route))
     state["cache_key"] = cache_key
     return True

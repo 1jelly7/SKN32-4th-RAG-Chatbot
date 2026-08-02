@@ -1,24 +1,30 @@
-"""구매 자연어 질의를 처리할 미구현 도메인 서비스 경계."""
+"""구매 자연어 질문을 Text2SQL과 읽기 전용 조회로 연결한다."""
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
+from mcp_servers.data_tools.purchase.mysql import query_readonly
+from mcp_servers.data_tools.purchase.schema import get_schema_resource
+from mcp_servers.data_tools.purchase.text2sql import generate_sql
 
-async def query_purchase(
-    question: str,
-) -> list[dict[str, Any]]:
-    """구매 자연어 업무 조회 전체 흐름을 수행한다.
 
-    schema resource를 읽고 generate_sql로 SELECT 초안을 만든 뒤 read-only MySQL에서
-    실행한다. 결과 행과 SQL 요약·실행 시각을 근거 형식으로 반환한다.
+async def query_purchase(question: str) -> list[dict[str, Any]]:
+    """구매 질문을 SELECT로 변환해 실행하고 provenance가 있는 evidence를 반환한다.
+
+    빈 결과는 빈 rows를 가진 evidence로 반환하며, SQL 생성·검증·DB 오류는 공통 Data
+    MCP server가 표준 오류 envelope로 변환할 수 있도록 그대로 전파한다.
     """
-    # TODO(implementation): 구매 schema→Text2SQL→SELECT guard→read-only MySQL 순서로
-    # 실행하고 rows, generated_sql, row_count, table/query/freshness metadata가 있는
-    # 내부 evidence를 반환한다. 공통 server가 success/error envelope로 변환하기 전에
-    # 빈 결과와 QUERY_ERROR를 구분하며 판매 DB나 ETL을 호출하지 않는다.
-    # Completion criteria:
-    # - 구매 Tool fake로 success, empty result, query error, timeout을 검증한다.
-    # - SELECT 외 SQL과 미허용 table을 실행 전에 거부한다.
-    # - domain="purchase"와 provenance metadata를 보존한다.
-    ...
+    schema = get_schema_resource()
+    sql = await generate_sql(question, schema)
+    started_at = time.monotonic()
+    rows = query_readonly(sql)
+    return [{
+        "type": "database",
+        "domain": "purchase",
+        "generated_sql": sql,
+        "row_count": len(rows),
+        "rows": rows,
+        "elapsed_ms": round((time.monotonic() - started_at) * 1000, 1),
+    }]

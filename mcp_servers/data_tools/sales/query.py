@@ -20,12 +20,7 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
     sql = await generate_sql(question, schema)
 
     started_at = time.time()
-    try:
-        rows = query_readonly(sql)
-        error = None
-    except Exception as exc:  # noqa: BLE001
-        rows = []
-        error = str(exc)
+    rows = query_readonly(sql)
     elapsed_ms = round((time.time() - started_at) * 1000, 1)
 
     return [
@@ -36,6 +31,5 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
             "row_count": len(rows),
             "rows": rows,
             "elapsed_ms": elapsed_ms,
-            "error": error,
         }
     ]

@@ -17,7 +17,7 @@ from app.agent.nodes import answer_synthesis, database_retrieval, document_retri
 from app.agent.state import GraphState
 from app.mcp.client import MCPClient
 
-GraphTransition = Literal["end", "router", "document", "database", "answer"]
+GraphTransition = Literal["end", "router", "document", "database", "evidence", "retry", "answer"]
 
 
 def after_router(state: GraphState) -> str:
@@ -46,6 +46,31 @@ def after_document(state: GraphState) -> str:
     return "evidence"
 
 
+def after_evidence(state: GraphState) -> str:
+    """근거 부족일 때만 한 번의 보강 조회를 허용한다."""
+    if state.get("evidence_status") == "INSUFFICIENT" and state.get("evidence_retry_count", 0) < 1:
+        return "retry"
+    return "answer"
+
+
+async def prepare_evidence_retry(state: GraphState) -> GraphState:
+    """재시도 횟수를 증가시키고 이전 조회 결과·오류를 비운다."""
+    state["evidence_retry_count"] = state.get("evidence_retry_count", 0) + 1
+    state["document_evidence"] = []
+    state["database_evidence"] = []
+    state["evidence"] = []
+    state["_errors"] = []
+    state["_mcp_errors"] = []
+    return state
+
+
+def after_retry(state: GraphState) -> str:
+    """원래 route와 동일한 retrieval 경로로 보강 조회를 돌려보낸다."""
+    if state.get("route") in ("DOCUMENT", "BOTH"):
+        return "document"
+    return "database"
+
+
 def build_graph(
     mcp_client: MCPClient | None = None,
     llm: AsyncLLMPort | None = None,
@@ -64,6 +89,7 @@ def build_graph(
     graph.add_node("document", partial(document_retrieval, mcp_client=mcp_client))
     graph.add_node("database", partial(database_retrieval, mcp_client=mcp_client))
     graph.add_node("evidence", evidence_eval)
+    graph.add_node("retry", prepare_evidence_retry)
     graph.add_node("answer", partial(answer_synthesis, llm=llm))
 
     graph.set_entry_point("router")
@@ -79,7 +105,16 @@ def build_graph(
         {"database": "database", "evidence": "evidence"},
     )
     graph.add_edge("database", "evidence")
-    graph.add_edge("evidence", "answer")
+    graph.add_conditional_edges(
+        "evidence",
+        after_evidence,
+        {"retry": "retry", "answer": "answer"},
+    )
+    graph.add_conditional_edges(
+        "retry",
+        after_retry,
+        {"document": "document", "database": "database"},
+    )
     graph.add_edge("answer", END)
 
     return graph.compile()

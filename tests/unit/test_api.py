@@ -13,7 +13,10 @@ from app.cache.repository import CacheValue, MemoryCache
 from app.core.dependencies import AppDependencies
 from app.main import create_app
 from app.mcp.client import (
+    MCPEvidenceInsufficientError,
     MCPClient,
+    MCPInternalError,
+    MCPInvalidInputError,
     MCPMalformedPayloadError,
     MCPNoResultError,
     MCPQueryError,
@@ -197,8 +200,11 @@ def test_invalid_chat_request_does_not_invoke_cache_or_graph() -> None:
     ("error", "status_code", "error_code"),
     [
         (MCPNoResultError("query_purchase", "secret=hidden"), 404, "NO_RESULT"),
+        (MCPInvalidInputError("query_purchase", "secret=hidden"), 400, "INVALID_INPUT"),
+        (MCPEvidenceInsufficientError("query_purchase", "secret=hidden"), 422, "EVIDENCE_INSUFFICIENT"),
         (MCPQueryError("query_purchase", "password=hidden"), 502, "QUERY_ERROR"),
-        (MCPTimeoutError("query_purchase", "token=hidden"), 504, "QUERY_ERROR"),
+        (MCPInternalError("query_purchase", "secret=hidden"), 502, "INTERNAL_ERROR"),
+        (MCPTimeoutError("query_purchase", "token=hidden"), 504, "TIMEOUT"),
         (MCPMalformedPayloadError("query_purchase", "key=hidden"), 502, "INTERNAL_ERROR"),
     ],
 )
@@ -213,3 +219,20 @@ def test_tool_errors_use_safe_contract_response(
     assert response.status_code == status_code
     assert response.json()["error_code"] == error_code
     assert "hidden" not in response.text
+
+
+def test_session_id_is_hashed_into_cache_context() -> None:
+    """같은 질문이라도 다른 세션의 답변을 공유하지 않게 한다."""
+    cache = RecordingCache()
+    graph = CountingGraph()
+    application = _application(cache, graph)
+
+    with TestClient(application) as client:
+        first = client.post("/api/chat", json={"question": "세션 질문", "session_id": "session-a"})
+        second = client.post("/api/chat", json={"question": "세션 질문", "session_id": "session-b"})
+        repeat = client.post("/api/chat", json={"question": "세션 질문", "session_id": "session-a"})
+
+    assert first.json()["cached"] is False
+    assert second.json()["cached"] is False
+    assert repeat.json()["cached"] is True
+    assert graph.graph_calls == 2

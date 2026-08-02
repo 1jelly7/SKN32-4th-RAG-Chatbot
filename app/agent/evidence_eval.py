@@ -31,6 +31,7 @@ async def evidence_eval(
     if state.get("route") == "GENERAL":
         state["evidence"] = []
         state["evidence_status"] = "SUPPORTED"
+        state["evidence_reason"] = "일반 질문은 외부 근거가 필요하지 않습니다."
         return state
 
     active_policy = policy or state.get("evidence_policy", DEFAULT_EVIDENCE_POLICY)
@@ -43,12 +44,16 @@ async def evidence_eval(
 
     if has_contradiction:
         state["evidence_status"] = "CONTRADICTED"
+        state["evidence_reason"] = "채택 가능한 근거 사이에 명시적인 사실 충돌이 있습니다."
     elif not accepted_evidence:
         state["evidence_status"] = "INSUFFICIENT"
+        state["evidence_reason"] = "정책 기준을 충족하는 근거가 없습니다."
     elif has_tool_error or has_rejected_evidence:
         state["evidence_status"] = "PARTIALLY_SUPPORTED"
+        state["evidence_reason"] = "일부 조회가 실패했거나 일부 근거가 품질 기준에서 제외됐습니다."
     else:
         state["evidence_status"] = "SUPPORTED"
+        state["evidence_reason"] = "수집된 근거가 현재 품질 정책을 충족합니다."
     return state
 
 

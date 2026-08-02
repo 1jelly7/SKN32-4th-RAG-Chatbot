@@ -53,8 +53,13 @@ Document MCP는 문서 본문을 DB에서 직접 받지 않는다.
 
 ## 현재 구현 단계
 
-현재는 구조 정렬과 단위 검증을 위한 스켈레톤 단계다. 라우팅, 메모리 캐시, 캐시 키,
-헬스 체크, 문서 DB 경로 조회 순서와 도메인 dispatch 경계는 구현돼 있다. 실제 LangGraph
-조립, MCP transport, 문서 DB·FAISS·업무 DB 연결, 도메인별 Text2SQL·ETL,
-evidence_eval은 후속 단계다. 상세 계약은 `interface.md`, 현재·목표 테스트 구분은
-`test-scenarios.md`를 따른다.
+LangGraph 조립, 결정적 라우팅, evidence 평가, cache-first API, Host-side MCP envelope
+정규화는 구현돼 있다. `INSUFFICIENT`는 retrieval을 한 번 보강 조회하며, `BOTH`는
+document→database 순서로 수집한 뒤 평가한다. 현재 기본 Host transport는 MCP Tool과 같은
+비동기 경계를 같은 프로세스에서 호출한다.
+
+`mcp_servers/data_tools/`의 purchase/sales Tool 등록과 read-only 조회 경계는 구현돼 있다.
+원격 MCP URL transport, Redis adapter, 문서 배치 인덱스 재사용·version 전파 및 실제 외부
+서비스 통합은 아직 완료되지 않았다. `mcp_servers/document/`와 `mcp_servers/data/`는
+공식 Tool에 등록되지 않은 ACL/범용 설계 스켈레톤이며 backend는 각각
+`document_tools`와 `data_tools`만 사용한다.

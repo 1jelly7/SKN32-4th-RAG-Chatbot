@@ -12,16 +12,17 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 
 | 계약 영역 | 현재 경로 | 소유자 | 상태 |
 |---|---|---|---|
-| 문서 경로 조회 | `mcp_servers/document_tools/document_db.py` | RAG 담당 | 인터페이스 스켈레톤 |
+| 문서 경로 조회 | `mcp_servers/document_tools/document_db.py` | RAG 담당 | 비동기 DB 조회 구현 |
 | 문서 파일 로드 | `mcp_servers/document_tools/file_loader.py` | RAG 담당 | 로더 조합 구현 |
 | 문서 검색 | `mcp_servers/document_tools/search.py` | RAG 담당 | 경로 조회 → 파일 로드 → RAG 순서 구현 |
-| 공통 데이터 서버 | `mcp_servers/data_tools/server.py` | 통합 담당 | Tool 등록 스켈레톤 |
-| 구매 조회 | `mcp_servers/data_tools/purchase/` | 구매 담당 | 도메인 인터페이스 스켈레톤 |
-| 판매 조회 | `mcp_servers/data_tools/sales/` | 판매 담당 | 도메인 인터페이스 스켈레톤 |
-| 근거 평가 | `app/agent/evidence_eval.py` | 통합 담당 | 경계 분리 단계 |
+| 공통 데이터 서버 | `mcp_servers/data_tools/server.py` | 통합 담당 | Tool 등록·공통 envelope 구현 |
+| 구매 조회 | `mcp_servers/data_tools/purchase/` | 구매 담당 | Text2SQL·read-only 조회 구현 |
+| 판매 조회 | `mcp_servers/data_tools/sales/` | 판매 담당 | Text2SQL·read-only 조회 구현 |
+| 근거 평가 | `app/agent/evidence_eval.py` | 통합 담당 | 결정적 정책 평가 구현; Graph가 1회 보강 제어 |
 
-아래 Tool 응답은 구현해야 할 계약이다. 현재 MCP transport와 실제 문서 DB·업무 DB·FAISS
-연결은 아직 완성되지 않았다.
+Host는 현재 같은 프로세스의 Tool service를 비동기 MCP port로 호출한다. 아래 envelope는
+구현된 Host/Data Tool 계약이다. 원격 URL transport와 실제 외부 문서 DB·FAISS·업무 DB를
+모두 사용하는 수용 검증은 아직 완성되지 않았다.
 
 ## 요청 처리 순서
 
@@ -37,6 +38,8 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 - 캐시는 `app/cache/`에서만 처리하며 LangGraph 그래프 진입 전에 위치한다.
 - 캐시 키는 정규화 질문, 대화 문맥 해시, 문서 인덱스 버전, DB freshness bucket,
   프롬프트 버전, 모델 식별자를 정렬·직렬화해 SHA-256으로 해시한다.
+- `session_id`가 있으면 원문을 저장하지 않고 SHA-256 해시를 대화 문맥 식별자로 사용해
+  서로 다른 세션의 동일 질문이 같은 답변 항목을 공유하지 않게 한다.
 - 문서 재인덱싱 또는 데이터 재적재가 끝나면 관련 캐시를 무효화한다.
 - Router, MCP Client, evidence_eval은 캐시를 직접 읽거나 쓰지 않는다.
 
@@ -62,12 +65,18 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
   "status": "error",
   "domain": "document | purchase | sales | both",
   "message": "사용자에게 표시 가능한 오류 설명",
-  "error_code": "INVALID_INPUT | NO_RESULT | QUERY_ERROR | EVIDENCE_INSUFFICIENT | INTERNAL_ERROR",
+  "error_code": "INVALID_INPUT | NO_RESULT | QUERY_ERROR | EVIDENCE_INSUFFICIENT | TIMEOUT | INTERNAL_ERROR",
   "data": [],
   "sources": [],
   "metadata": {}
 }
 ```
+
+Host의 공개 HTTP 매핑은 `INVALID_INPUT=400`, `NO_RESULT=404`,
+`EVIDENCE_INSUFFICIENT=422`, `QUERY_ERROR=502`, `INTERNAL_ERROR=502`,
+`TIMEOUT=504`다. MCP timeout은 `QUERY_ERROR`로 축약하지 않는다. malformed envelope는
+provider의 `INTERNAL_ERROR`와 별도로 Host 검증 실패로 처리하되 공개 코드는
+`INTERNAL_ERROR`를 사용한다.
 
 ## Tool 1: 문서 검색
 
@@ -176,7 +185,13 @@ FastAPI/LangGraph Host와 MCP Server 간 Tool 호출 형식을 정의한다.
 }
 ```
 
-`INSUFFICIENT`이면 최대 한 번 보완 검색하거나 `EVIDENCE_INSUFFICIENT` 응답으로 전환한다.
+`INSUFFICIENT`이면 원래 route의 retrieval을 정확히 한 번 보강 실행한다. 두 번째 평가도
+`INSUFFICIENT`이면 HTTP 422 `EVIDENCE_INSUFFICIENT`로 전환한다. `CONTRADICTED`는 저신뢰
+근거와 구별하며 재시도하지 않는다. 이 경우 공개 성공 응답의 `evidence_status`를
+`CONTRADICTED`로 유지하고, 상충 때문에 단일 답변을 만들 수 없다는 경고를 반환한다.
+
+`ChatResponse`는 `answer`, `sources`, `tables`, `cached`, `route`, `evidence_status`,
+`request_id`를 반환한다. cache hit도 저장된 `evidence_status`를 보존한다.
 
 ## 변경 규칙
 

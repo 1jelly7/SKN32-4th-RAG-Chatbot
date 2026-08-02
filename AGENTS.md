@@ -32,7 +32,7 @@ python -m pytest tests/integration
 python -m pytest tests/unit/test_etl.py
 ```
 
-`pytest.ini`는 `tests/`, `test_*.py`, `unit`/`integration` marker와 async auto mode를 정의한다. 현재 `tests/integration/test_chat_document_flow.py`, `test_chat_data_flow.py`, `test_etl_mysql_flow.py`는 placeholder이므로 통과해도 실제 외부 통합 완료를 뜻하지 않는다. 린트·포맷·타입 검사·빌드 도구 설정과 CI 설정은 현재 없으므로 임의의 명령을 추가하지 않는다.
+`pytest.ini`는 `tests/`, `test_*.py`, `unit`/`integration` marker와 async auto mode를 정의한다. 현재 `tests/integration/test_chat_document_flow.py`, `test_chat_data_flow.py`는 외부 서비스를 쓰지 않는 fake 기반 계약 테스트이고, `test_etl_mysql_flow.py`만 placeholder다. 어느 테스트도 그 자체로 실제 원격 MCP·DB·FAISS 통합 완료를 뜻하지 않는다. 린트·포맷·타입 검사·빌드 도구 설정과 CI 설정은 현재 없으므로 임의의 명령을 추가하지 않는다.
 
 `app/core/config.py`의 `Settings`가 환경 변수의 실행 기준이며 `.env.example`이 비밀값 없는 변수 템플릿이다. 로컬에서는 이를 `.env`로 복사한 뒤 `OPENAI_*`, `REDIS_URL`, `MYSQL_READ_*`, `MYSQL_WRITE_*`, `MYSQL_DATABASE`, `DOCUMENT_MCP_URL`, `DATA_MCP_URL`, `FAISS_PATH`, `DOCUMENT_DB_*`를 팀이 제공한 값으로 채운다. 단위 테스트는 가능한 한 API key, 네트워크, MySQL, Redis, FAISS 없이 실행한다.
 
