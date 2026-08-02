@@ -9,18 +9,18 @@ chat 흐름 통과는 실제 원격 MCP·DB·FAISS 연결 완료를 뜻하지 �
 
 2026-08-02 기준 자동 테스트는 다음 범위를 검증한다.
 
-| 테스트 파일 | 검증 범위 |
-|---|---|
+| 테스트 파일 | 검증 범위                                                    |
+|---|--------------------------------------------------------------|
 | `tests/unit/test_agent.py` | route/domain 판정, evidence 상태, BOTH fan-in, 1회 보강 조회 |
-| `tests/unit/test_cache.py`, `tests/integration/test_cache_flow.py` | 질문·세션 문맥별 키와 Graph 외부 cache short-circuit |
-| `tests/unit/test_api.py` | `/api/health`, session cache 격리, 공개 오류 매핑 |
-| `tests/unit/test_document_mcp.py` | 문서 DB 경로 조회 → 파일 로드 → RAG 호출 순서 |
+| `tests/unit/test_cache.py`, `tests/integration/test_cache_flow.py` | 질문·세션 문맥별 키와 Graph 외부 cache short-circuit         |
+| `tests/unit/test_api.py` | `/api/health`, session cache 격리, 공개 오류 매핑            |
+| `tests/unit/test_document_mcp.py` | 문서 DB 경로 조회 → 파일 로드 → RAG 호출 순서                |
 | `tests/unit/test_data_mcp.py` | 구매·판매 Tool dispatch, 공통 envelope와 오류 분류 |
 | `tests/unit/test_etl.py` | legacy finance 및 구매·판매 ETL 변환 계약 |
-| `tests/unit/test_logging.py` | 5필드 로그 포맷 |
-| `tests/integration/test_chat_document_flow.py` | fake Document MCP 기반 API→Graph 흐름 |
-| `tests/integration/test_chat_data_flow.py` | fake purchase/sales MCP 기반 API→Graph 흐름 |
-| `tests/integration/test_chat_error_flow.py` | empty/query/malformed/timeout HTTP 매핑 |
+| `tests/unit/test_logging.py` | 5필드 로그 포맷                                              |
+| `tests/integration/test_chat_document_flow.py` | fake Document MCP 기반 API→Graph 흐름                        |
+| `tests/integration/test_chat_data_flow.py` | fake purchase/sales MCP 기반 API→Graph 흐름                  |
+| `tests/integration/test_chat_error_flow.py` | empty/query/malformed/timeout HTTP 매핑                      |
 
 chat integration 테스트는 외부 서비스가 없는 in-process fake 기반 계약 테스트다.
 `test_etl_mysql_flow.py`만 placeholder이므로 ETL 외부 통합 완료의 근거로 사용하지 않는다.

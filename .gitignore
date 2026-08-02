@@ -51,3 +51,14 @@ Thumbs.db
 dist/
 build/
 *.spec
+
+# ────── Claude Code: 개인 전용 파일 ────────
+RULE.md
+CLAUDE.md
+docs/history/
+docs/plan/
+docs/report/
+docs/STRUCTURE.md
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/logs/

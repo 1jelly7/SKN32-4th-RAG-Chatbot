@@ -10,6 +10,7 @@ import pymysql.cursors
 
 from app.core.config import get_settings
 
+# 사고를 막기 위한 이중 안전장치입니다. sql_guard 역할을 겸합니다.
 _FORBIDDEN_KEYWORDS = (
     "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE",
     "TRUNCATE", "GRANT", "REVOKE", "REPLACE", "MERGE",
@@ -18,8 +19,17 @@ _FORBIDDEN_KEYWORDS = (
 
 class ReadOnlyMySQLClient:
     """구매 DB의 SELECT 전용 계정을 지연 연결 방식으로 사용한다."""
-
     def __init__(self, host: str, user: str, password: str, database: str) -> None:
+        """연결 설정만 보관하며 생성 시점에는 DB에 접속하지 않는다."""
+        self._connection_kwargs = dict(
+            host=host,
+            user=user,
+            password=password,
+            database=database,
+            cursorclass=pymysql.cursors.DictCursor,
+            charset="utf8mb4",
+            autocommit=False,
+        )
         """연결 설정만 보관하며 생성 시점에는 DB에 접속하지 않는다."""
         self._connection_kwargs = dict(
             host=host,
@@ -56,7 +66,6 @@ class ReadOnlyMySQLClient:
 
 
 _default_client: ReadOnlyMySQLClient | None = None
-
 
 def _get_default_client() -> ReadOnlyMySQLClient:
     """검증된 구매 DB 설정으로 기본 client를 한 번만 만든다."""

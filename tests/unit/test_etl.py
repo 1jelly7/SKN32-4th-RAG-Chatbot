@@ -5,7 +5,7 @@
 
 import pandas as pd
 
-from etl.finance.transform import transform
+from etl.purchase.transform import transform
 
 
 def test_transform_deduplicates() -> None:
