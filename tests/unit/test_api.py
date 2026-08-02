@@ -135,6 +135,17 @@ def test_health_uses_injected_dependencies_without_file_logging(tmp_path: Path) 
     assert log_path.exists() is False
 
 
+def test_ui_entry_and_assets_disable_browser_cache() -> None:
+    """개발 중 UI 변경이 이전 HTML·CSS·JS 캐시에 가려지지 않게 한다."""
+    application = _application(MemoryCache(), CountingGraph())
+
+    with TestClient(application) as client:
+        for path in ("/", "/style.css", "/chat.js"):
+            response = client.get(path)
+            assert response.status_code == 200
+            assert response.headers["cache-control"] == "no-store"
+
+
 def test_cache_hit_skips_graph_llm_and_mcp_calls() -> None:
     cache = RecordingCache()
     graph = CountingGraph()

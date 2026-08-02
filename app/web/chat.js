@@ -1,12 +1,20 @@
-// ChatResponse를 답변·출처·표·차트로 변환하는 vanilla UI 경계입니다.
-// 서버가 제거한 내부 경로와 자격증명을 별도 endpoint에서 다시 조회하지 않습니다.
+// ChatResponse를 대화·출처·표 UI로 변환하는 vanilla JavaScript 경계입니다.
 const form = document.querySelector('#chat-form');
 const input = document.querySelector('#question');
 const messages = document.querySelector('#messages');
+const sendButton = document.querySelector('#send-button');
+const sourcesPanel = document.querySelector('#sources-panel');
+const sourcesList = document.querySelector('#sources-list');
+const sourcesSummary = document.querySelector('#sources-summary');
+const sourcesToggle = document.querySelector('#sources-toggle');
+const sourcesClose = document.querySelector('#sources-close');
+const sourcesBackdrop = document.querySelector('#sources-backdrop');
 
 let chartCounter = 0;
 
-// 사용자 입력과 provider 응답은 모두 비신뢰 문자열이므로 HTML 템플릿에 넣기 전에 escape합니다.
+const robotIcon = '<svg viewBox="0 0 24 24" class="svg-icon"><path d="M5 10h14v9H5zM12 4v3M9 14h.01M15 14h.01M8 19v2M16 19v2M3 12h2M19 12h2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>';
+const documentIcon = '<svg viewBox="0 0 24 24" class="svg-icon"><path d="M6 3h8l4 4v14H6zM14 3v5h5M9 12h6M9 16h6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg>';
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -16,125 +24,138 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
+function formatAnswer(value) {
+  return escapeHtml(value)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+function userFriendlyError(error) {
+  const message = String(error?.message || '');
+  if (message === 'Failed to fetch' || error instanceof TypeError) {
+    return '서버에 연결하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  return message || '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
 function routeBadge(route) {
-  if (!route) return '';
-  const labels = { GENERAL: '일반', DOCUMENT: '문서', DATABASE: 'DB', BOTH: '문서+DB' };
-  if (!Object.hasOwn(labels, route)) return '';
-  return `<span class="badge badge-${route}">${labels[route]}</span>`;
+  const labels = { GENERAL: '일반 지식', DOCUMENT: '사내 문서', DATABASE: '업무 데이터', BOTH: '문서 + 데이터' };
+  return labels[route] ? `<span class="badge badge-${route}">${labels[route]}</span>` : '';
 }
 
-// 공개 Source 필드만 사용하며 document/database provenance를 아이콘으로 구분합니다.
-function renderSources(sources) {
-  if (!sources || sources.length === 0) return '';
-  const items = sources.map(s => {
-    const icon = s.source_type === 'document' ? '📄' : '🗄️';
-    const scoreText = s.score != null ? ` (score ${s.score.toFixed(3)})` : '';
-    return `<li>${icon} ${escapeHtml(s.title)}${scoreText}</li>`;
-  }).join('');
-  return `<details class="sources"><summary>참고 출처 (${sources.length})</summary><ul>${items}</ul></details>`;
+function formatScore(score) {
+  if (typeof score !== 'number') return '근거 확인';
+  if (score >= 0.7) return '높은 관련성';
+  if (score >= 0.35) return '관련성 있음';
+  return '참고 근거';
 }
 
-// DB 조회 결과를 표(<table>)로 렌더링합니다.
+function renderSources(sources, route) {
+  const documentSources = (sources || []).filter(source => source.source_type === 'document');
+  const label = documentSources.length ? `문서 근거 ${documentSources.length}건` : route === 'DOCUMENT' ? '관련 문서를 찾지 못했습니다' : '문서 검색 결과가 여기에 표시됩니다';
+  sourcesSummary.textContent = label;
+
+  if (!documentSources.length) {
+    sourcesList.innerHTML = `<div class="source-empty"><span aria-hidden="true">▤</span><p>${route === 'DOCUMENT' ? '관련 문서를 찾지 못했습니다. 다른 표현으로 다시 질문해 주세요.' : '사내 문서 검색을 실행하면 근거 문서와 관련도가 표시됩니다.'}</p></div>`;
+    return;
+  }
+
+  sourcesList.innerHTML = documentSources.map(source => `
+    <article class="source-card">
+      <div class="source-card-main">
+        <div class="source-title-row">
+          <span class="source-icon" aria-hidden="true">${documentIcon}</span>
+          <h3 class="source-title">${escapeHtml(source.title || '제목 없는 문서')}</h3>
+          <span class="source-score">${formatScore(source.score)}</span>
+        </div>
+        <p class="source-meta">${source.updated_at ? `갱신 ${escapeHtml(source.updated_at)}` : '사내 지식베이스 문서'}${source.page ? ` · ${source.page}쪽` : ''}</p>
+        <p class="source-kind">답변 생성에 사용된 사내 문서 근거입니다.</p>
+      </div>
+    </article>`).join('');
+}
+
 function renderTable(table) {
-  const headerHtml = table.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
-  const rowsHtml = table.rows.map(row =>
-    `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`
-  ).join('');
-  return `
-    <div class="table-wrap">
-      <div class="table-meta">${escapeHtml(table.domain)} 데이터 · ${table.rows.length}건</div>
-      <table class="data-table">
-        <thead><tr>${headerHtml}</tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-      <details class="sql-detail"><summary>생성된 SQL 보기</summary><pre>${escapeHtml(table.sql)}</pre></details>
-    </div>`;
+  const headerHtml = table.columns.map(column => `<th>${escapeHtml(column)}</th>`).join('');
+  const rowsHtml = table.rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('');
+  return `<div class="table-wrap"><div class="table-meta">${escapeHtml(table.domain)} 데이터 · ${table.rows.length}건</div><table class="data-table"><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table><details class="sql-detail"><summary>생성된 SQL 보기</summary><pre>${escapeHtml(table.sql)}</pre></details></div>`;
 }
 
-// label_column/value_column이 있으면 막대그래프용 <canvas>를 만들고, 삽입 직후 Chart.js로 그립니다.
 function renderChartPlaceholder(table) {
-  if (!table.chartable) return '';
+  if (!table.chartable) return null;
   chartCounter += 1;
   const canvasId = `chart-${Date.now()}-${chartCounter}`;
-  // 다음 tick에 실제 차트를 그리도록 id만 먼저 반환하고, 호출부에서 drawChart를 실행합니다.
-  return { html: `<div class="chart-wrap"><canvas id="${canvasId}"></canvas></div>`, canvasId };
+  return { html: `<div class="chart-wrap"><canvas id="${canvasId}"></canvas></div>`, id: canvasId };
 }
 
-// 서버가 지정한 label/value 컬럼이 모두 있을 때만 제한된 행으로 차트를 그립니다.
 function drawChart(canvasId, table) {
-  const labelIdx = table.columns.indexOf(table.label_column);
-  const valueIdx = table.columns.indexOf(table.value_column);
-  const labels = table.rows.map(r => String(r[labelIdx]));
-  const values = table.rows.map(r => Number(r[valueIdx]) || 0);
-
-  const ctx = document.getElementById(canvasId);
-  if (!ctx || typeof Chart === 'undefined') return;
-
-  new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{ label: table.value_column, data: values, backgroundColor: '#285E45' }],
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: { x: { ticks: { autoSkip: false, maxRotation: 60, minRotation: 30 } } },
-    },
-  });
+  const labelIndex = table.columns.indexOf(table.label_column);
+  const valueIndex = table.columns.indexOf(table.value_column);
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined' || labelIndex < 0 || valueIndex < 0) return;
+  new Chart(canvas, { type: 'bar', data: { labels: table.rows.map(row => String(row[labelIndex])), datasets: [{ label: table.value_column, data: table.rows.map(row => Number(row[valueIndex]) || 0), backgroundColor: '#2563eb', borderRadius: 5 }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { autoSkip: false, maxRotation: 50 } }, y: { beginAtZero: true } } } });
 }
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const question = input.value;
-  if (!question.trim()) return;
+function scrollToLatest() {
+  messages.scrollTop = messages.scrollHeight;
+}
 
-  messages.insertAdjacentHTML('beforeend', `<div class="msg user"><b>나</b>${escapeHtml(question)}</div>`);
+function setSourcesOpen(isOpen) {
+  sourcesPanel.classList.toggle('is-open', isOpen);
+  sourcesToggle.setAttribute('aria-expanded', String(isOpen));
+  sourcesBackdrop.hidden = !isOpen;
+}
+
+function autoResize() {
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
+}
+
+sourcesToggle.addEventListener('click', () => setSourcesOpen(!sourcesPanel.classList.contains('is-open')));
+sourcesClose.addEventListener('click', () => setSourcesOpen(false));
+sourcesBackdrop.addEventListener('click', () => setSourcesOpen(false));
+input.addEventListener('input', autoResize);
+input.addEventListener('keydown', event => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    form.requestSubmit();
+  }
+});
+
+form.addEventListener('submit', async event => {
+  event.preventDefault();
+  const question = input.value.trim();
+  if (!question || sendButton.disabled) return;
+
+  messages.insertAdjacentHTML('beforeend', `<div class="msg-row user"><div class="msg"><span class="msg-label">나</span><div class="answer">${formatAnswer(question)}</div></div></div>`);
   input.value = '';
+  autoResize();
+  sendButton.disabled = true;
 
   const loadingId = `loading-${Date.now()}`;
-  messages.insertAdjacentHTML('beforeend', `<div class="msg bot" id="${loadingId}">답변 생성 중...</div>`);
-  messages.scrollTop = messages.scrollHeight;
+  messages.insertAdjacentHTML('beforeend', `<div class="msg-row assistant loading-row" id="${loadingId}"><span class="avatar" aria-hidden="true">${robotIcon}</span><div class="msg"><span class="msg-label">사내 지식 챗봇</span><span class="loading">답변을 준비하고 있습니다</span></div></div>`);
+  scrollToLatest();
 
   try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
-    });
-    const data = await res.json();
+    const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || `요청에 실패했습니다 (${response.status})`);
 
-    if (!res.ok) {
-      document.getElementById(loadingId).outerHTML = `<div class="msg bot error">서버 오류: ${escapeHtml(data.detail || res.status)}</div>`;
-      return;
-    }
-
-    const cachedBadge = data.cached ? '<span class="badge badge-cached">캐시</span>' : '';
-
-    const tables = data.tables || [];
     const chartPlaceholders = [];
-    const tablesHtml = tables.map(t => {
-      const tableHtml = renderTable(t);
-      const chart = renderChartPlaceholder(t);
-      if (chart) {
-        chartPlaceholders.push({ canvasId: chart.canvasId, table: t });
-        return tableHtml + chart.html;
-      }
-      return tableHtml;
+    const tablesHtml = (data.tables || []).map(table => {
+      const chart = renderChartPlaceholder(table);
+      if (chart) chartPlaceholders.push({ id: chart.id, table });
+      return renderTable(table) + (chart?.html || '');
     }).join('');
-
-    document.getElementById(loadingId).outerHTML = `
-      <div class="msg bot">
-        <div class="meta">${routeBadge(data.route)}${cachedBadge}</div>
-        <div class="answer">${escapeHtml(data.answer).replace(/\n/g, '<br>')}</div>
-        ${renderSources(data.sources)}
-        ${tablesHtml}
-      </div>`;
-
-    // DOM에 canvas가 실제로 삽입된 뒤에 Chart.js를 실행해야 합니다.
-    chartPlaceholders.forEach(({ canvasId, table }) => drawChart(canvasId, table));
-  } catch (err) {
-    document.getElementById(loadingId).outerHTML = `<div class="msg bot error">오류: ${escapeHtml(err.message)}</div>`;
+    const cacheBadge = data.cached ? '<span class="badge badge-cached">캐시됨</span>' : '';
+    const evidenceLabel = data.evidence_status === 'SUPPORTED' ? '검증된 근거를 바탕으로 답변했습니다.' : data.evidence_status ? `근거 상태: ${escapeHtml(data.evidence_status)}` : '';
+    document.getElementById(loadingId).outerHTML = `<div class="msg-row assistant"><span class="avatar" aria-hidden="true">${robotIcon}</span><div class="msg"><span class="msg-label">사내 지식 챗봇</span><div class="meta">${routeBadge(data.route)}${cacheBadge}</div><div class="answer">${formatAnswer(data.answer)}</div>${tablesHtml}${evidenceLabel ? `<p class="evidence-note">${evidenceLabel}</p>` : ''}</div></div>`;
+    chartPlaceholders.forEach(({ id, table }) => drawChart(id, table));
+    renderSources(data.sources, data.route);
+  } catch (error) {
+    document.getElementById(loadingId).outerHTML = `<div class="msg-row assistant"><span class="avatar" aria-hidden="true">!</span><div class="msg error"><span class="msg-label">요청 오류</span><div class="answer">${escapeHtml(userFriendlyError(error))}</div></div></div>`;
+  } finally {
+    sendButton.disabled = false;
+    scrollToLatest();
+    input.focus();
   }
-  messages.scrollTop = messages.scrollHeight;
 });

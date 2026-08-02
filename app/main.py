@@ -20,6 +20,7 @@ from app.agent.prompts import PROMPT_VERSION
 from app.core.dependencies import AppDependencies
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
+UI_CACHE_HEADERS = {"Cache-Control": "no-store"}
 CACHE_KEY_CONTEXT = {
     "document_index_version": "unknown",
     "database_freshness_bucket": "unknown",
@@ -56,17 +57,17 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
     @application.get("/")
     def index() -> FileResponse:
         """번들된 채팅 UI의 진입 HTML을 반환한다."""
-        return FileResponse(WEB_DIR / "index.html")
+        return FileResponse(WEB_DIR / "index.html", headers=UI_CACHE_HEADERS)
 
     @application.get("/chat.js")
     def chat_js() -> FileResponse:
         """별도 정적 경로를 기대하는 UI를 위해 채팅 스크립트를 반환한다."""
-        return FileResponse(WEB_DIR / "chat.js")
+        return FileResponse(WEB_DIR / "chat.js", headers=UI_CACHE_HEADERS)
 
     @application.get("/style.css")
     def style_css() -> FileResponse:
         """별도 정적 경로를 기대하는 UI를 위해 스타일시트를 반환한다."""
-        return FileResponse(WEB_DIR / "style.css")
+        return FileResponse(WEB_DIR / "style.css", headers=UI_CACHE_HEADERS)
 
     return application
 
