@@ -35,7 +35,7 @@ def get_schema_resource() -> SchemaResource:
             "invoice_matching": ["invoice_match_id", "vendor_invoice_id", "po_id", "gr_id", "match_type", "invoice_amount", "po_amount", "gr_amount", "variance_amount", "match_status"],
         },
         "business_glossary": {
-            "지출": "purchase_orders.total_amount 또는 vendor_invoices.total_amount 합계",
+            "지출": "purchase_orders.total_amount",
             "공급업체": "vendors 테이블",
             "미지급금": "vendor_invoices.outstanding_amount",
             "발주": "purchase_orders",
