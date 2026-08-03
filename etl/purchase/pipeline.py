@@ -1,71 +1,126 @@
-"""구매 extract→transform→validate→load를 조합할 미구현 배치 진입점."""
+"""구매 extract → transform → validate → load 파이프라인 진입점."""
 
+from __future__ import annotations
+
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
-from .extract import extract_excel
-from .transform import transform
-from .validate import validate
-from .load import upsert
-from .types import PipelineResult
+import pandas as pd
+
+from etl.purchase.extract import extract_csv, extract_excel_sheet
+from etl.purchase.load import PurchaseETLMySQLClient
+from etl.purchase.schema import PURCHASE_SCHEMA, boolean_columns, type_mapping_for
+from etl.purchase.transform import transform
+from etl.purchase.types import PipelineResult
+from etl.purchase.validate import validate
+
+MODULE = "etl.purchase.pipeline"
+LOG_PATH = Path("logs/etl_purchase.log.txt")
 
 
-def run_csv_pipeline(
-        path: Path,
-        table: str,
-        required_columns: list[str],
-        sheet_name: str | None = None,
-        column_mapping: dict[str, str] | None = None,
-        type_mapping: dict[str, any] | None = None,
-) -> PipelineResult:
-    """CSV ETL의 extract → transform → validate → load 순서를 오케스트레이션한다.
+def _log(level: str, event: str, message: str = "") -> None:
+    ts = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+    line = f"{ts} | {level} | {MODULE} | {event} | {message}\n"
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with LOG_PATH.open("a", encoding="utf-8") as f:
+        f.write(line)
+    print(line, end="")
 
-    단계별 입력/출력 개수와 오류를 기록하고, validation.is_valid가 false면 load를 호출하지
-    않은 채 ``load=None``인 결과를 반환한다. 예외에는 source path와 단계명을 포함하되
-    원본 민감 데이터는 로그에 기록하지 않는다.
+
+def _bool_to_int(value: Any):
+    if pd.isna(value):
+        return pd.NA
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).strip().upper()
+    if text in ("TRUE", "1", "Y", "YES"):
+        return 1
+    if text in ("FALSE", "0", "N", "NO"):
+        return 0
+    return pd.NA
+
+
+def _coerce_boolean_columns(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """스키마상 TINYINT(1)인 컬럼의 'TRUE'/'FALSE' 텍스트를 1/0으로 정리한다.
+
+    구매 원천의 Is_Active는 실제로 pandas bool dtype이라 이 강제 없이도
+    astype("Int64")가 통과하지만, sales와 동일하게 방어적으로 유지한다.
     """
-    # TODO(implementation): 각 단계를 순서대로 호출하고 검증 실패 시 load=None으로
-    # 중단한다. API/Agent에서 호출하지 않으며 처리 행 수·검증 결과만 구매 ETL 로그에
-    # 남긴다. 성공, 검증 중단, 적재 rollback fake test가 완료 조건이다.
-    ...
+    result = frame.copy()
+    for col in columns:
+        if col in result.columns:
+            result[col] = result[col].map(_bool_to_int)
+    return result
 
+
+def _run(frame: pd.DataFrame, source_label: str, table: str, required_columns: list[str]) -> PipelineResult:
+    _log("INFO", "extract_done", f"source={source_label} table={table} rows={len(frame)}")
+
+    prepared = frame
+    if table in PURCHASE_SCHEMA:
+        prepared = _coerce_boolean_columns(frame, boolean_columns(table))
+        type_mapping = type_mapping_for(table)
+    else:
+        type_mapping = None
+
+    transformed = transform(prepared, type_mapping=type_mapping)
+    dropped = len(prepared) - len(transformed)
+    if dropped:
+        _log("INFO", "duplicates_dropped", f"table={table} dropped_rows={dropped}")
+
+    report = validate(transformed, required_columns)
+    _log(
+        "INFO" if report["is_valid"] else "ERROR",
+        "validate_done",
+        f"table={table} is_valid={report['is_valid']} "
+        f"invalid_rows={report['invalid_row_count']} errors={report['errors']}",
+    )
+
+    if not report["is_valid"]:
+        _log("ERROR", "pipeline_aborted", f"table={table} reason=validation_failed")
+        return {"source_path": source_label, "validation": report, "load": None}
+
+    client = PurchaseETLMySQLClient()
+    load_result = client.upsert(transformed, table)
+    _log(
+        "INFO",
+        "table_loaded",
+        f"table={table} inserted={load_result['inserted_count']} "
+        f"updated={load_result['updated_count']}",
+    )
+
+    return {"source_path": source_label, "validation": report, "load": load_result}
+
+
+def run_csv_pipeline(path: Path, table: str, required_columns: list[str]) -> PipelineResult:
+    """구매 ETL 단계를 순서대로 실행한다(CSV 원천용)."""
+    _log("INFO", "pipeline_start", f"source={path} table={table}")
     try:
-        # 1. EXTRACT - 엑셀에서 데이터 읽기
-        print(f"  → Extracting from {path}...")
-        # sheet_name이 없으면 table 이름을 사용
-        sheet_to_read = sheet_name if sheet_name else table
-        df_extracted = extract_excel(path, sheet_name=sheet_to_read)
-        print(f"    ✓ Extracted {len(df_extracted)} rows")
+        frame = extract_csv(path)
+        result = _run(frame, str(path), table, required_columns)
+        _log("INFO", "pipeline_success", f"table={table}")
+        return result
+    except Exception as exc:  # noqa: BLE001 - 배치 실패를 그대로 로그에 남긴다
+        _log("ERROR", "pipeline_failed", f"table={table} {type(exc).__name__}: {exc}")
+        raise
 
-        # 2. TRANSFORM - 데이터 변환
-        print(f"  → Transforming data...")
-        df_transformed = transform(df_extracted, column_mapping, type_mapping)
-        print(f"    ✓ Transformed to {len(df_transformed)} rows")
 
-        # 3. VALIDATE - 데이터 검증
-        print(f"  → Validating data...")
-        validation_result = validate(df_transformed, required_columns)
-        print(f"    ✓ Validation: {'PASS' if validation_result['is_valid'] else 'FAIL'}")
+def run_excel_pipeline(
+    path: Path, sheet_name: str, table: str, required_columns: list[str]
+) -> PipelineResult:
+    """엑셀 시트를 원천으로 구매 ETL 단계를 순서대로 실행한다.
 
-        if not validation_result['is_valid']:
-            for error in validation_result['errors']:
-                print(f"      ⚠ {error}")
-
-        # 4. LOAD - 데이터베이스에 저장 (검증 통과했을 때만)
-        load_result = None
-        if validation_result['is_valid']:
-            print(f"  → Loading to table '{table}'...")
-            load_result = upsert(df_transformed, table)
-            print(f"    ✓ Loaded: inserted={load_result['inserted_count']}, updated={load_result['updated_count']}")
-        else:
-            print(f"  → Skipping load due to validation failures")
-
-        # 5. 결과 반환
-        return PipelineResult(
-            source_path=str(path),
-            validation=validation_result,
-            load=load_result
-        )
-
-    except Exception as e:
-        print(f"    ❌ Pipeline error: {str(e)}")
+    계약(반환 타입·단계 순서)은 run_csv_pipeline과 동일하다(etl/sales와 동형).
+    """
+    _log("INFO", "pipeline_start", f"source={path} sheet={sheet_name} table={table}")
+    try:
+        frame = extract_excel_sheet(path, sheet_name)
+        result = _run(frame, f"{path}#{sheet_name}", table, required_columns)
+        _log("INFO", "pipeline_success", f"table={table}")
+        return result
+    except Exception as exc:  # noqa: BLE001
+        _log("ERROR", "pipeline_failed", f"table={table} {type(exc).__name__}: {exc}")
         raise

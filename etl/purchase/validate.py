@@ -1,47 +1,35 @@
-"""구매 적재 전 schema와 행 품질을 판정하는 미구현 검증 경계."""
+"""구매 ETL의 스키마·필수값 검증 책임을 둔다."""
+
+from __future__ import annotations
 
 import pandas as pd
 
-from .types import ValidationReport
+from etl.purchase.types import ValidationReport
 
 
 def validate(frame: pd.DataFrame, required_columns: list[str]) -> ValidationReport:
-    """적재 전 스키마·필수값·형식·참조/코드 규칙을 검사해 구조화 보고서를 만든다.
+    """적재 전 구매 데이터의 필수 컬럼과 NULL 여부를 검사한다.
 
-    누락 컬럼과 각 invalid row의 이유를 식별 가능한 오류 메시지로 모으고, 오류 행을
-    조용히 제거하지 않는다. ``is_valid``는 오류 임계치 정책에 따라 결정되며 load 단계는
-    false일 때 실행되지 않아야 한다.
+    누락 컬럼이 있으면 즉시 실패로 표시하고, 존재하는 필수 컬럼이라도 NULL이
+    섞여 있으면 오류로 집계한다(sales의 validate()보다 엄격 — 하향 통일하지
+    않는다). 오류 행을 조용히 제거하지 않는다.
     """
-    # TODO(implementation): 누락 컬럼과 행별 필수값·형식·코드 오류를 ValidationReport로
-    # 수집한다. invalid row를 삭제하지 않으며 is_valid=False이면 pipeline이 load를
-    # 호출하지 않는 fake 회귀가 완료 조건이다.
-    ...
-    errors = []
+    errors: list[str] = []
     invalid_row_count = 0
 
-    # 1. 필수 컬럼 확인
     missing_columns = [col for col in required_columns if col not in frame.columns]
     if missing_columns:
         errors.append(f"Missing required columns: {', '.join(missing_columns)}")
 
-    # 2. 필수 컬럼의 NULL 값 확인
     for col in required_columns:
         if col in frame.columns:
-            null_count = frame[col].isna().sum()
+            null_count = int(frame[col].isna().sum())
             if null_count > 0:
                 errors.append(f"Column '{col}' has {null_count} NULL values")
                 invalid_row_count += null_count
 
-    # 3. 전체 행 수 확인
     if len(frame) == 0:
         errors.append("DataFrame is empty")
-        is_valid = False
-    else:
-        # 오류 임계치: 에러가 있으면 invalid
-        is_valid = len(errors) == 0
 
-    return ValidationReport(
-        is_valid=is_valid,
-        invalid_row_count=invalid_row_count,
-        errors=errors
-    )
+    is_valid = len(errors) == 0
+    return ValidationReport(is_valid=is_valid, invalid_row_count=invalid_row_count, errors=errors)
