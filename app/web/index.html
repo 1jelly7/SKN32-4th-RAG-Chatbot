@@ -9,6 +9,14 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 </head>
 <body>
+  <section id="login-screen" class="login-screen" aria-labelledby="login-title" hidden>
+    <form id="login-form" class="login-card">
+      <h1 id="login-title">사내 지식 챗봇 로그인</h1><p>승인된 계정으로 로그인하세요.</p>
+      <label for="username">로그인 ID</label><input id="username" name="username" autocomplete="username" required maxlength="128">
+      <label for="password">비밀번호</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256">
+      <p id="login-error" class="login-error" role="alert" aria-live="polite"></p><button id="login-button" type="submit">로그인</button>
+    </form>
+  </section>
   <div class="app-shell">
     <main class="chat-panel" aria-label="사내 지식 챗봇">
       <header class="app-header">
@@ -19,6 +27,7 @@
             <p>문서와 업무 데이터를 안전하게 검색합니다</p>
           </div>
         </div>
+        <div class="user-menu"><span id="current-user"></span><button id="logout-button" type="button">로그아웃</button></div>
         <button id="sources-toggle" class="icon-button sources-toggle" type="button" aria-expanded="false" aria-controls="sources-panel">
           <svg viewBox="0 0 24 24" class="svg-icon" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/></svg>
           <span class="sr-only">출처 패널 열기</span>

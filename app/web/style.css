@@ -13,6 +13,16 @@
   font-family: Inter, "Pretendard", "Malgun Gothic", system-ui, sans-serif;
 }
 
+.login-screen { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 1rem; background: #eff6ff; }
+.login-screen[hidden] { display: none; }
+.login-card { width: min(100%, 24rem); display: grid; gap: .7rem; padding: 2rem; border-radius: 1rem; background: #fff; box-shadow: 0 16px 45px #1e3a8a22; }
+.login-card input, .login-card button { min-height: 2.75rem; border-radius: .5rem; border: 1px solid #cbd5e1; padding: .5rem .75rem; }
+.login-card button { border: 0; background: #1d4ed8; color: #fff; font-weight: 700; cursor: pointer; }
+.login-card button:disabled { opacity: .65; cursor: progress; }
+.login-error { min-height: 1.25rem; color: #b91c1c; margin: 0; }
+.user-menu { display: flex; align-items: center; gap: .5rem; font-size: .875rem; }
+.user-menu button { border: 1px solid #cbd5e1; border-radius: .4rem; background: #fff; padding: .35rem .5rem; cursor: pointer; }
+
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: var(--canvas); color: var(--ink); }
 button, textarea { font: inherit; }

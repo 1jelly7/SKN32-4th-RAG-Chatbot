@@ -9,8 +9,31 @@ const sourcesSummary = document.querySelector('#sources-summary');
 const sourcesToggle = document.querySelector('#sources-toggle');
 const sourcesClose = document.querySelector('#sources-close');
 const sourcesBackdrop = document.querySelector('#sources-backdrop');
+const loginScreen = document.querySelector('#login-screen');
+const loginForm = document.querySelector('#login-form');
+const loginError = document.querySelector('#login-error');
+const loginButton = document.querySelector('#login-button');
+const currentUser = document.querySelector('#current-user');
+const logoutButton = document.querySelector('#logout-button');
 
 let chartCounter = 0;
+let auth_state_revision = 0;
+
+function showLogin() { loginScreen.hidden = false; document.querySelector('.app-shell').setAttribute('aria-hidden', 'true'); document.querySelector('#username').focus(); }
+function showApplication(user) { loginScreen.hidden = true; document.querySelector('.app-shell').removeAttribute('aria-hidden'); currentUser.textContent = `${user.display_name} (${user.role})`; }
+async function restoreSession() { const response = await fetch('/api/auth/me'); if (response.ok) showApplication(await response.json()); else showLogin(); }
+loginForm.addEventListener('submit', async event => { event.preventDefault(); loginError.textContent = ''; loginButton.disabled = true; try { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: document.querySelector('#username').value, password: document.querySelector('#password').value }) }); if (!response.ok) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.'); showApplication((await response.json()).user); document.querySelector('#password').value = ''; } catch (error) { loginError.textContent = error.message; } finally { loginButton.disabled = false; } });
+logoutButton.addEventListener('click', async () => { await fetch('/api/auth/logout', { method: 'POST' }); showLogin(); });
+
+loginForm.addEventListener('submit', () => { auth_state_revision += 1; }, true);
+logoutButton.addEventListener('click', () => { auth_state_revision += 1; }, true);
+
+restoreSession = async function restore_session_with_revision() {
+  const revision = auth_state_revision;
+  const response = await fetch('/api/auth/me');
+  if (revision !== auth_state_revision) return;
+  if (response.ok) showApplication(await response.json()); else showLogin();
+};
 
 const robotIcon = '<svg viewBox="0 0 24 24" class="svg-icon"><path d="M5 10h14v9H5zM12 4v3M9 14h.01M15 14h.01M8 19v2M16 19v2M3 12h2M19 12h2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>';
 const documentIcon = '<svg viewBox="0 0 24 24" class="svg-icon"><path d="M6 3h8l4 4v14H6zM14 3v5h5M9 12h6M9 16h6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg>';
@@ -138,6 +161,7 @@ form.addEventListener('submit', async event => {
   try {
     const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
     const data = await response.json();
+    if (response.status === 401) { showLogin(); throw new Error('세션이 만료되었습니다. 다시 로그인하세요.'); }
     if (!response.ok) throw new Error(data.detail || `요청에 실패했습니다 (${response.status})`);
 
     const chartPlaceholders = [];
@@ -159,3 +183,5 @@ form.addEventListener('submit', async event => {
     input.focus();
   }
 });
+
+restoreSession();

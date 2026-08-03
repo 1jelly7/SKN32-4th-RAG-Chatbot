@@ -45,6 +45,7 @@ class GraphState(TypedDict, total=False):
     database_freshness_bucket: str
     prompt_version: str
     model_id: str
+    user_context: dict[str, Any]
     document_evidence: list[dict[str, Any]]
     database_evidence: list[dict[str, Any]]
     evidence_policy: EvidencePolicy

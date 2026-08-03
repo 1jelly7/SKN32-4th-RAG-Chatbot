@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.integration.chat_fakes import build_fake_application, database_success, document_success
+from tests.auth_helpers import login
 
 
 @pytest.mark.integration
@@ -18,6 +19,7 @@ def test_document_question_flows_from_api_to_document_fake_and_response() -> Non
     )
 
     with TestClient(application) as client:
+        login(client)
         response = client.post("/api/chat", json={"question": "휴가 규정 알려줘"})
 
     body = response.json()

@@ -365,10 +365,10 @@ pytest tests/integration       # 통합 테스트
 pytest tests/unit/test_etl.py  # ETL 기능만
 ```
 ## 사내규정 챗봇(RAG) 실행 방법
- 
+
 ### 1. 사전 준비
 `.env`에 아래 값을 채운다.
- 
+
 ```
 DOCUMENT_DB_HOST=127.0.0.1
 DOCUMENT_DB_USER=
@@ -377,36 +377,36 @@ DOCUMENT_DB_DATABASE=erp_system
 FAISS_PATH=data/faiss
 EMBEDDING_BACKEND=sbert
 ```
- 
+
 ### 2. DB 생성 (최초 1회)
- 
+
 ```
 mysql -u root -p < database/document/schema.sql
 ```
- 
+
 ### 3. 원천 문서 배치
 사내규정 PDF(취업규칙, 법인카드 관리지침 등)를 `data/raw/documents/`에 둔다.
- 
+
 ### 4. 문서 경로 등록
- 
+
 ```
 python scripts/register_documents.py
 ```
- 
+
 ### 5. 인덱싱
- 
+
 ```
 python scripts/ingest_documents.py
 ```
- 
+
 문서를 추가·교체하거나 `EMBEDDING_BACKEND`를 바꾸면 다시 실행한다.
- 
+
 ### 6. 실행 확인
- 
+
 ```
 uvicorn app.main:app --reload
 ```
- 
+
 `http://127.0.0.1:8000`에서 확인한다.
 
 ## 판매(Sales) 도메인 ETL 실행 방법

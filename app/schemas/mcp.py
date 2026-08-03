@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 ToolName = Literal["search_documents", "query_purchase", "query_sales"]
 MCPDomain = Literal["document", "purchase", "sales", "both"]
 MCPErrorCode = Literal[
+    "FORBIDDEN",
     "INVALID_INPUT",
     "NO_RESULT",
     "QUERY_ERROR",

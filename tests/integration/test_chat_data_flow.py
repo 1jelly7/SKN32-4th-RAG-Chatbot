@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.integration.chat_fakes import build_fake_application, database_success, document_success
+from tests.auth_helpers import login
 
 
 @pytest.mark.integration
@@ -27,6 +28,7 @@ def test_single_domain_database_questions_call_only_the_selected_tool(
     )
 
     with TestClient(application) as client:
+        login(client)
         response = client.post("/api/chat", json={"question": question})
 
     body = response.json()
@@ -51,6 +53,7 @@ def test_ambiguous_database_question_calls_purchase_and_sales() -> None:
     )
 
     with TestClient(application) as client:
+        login(client)
         response = client.post("/api/chat", json={"question": "이번 분기 실적 알려줘"})
 
     body = response.json()
