@@ -127,7 +127,7 @@ def run_excel_pipeline(
 ) -> PipelineResult:
     """엑셀 시트를 원천으로 판매 ETL 단계를 순서대로 실행한다.
 
-    시트별 CSV가 아직 준비되지 않은 소스(ERP_Sales_Data_Full.xlsx)를 위한 진입점이며,
+    시트별 CSV가 아직 준비되지 않은 소스(ERP_Sales_Data_Full_5y.xlsx)를 위한 진입점이며,
     계약(반환 타입·단계 순서)은 run_csv_pipeline과 동일하다.
     """
     _log("INFO", "pipeline_start", f"source={path} sheet={sheet_name} table={table}")

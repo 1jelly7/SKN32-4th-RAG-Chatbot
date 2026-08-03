@@ -12,6 +12,8 @@
 --
 -- 실행 방법 (최초 1회, 또는 정의를 바꿀 때마다):
 --   mysql -u JangGGo -p sales < database/sales/views.sql
+-- Windows PowerShell에서는 "<" 리다이렉션이 안 되므로 대신:
+--   Get-Content database/sales/views.sql | mysql -u JangGGo -p sales
 --
 -- 실행 순서: 이 파일은 database/sales/ddl.sql로 테이블이 이미 만들어지고
 -- ETL로 데이터가 적재된 뒤에 실행한다.

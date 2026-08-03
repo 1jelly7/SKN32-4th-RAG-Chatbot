@@ -13,7 +13,7 @@ def extract_csv(path: Path) -> pd.DataFrame:
 def extract_excel_sheet(path: Path, sheet_name: str) -> pd.DataFrame:
     """판매 워크북(xlsx)의 지정 시트를 읽는다.
 
-    원천 CSV가 아직 준비되지 않은 소스(예: ERP_Sales_Data_Full.xlsx)에 사용한다.
+    원천 CSV가 아직 준비되지 않은 소스(예: ERP_Sales_Data_Full_5y.xlsx)에 사용한다.
     반환값은 extract_csv와 동일하게 원본 그대로의 DataFrame이며, 이후 단계
     (transform/validate/load)는 두 추출 방식을 구분하지 않고 동일하게 다룬다.
 

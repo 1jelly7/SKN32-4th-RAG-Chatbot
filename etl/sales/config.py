@@ -65,7 +65,7 @@ class MySQLWriteConfig:
 # 소스 엑셀 워크북 기본 경로. 필요하면 pipeline 호출 시 override 한다.
 DEFAULT_SOURCE_XLSX = os.getenv(
     "SALES_SOURCE_XLSX",
-    "data/raw/source_data/ERP_Sales_Data_Full.xlsx",
+    "data/raw/source_data/ERP_Sales_Data_Full_5y.xlsx",
 )
 
 LOG_PATH = os.getenv("SALES_ETL_LOG_PATH", "logs/etl_sales.log.txt")
