@@ -13,7 +13,7 @@ from pathlib import Path
 from etl.sales.pipeline import run_excel_pipeline
 from etl.sales.schema import SALES_SCHEMA, SHEET_TO_TABLE, TABLE_LOAD_ORDER
 
-DEFAULT_SOURCE = Path("data/raw/source_data/ERP_Sales_Data_Full.xlsx")
+DEFAULT_SOURCE = Path("data/raw/source_data/ERP_Sales_Data_Full_5y.xlsx")
 
 
 def required_columns_for(table: str) -> list[str]:

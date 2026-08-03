@@ -409,34 +409,80 @@ uvicorn app.main:app --reload
  
 `http://127.0.0.1:8000`에서 확인한다.
 
+
 ## 판매(Sales) 도메인 ETL 실행 방법
+
+### 0. Windows PowerShell 체크리스트
+
+- PowerShell(`PS C:\...>`)에서 프로젝트 루트로 이동 후 실행: `cd C:\프로젝트_경로\...`
+- `mysql --version` 안 되면 PATH 미등록 → `mysql` 대신
+  `& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"`로 실행 (경로는 설치 버전에
+  따라 다를 수 있음)
+- `<` 리다이렉션은 PowerShell에서 안 됨 → `mysql ... < 파일.sql`이 아니라
+  `Get-Content 파일.sql | mysql ...`로 실행 (아래 각 단계에 PowerShell용 명령 포함)
+- 프롬프트가 `mysql>`이면 이미 MySQL 셸 안에 있는 것 → PowerShell 명령을 치기 전에
+  `exit`로 먼저 나올 것
+- `-u` 계정을 꼭 명시할 것 (생략하면 Windows 로그인 계정으로 접속 시도해 거부됨)
 
 ### 1. 사전 준비
 
-`.env`에 아래 값을 채운다.
+`.env`에 판매 도메인 전용 블록을 채운다 (공용 `MYSQL_WRITE_*`/`MYSQL_DATABASE` 아님,
+SPEC.md 5절 참고).
 ```env
-MYSQL_WRITE_HOST=localhost
-MYSQL_WRITE_USER=etl_writer
-MYSQL_WRITE_PASSWORD=
-MYSQL_DATABASE=sales
+SALES_DB_HOST=127.0.0.1
+SALES_DB_USER=JangGGo
+SALES_DB_PASSWORD=
+SALES_DB_DATABASE=sales
+
+# 챗봇 조회 전용 계정 (query_sales가 사용, ETL과 무관)
+SALES_READ_USER=sales_reader
+SALES_READ_PASSWORD=<원하는 비밀번호>
 ```
 
-### 2. DB 생성 (최초 1회, 관리자 계정으로 실행)
+### 2. DB 생성 (최초 1회, root 계정으로 실행)
 ```bash
 mysql -u root -p < database/sales/create_sales_db.sql
 ```
-`.env`의 `MYSQL_WRITE_USER`/`MYSQL_WRITE_PASSWORD`와 스크립트 안 계정 정보를 동일하게 맞춘다.
+```powershell
+Get-Content database/sales/create_sales_db.sql | mysql -u root -p
+```
+`sales` DB와 ETL 쓰기 계정(`JangGGo`)을 함께 만든다. `.env`의 `SALES_DB_USER`/
+`SALES_DB_PASSWORD`와 스크립트 안 계정 정보를 동일하게 맞춘다.
 
-### 3. 테이블 생성
+### 3. 테이블 생성 (JangGGo 계정으로)
 ```bash
-mysql -u etl_writer -p sales < database/sales/ddl.sql
+mysql -u JangGGo -p sales < database/sales/ddl.sql
+```
+```powershell
+Get-Content database/sales/ddl.sql | mysql -u JangGGo -p sales
 ```
 
 ### 4. 원천 데이터 배치
-`ERP_Sales_Data_Full.xlsx`를 `data/raw/source_data/`에 둔다.
+`ERP_Sales_Data_Full_5y.xlsx`(5년치, 800건)를 `data/raw/source_data/`에 둔다.
+(`_5y` 없는 옛 파일은 더 이상 안 씀)
 
 ### 5. ETL 실행
 ```bash
-python -m etl.sales.run_all data/raw/source_data/ERP_Sales_Data_Full.xlsx
+python -m etl.sales.run_all data/raw/source_data/ERP_Sales_Data_Full_5y.xlsx
 ```
-실행 로그는 `logs/etl_sales.log.txt`에서 확인한다. 동일 원천으로 재실행해도 UPSERT라 행 수는 늘지 않는다(멱등성).
+로그: `logs/etl_sales.log.txt`. 재실행해도 UPSERT라 중복 안 됨(멱등성).
+
+### 6. 시맨틱 뷰 생성 (최초 1회, ETL 적재 이후 · JangGGo 계정)
+```bash
+mysql -u JangGGo -p sales < database/sales/views.sql
+```
+```powershell
+Get-Content database/sales/views.sql | mysql -u JangGGo -p sales
+```
+`query_sales`가 원본 테이블 대신 이 뷰 5개만 참조한다(SPEC.md 4절).
+
+### 7. 챗봇 조회 전용 계정 생성 (최초 1회, root 계정)
+```bash
+mysql -u root -p sales < database/sales/grants_reader.sql
+```
+```powershell
+Get-Content database/sales/grants_reader.sql | mysql -u root -p sales
+```
+`sales_reader` 계정을 만들고 6번 뷰에만 `SELECT` 권한을 준다. `CREATE USER`는
+`JangGGo`로 안 되고 `root`가 필요하다. 비밀번호는 `.env`의 `SALES_READ_PASSWORD`와
+동일하게.

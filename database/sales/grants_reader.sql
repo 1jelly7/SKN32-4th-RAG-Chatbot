@@ -12,8 +12,11 @@
 --   sales(sales_reader): sales 뷰만 (챗봇 판매 조회)
 --   purchase(신규)     : purchase만 (purchase 담당이 별도 추가 예정)
 --
--- 실행 방법 (최초 1회, admin 계정으로):
---   mysql -u JangGGo -p sales < database/sales/grants_reader.sql
+-- 실행 방법 (최초 1회, root 계정으로 — CREATE USER는 전역 권한이라 sales.*에 대한
+-- ALL PRIVILEGES만 있는 admin(JangGGo)으로는 실행할 수 없다. SPEC.md 5절 참고):
+--   mysql -u root -p sales < database/sales/grants_reader.sql
+-- Windows PowerShell에서는 "<" 리다이렉션이 안 되므로 대신:
+--   Get-Content database/sales/grants_reader.sql | mysql -u root -p sales
 --
 -- 실행 전 database/sales/views.sql이 먼저 적용되어 있어야 한다.
 -- ============================================================
