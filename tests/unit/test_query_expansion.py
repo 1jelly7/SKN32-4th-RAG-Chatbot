@@ -77,3 +77,30 @@ async def test_document_retrieval_skips_expansion_for_strong_direct_match() -> N
     )
 
     assert [call.tool_name for call in port.calls] == ["search_documents"]
+
+
+@pytest.mark.asyncio
+async def test_document_retrieval_uses_semantic_document_query() -> None:
+    port = FakeMCPPort(
+        {
+            "search_documents": {
+                "status": "success",
+                "domain": "document",
+                "message": None,
+                "data": [{"content": "겸직 승인 절차", "score": 0.9}],
+                "sources": [{"document_id": "policy-job", "title": "취업규칙", "page": 4}],
+                "metadata": {},
+            }
+        }
+    )
+
+    await document_retrieval(
+        {
+            "question": "다른 직장에서 일을 병행해도 되나요?",
+            "document_search_query": "겸직 겸업 규정",
+            "route": "DOCUMENT",
+        },
+        MCPClient(port),
+    )
+
+    assert port.calls[0].payload["query"] == "겸직 겸업 규정"

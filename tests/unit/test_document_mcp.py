@@ -9,7 +9,58 @@ import pytest
 
 import mcp_servers.document_tools.search as search_module
 import mcp_servers.document_tools.file_loader as file_loader_module
+from mcp_servers.document_tools.document_db import DocumentPathRepository
 from tests.auth_helpers import TEST_ADMIN_CONTEXT
+
+
+def test_document_path_lookup_does_not_exclude_semantically_related_titles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """질문의 일반어가 일부 제목과 일치해도 활성 문서 전체를 허용 목록에 둔다."""
+    executed_sql: list[str] = []
+    rows = [
+        {
+            "document_id": "doc-work-rule",
+            "title": "취업규칙",
+            "file_path": "documents/work-rule.pdf",
+            "updated_at": "2026-08-01",
+        },
+        {
+            "document_id": "doc-accounting",
+            "title": "회계규정",
+            "file_path": "documents/accounting.pdf",
+            "updated_at": "2026-08-01",
+        },
+    ]
+
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def execute(self, sql: str) -> None:
+            executed_sql.append(sql)
+
+        def fetchall(self) -> list[dict[str, object]]:
+            return rows
+
+    class FakeConnection:
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("mcp_servers.document_tools.document_db.pymysql.connect", lambda **_: FakeConnection())
+    repository = DocumentPathRepository("host", "user", "password", "document_db")
+
+    result = repository._find_paths_sync("겸직 규정")
+
+    assert [record["document_id"] for record in result] == ["doc-work-rule", "doc-accounting"]
+    assert len(executed_sql) == 1
+    assert "LIKE" not in executed_sql[0]
 
 
 def test_document_search_resolves_database_paths_before_loading(monkeypatch) -> None:

@@ -7,12 +7,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
 from app.agent.llm import AsyncLLMPort, complete
-from app.agent.prompts import ANSWER_PROMPT
+from app.agent.prompts import ANSWER_PROMPT, ROUTER_PROMPT
+from app.agent.query_classification import classify_question
 from app.agent.query_expansion import expand_document_queries
 from app.agent.state import DataDomain, GraphState, Route
 from app.logging.performance import record_timing, start_timer
@@ -73,15 +76,67 @@ def route_data_domain(question: str) -> DataDomain:
     return "both"
 
 
-async def router(state: GraphState) -> GraphState:
+async def router(
+    state: GraphState,
+    llm: AsyncLLMPort | None = None,
+) -> GraphState:
     """question을 분류해 route 필드에 기록하고 기존 상태를 보존한다."""
     started_ns = start_timer()
     question = state.get("question", "")
-    state["route"] = route_question(question)
+    state["query_labels"] = sorted(classify_question(question))
+    deterministic_route = route_question(question)
+    if deterministic_route == "GENERAL":
+        semantic_route, document_search_query = await semantic_route_question(question, llm)
+        state["route"] = semantic_route
+        if document_search_query:
+            state["document_search_query"] = document_search_query
+        state["routing_method"] = "semantic"
+    else:
+        state["route"] = deterministic_route
+        state["routing_method"] = "keyword"
     if state["route"] in ("DATABASE", "BOTH"):
         state["data_domain"] = route_data_domain(question)
     record_timing(state.setdefault("timings_ms", {}), "agent_routing", started_ns)
     return state
+
+
+async def semantic_route_question(
+    question: str,
+    llm: AsyncLLMPort | None = None,
+) -> tuple[Route, str | None]:
+    """키워드로 분류하지 못한 질문의 사내 문서·데이터 의도를 의미적으로 판별한다.
+
+    의미 분류 모델의 오류나 계약 위반은 일반 질문으로 안전하게 폴백한다. 이 함수는
+    근거를 생성하지 않고 검색 경로만 선택하며, 실제 사내 사실은 이후 MCP 근거로 검증한다.
+    """
+    if not question.strip():
+        return "GENERAL", None
+    try:
+        raw_response = await complete(ROUTER_PROMPT, [], question, llm)
+    except RuntimeError:
+        return "GENERAL", None
+    return _parse_semantic_route(raw_response)
+
+
+def _parse_semantic_route(raw_response: str) -> tuple[Route, str | None]:
+    """모델의 JSON 응답에서 허용된 route와 안전한 문서 검색어만 반환한다."""
+    text = raw_response.strip()
+    object_start = text.find("{")
+    object_end = text.rfind("}")
+    if object_start < 0 or object_end < object_start:
+        return "GENERAL", None
+    try:
+        payload = json.loads(text[object_start : object_end + 1])
+    except json.JSONDecodeError:
+        return "GENERAL", None
+    route = payload.get("route") if isinstance(payload, dict) else None
+    if route not in ("GENERAL", "DOCUMENT", "DATABASE", "BOTH"):
+        return "GENERAL", None
+    raw_query = payload.get("document_query")
+    document_query = raw_query.strip()[:300] if isinstance(raw_query, str) else None
+    if route not in ("DOCUMENT", "BOTH") or not document_query:
+        document_query = None
+    return route, document_query
 
 
 async def document_retrieval(
@@ -100,7 +155,8 @@ async def document_retrieval(
         return state
 
     question = state.get("question", "")
-    search_queries = expand_document_queries(question)
+    document_search_query = state.get("document_search_query") or question
+    search_queries = expand_document_queries(document_search_query)
     started_ns = start_timer()
     try:
         results: list[object] = []
@@ -333,6 +389,7 @@ async def answer_synthesis(
     question = state.get("question", "")
     llm_started_ns = start_timer()
     answer = await complete(ANSWER_PROMPT, _limit_evidence_for_answer(evidence), question, llm)
+    answer = _replace_evidence_labels(answer, evidence)
     record_timing(state.setdefault("timings_ms", {}), "llm_answer", llm_started_ns)
     if evidence_status == "PARTIALLY_SUPPORTED":
         answer += "\n\n(일부 근거에 조회 오류가 있어, 확인된 부분만 반영한 답변입니다.)"
@@ -341,6 +398,23 @@ async def answer_synthesis(
     state["sources"] = _build_sources(evidence)
     state["tables"] = _build_tables(evidence)
     return state
+
+
+def _replace_evidence_labels(answer: str, evidence: list[dict[str, Any]]) -> str:
+    """모델의 내부 근거 번호 표기를 실제 문서명 또는 데이터 조회명으로 바꾼다."""
+    def replace(match: re.Match[str]) -> str:
+        evidence_index = int(match.group(1)) - 1
+        if evidence_index < 0 or evidence_index >= len(evidence):
+            return match.group(0)
+        item = evidence[evidence_index]
+        if item.get("type") == "document":
+            title = item.get("title")
+            return str(title) if title else match.group(0)
+        if item.get("type") == "database":
+            return f"{item.get('domain', '업무')} 데이터 조회"
+        return match.group(0)
+
+    return re.sub(r"\[근거\s*(\d+)\]", replace, answer)
 
 
 def _json_safe(value: Any) -> Any:

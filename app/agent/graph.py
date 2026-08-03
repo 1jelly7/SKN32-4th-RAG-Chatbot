@@ -85,7 +85,7 @@ def build_graph(
     """
     graph = StateGraph(GraphState)
 
-    graph.add_node("router", router)
+    graph.add_node("router", partial(router, llm=llm))
     graph.add_node("document", partial(document_retrieval, mcp_client=mcp_client))
     graph.add_node("database", partial(database_retrieval, mcp_client=mcp_client))
     graph.add_node("evidence", evidence_eval)

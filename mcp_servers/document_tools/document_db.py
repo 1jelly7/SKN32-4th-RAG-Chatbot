@@ -31,10 +31,10 @@ class DocumentPathRepository:
         pymysql은 동기 클라이언트라, 이벤트 루프를 막지 않도록 실제 조회는
         스레드풀에서 실행합니다.
 
-        지금 단계에서는 제목에 대한 단순 키워드 매칭으로 관련 문서를 좁히고,
-        하나도 안 걸리면(질문이 아주 구체적이지 않은 경우가 많으므로) 활성 문서
-        전체를 반환합니다 - 최종 순위는 뒤 단계인 FAISS 벡터 검색이 정하기 때문에,
-        여기서는 "완전히 무관해 보이는 문서만 제외"하는 정도의 느슨한 필터면 충분합니다.
+        이 저장소는 활성 문서 접근 허용 목록을 제공하고 의미적 관련성 판정은 FAISS에
+        맡긴다. 질문 표현과 제목이 다를 수 있으므로 제목 LIKE 결과로 허용 목록을 좁히지
+        않는다. 예를 들어 '겸직 규정'을 제목으로 선필터링하면 실제 근거인 '취업규칙'이
+        제외되어 의미 검색이 복구할 수 없기 때문이다.
         """
         import asyncio
 
@@ -44,21 +44,6 @@ class DocumentPathRepository:
         connection = pymysql.connect(**self._connection_kwargs)
         try:
             with connection.cursor() as cursor:
-                keywords = [w for w in query.split() if len(w) >= 2]
-
-                if keywords:
-                    conditions = " OR ".join(["title LIKE %s"] * len(keywords))
-                    params = [f"%{kw}%" for kw in keywords]
-                    cursor.execute(
-                        f"SELECT document_id, title, file_path, updated_at "
-                        f"FROM document_paths WHERE is_active = TRUE AND ({conditions})",
-                        params,
-                    )
-                    rows = cursor.fetchall()
-                    if rows:
-                        return [self._to_record(row) for row in rows]
-
-                # 제목 키워드로 못 좁혔으면 활성 문서 전체를 반환합니다.
                 cursor.execute(
                     "SELECT document_id, title, file_path, updated_at "
                     "FROM document_paths WHERE is_active = TRUE"

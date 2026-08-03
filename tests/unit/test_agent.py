@@ -13,7 +13,16 @@ import pytest
 
 from app.agent.graph import build_graph
 from app.agent.llm import FakeLLMPort
-from app.agent.nodes import _build_sources, _build_tables, answer_synthesis, database_retrieval, route_data_domain, route_question, router
+from app.agent.nodes import (
+    _build_sources,
+    _build_tables,
+    answer_synthesis,
+    database_retrieval,
+    route_data_domain,
+    route_question,
+    router,
+    semantic_route_question,
+)
 from app.agent.state import DataDomain, EvidencePolicy, GraphState, Route
 from app.mcp.client import FakeMCPPort, MCPClient
 
@@ -92,10 +101,44 @@ async def test_router_preserves_route_and_data_domain(
 ) -> None:
     state: GraphState = {"question": question}
 
-    result = await router(state)
+    result = await router(state, FakeLLMPort('{"route": "GENERAL", "document_query": null}'))
 
     assert result["route"] == expected_route
     assert result.get("data_domain") == expected_domain
+
+
+@pytest.mark.asyncio
+async def test_semantic_router_recognizes_internal_policy_without_registered_keyword() -> None:
+    llm = FakeLLMPort('{"route": "DOCUMENT", "document_query": "겸직 겸업 규정"}')
+
+    result = await router({"question": "다른 직장에서 일을 병행해도 되나요?"}, llm)
+
+    assert result["route"] == "DOCUMENT"
+    assert result["routing_method"] == "semantic"
+    assert result["document_search_query"] == "겸직 겸업 규정"
+    assert llm.calls[0].question == "다른 직장에서 일을 병행해도 되나요?"
+
+
+@pytest.mark.asyncio
+async def test_semantic_router_falls_back_to_general_for_invalid_model_output() -> None:
+    route, document_query = await semantic_route_question(
+        "별도의 사내 근거가 필요 없는 질문",
+        FakeLLMPort("not-json"),
+    )
+
+    assert route == "GENERAL"
+    assert document_query is None
+
+
+@pytest.mark.asyncio
+async def test_keyword_route_does_not_call_semantic_router() -> None:
+    llm = FakeLLMPort('{"route": "GENERAL", "document_query": null}')
+
+    result = await router({"question": "휴가 규정을 알려줘"}, llm)
+
+    assert result["route"] == "DOCUMENT"
+    assert result["routing_method"] == "keyword"
+    assert llm.calls == []
 
 
 @pytest.mark.asyncio
@@ -731,3 +774,27 @@ async def test_empty_internal_search_is_not_reported_as_mcp_failure() -> None:
     assert result["evidence_status"] == "INSUFFICIENT"
     assert "사내 근거" in result["answer"]
     assert [call.tool_name for call in port.calls] == ["search_documents"] * 4
+
+
+@pytest.mark.asyncio
+async def test_answer_synthesis_replaces_internal_evidence_number_with_document_title() -> None:
+    result = await answer_synthesis(
+        {
+            "question": "다른 직장에서 일을 병행해도 되나요?",
+            "route": "DOCUMENT",
+            "evidence_status": "SUPPORTED",
+            "evidence": [
+                {
+                    "type": "document",
+                    "document_id": "work-rule",
+                    "title": "취업규칙[2025.06.25. 개정]",
+                    "content": "제8조 겸직제한",
+                    "score": 0.9,
+                }
+            ],
+        },
+        FakeLLMPort("문서명: [근거 1]\n조항: 제8조(겸직제한)"),
+    )
+
+    assert "문서명: 취업규칙[2025.06.25. 개정]" in result["answer"]
+    assert "[근거 1]" not in result["answer"]

@@ -37,6 +37,8 @@ class GraphState(TypedDict, total=False):
     session_id: str | None
     request_id: str
     route: Route
+    routing_method: str
+    document_search_query: str
     data_domain: DataDomain
     cache_key: str
     cached: bool
