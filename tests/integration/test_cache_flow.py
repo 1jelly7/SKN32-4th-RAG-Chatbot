@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.mcp.client import MCPNoResultError, MCPQueryError
 from tests.integration.chat_fakes import build_fake_application, database_success, document_success
+from tests.auth_helpers import login
 
 
 @pytest.mark.integration
@@ -19,6 +20,7 @@ def test_both_success_is_cached_without_additional_port_or_llm_calls() -> None:
     )
 
     with TestClient(application) as client:
+        login(client)
         first = client.post("/api/chat", json={"question": "휴가 규정과 매출 알려줘"})
         calls_after_miss = list(port.calls)
         llm_calls_after_miss = list(llm.calls)
@@ -46,6 +48,7 @@ def test_both_keeps_document_result_when_database_tool_fails() -> None:
     )
 
     with TestClient(application) as client:
+        login(client)
         response = client.post("/api/chat", json={"question": "휴가 규정과 매출 알려줘"})
 
     body = response.json()
@@ -69,6 +72,7 @@ def test_both_returns_insufficient_response_when_all_tools_fail() -> None:
     )
 
     with TestClient(application) as client:
+        login(client)
         response = client.post("/api/chat", json={"question": "휴가 규정과 매출 알려줘"})
 
     body = response.json()

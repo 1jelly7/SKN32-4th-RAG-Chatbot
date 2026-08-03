@@ -11,6 +11,7 @@ from app.cache.repository import MemoryCache
 from app.core.dependencies import AppDependencies
 from app.main import create_app
 from app.mcp.client import FakeMCPPort, MCPClient
+from tests.auth_helpers import authentication_dependencies
 
 
 def tool_success(
@@ -65,5 +66,6 @@ def build_fake_application(responses: dict[str, object]) -> tuple[FastAPI, FakeM
         mcp=MCPClient(port),
         cache=MemoryCache(),
         configure_logging=lambda: None,
+        **authentication_dependencies(),
     )
     return create_app(dependencies), port, llm

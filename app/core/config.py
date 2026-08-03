@@ -29,6 +29,17 @@ class Settings(BaseSettings):
     document_db_user: str
     document_db_password: str
     document_db_database: str
+    account_db_host: str = "127.0.0.1"
+    account_db_port: int = 3306
+    account_db_name: str = "account_db"
+    account_db_user: str = ""
+    account_db_password: str = ""
+    auth_secret_key: str = "change-this-in-production"
+    auth_access_token_expire_minutes: int = 60
+    auth_cookie_secure: bool = False
+    account_seed_admin_password: str | None = None
+    account_seed_hr_password: str | None = None
+    account_seed_finance_password: str | None = None
 
     # 임베딩 백엔드: "local"(기본값, 외부 API 불필요) 또는 "openai".
     embedding_backend: str = "local"

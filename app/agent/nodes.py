@@ -87,7 +87,7 @@ async def document_retrieval(
 
     question = state.get("question", "")
     try:
-        state["document_evidence"] = await mcp_client.document_search(question, top_k=10)
+        state["document_evidence"] = await mcp_client.document_search(question, top_k=10, user_context=state.get("user_context"))
         # 캐시 키가 실제 문서 인덱스 버전을 참조하도록, MCP metadata에서 뽑아 state에 저장합니다.
         # (이전에는 이 필드가 항상 비어 있어 인덱스가 갱신돼도 캐시가 무효화되지 않았습니다)
         if state["document_evidence"]:
@@ -125,6 +125,7 @@ async def database_retrieval(
         return state
 
     question = state.get("question", "")
+    user_context = state.get("user_context")
     domain = state.get("data_domain", "both")
     allows_partial_result = domain == "both" or state.get("route") == "BOTH"
 
@@ -132,7 +133,7 @@ async def database_retrieval(
     retrieval_errors: list[MCPClientError] = []
     if domain in ("purchase", "both"):
         try:
-            evidence.extend(await mcp_client.purchase_query(question))
+            evidence.extend(await mcp_client.purchase_query(question, user_context=user_context))
         except MCPNoResultError:
             pass  # 조회 결과 0건은 실패가 아니라 정상적인 빈 결과입니다.
         except MCPClientError as exc:
@@ -142,7 +143,7 @@ async def database_retrieval(
             retrieval_errors.append(exc)
     if domain in ("sales", "both"):
         try:
-            evidence.extend(await mcp_client.sales_query(question))
+            evidence.extend(await mcp_client.sales_query(question, user_context=user_context))
         except MCPNoResultError:
             pass  # 조회 결과 0건은 실패가 아니라 정상적인 빈 결과입니다.
         except MCPClientError as exc:

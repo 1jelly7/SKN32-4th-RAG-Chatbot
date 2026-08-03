@@ -6,6 +6,7 @@ import pymysql
 import pytest
 
 import mcp_servers.document_tools.search as search_module
+from tests.auth_helpers import TEST_ADMIN_CONTEXT
 
 
 def test_document_search_resolves_database_paths_before_loading(monkeypatch) -> None:
@@ -83,4 +84,4 @@ def test_in_process_mcp_maps_document_database_error_to_query_error(
     monkeypatch.setattr(search_module, "search_documents", unavailable_search)
 
     with pytest.raises(MCPQueryError):
-        asyncio.run(MCPClient(InProcessMCPPort()).document_search("policy", top_k=3))
+        asyncio.run(MCPClient(InProcessMCPPort()).document_search("policy", top_k=3, user_context=TEST_ADMIN_CONTEXT))

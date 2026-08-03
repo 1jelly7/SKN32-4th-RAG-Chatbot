@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.integration.chat_fakes import build_fake_application, database_success, document_success
+from tests.auth_helpers import login
 
 
 @pytest.mark.integration
@@ -61,6 +62,7 @@ def test_graph_mcp_errors_use_http_contract(
     application, port, llm = build_fake_application(responses)
 
     with TestClient(application) as client:
+        login(client)
         result = client.post("/api/chat", json={"question": question})
 
     assert result.status_code == expected_status
@@ -93,6 +95,7 @@ def test_insufficient_evidence_retries_once_then_returns_safe_response() -> None
     )
 
     with TestClient(application) as client:
+        login(client)
         response = client.post("/api/chat", json={"question": "휴가 규정 알려줘"})
 
     assert response.status_code == 200

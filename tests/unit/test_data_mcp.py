@@ -20,6 +20,7 @@ from app.mcp.client import (
 )
 from mcp_servers.data_tools.purchase.mysql import ReadOnlyMySQLClient as PurchaseMySQLClient
 from mcp_servers.data_tools.sales.mysql import ReadOnlyMySQLClient as SalesMySQLClient
+from tests.auth_helpers import TEST_ADMIN_CONTEXT
 
 
 def _success(
@@ -154,6 +155,13 @@ def test_data_server_wraps_purchase_rows_in_common_envelope(monkeypatch: pytest.
     """공식 구매 service 결과가 Host가 검증할 envelope로 변환되게 한다."""
     from mcp_servers.data_tools import server
 
+    original_execute_data_tool = server.execute_data_tool
+
+    async def authorized_execute(tool_name: str, question: str) -> dict[str, Any]:
+        return await original_execute_data_tool(tool_name, question, TEST_ADMIN_CONTEXT)
+
+    monkeypatch.setattr(server, "execute_data_tool", authorized_execute)
+
     async def fake_query(question: str) -> list[dict[str, Any]]:
         assert question == "구매 현황"
         return [{
@@ -173,6 +181,13 @@ def test_data_server_wraps_purchase_rows_in_common_envelope(monkeypatch: pytest.
 def test_data_server_distinguishes_empty_and_query_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """빈 결과와 provider 실패가 서로 다른 표준 오류로 유지되게 한다."""
     from mcp_servers.data_tools import server
+
+    original_execute_data_tool = server.execute_data_tool
+
+    async def authorized_execute(tool_name: str, question: str) -> dict[str, Any]:
+        return await original_execute_data_tool(tool_name, question, TEST_ADMIN_CONTEXT)
+
+    monkeypatch.setattr(server, "execute_data_tool", authorized_execute)
 
     async def empty_query(_: str) -> list[dict[str, Any]]:
         return [{"domain": "sales", "generated_sql": "SELECT 1", "rows": []}]
