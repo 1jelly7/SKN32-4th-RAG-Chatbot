@@ -28,24 +28,30 @@ class MySQLWriteConfig:
 
     @classmethod
     def from_env(cls) -> "MySQLWriteConfig":
-        """환경 변수에서 필수 쓰기 설정을 검증해 구성한다."""
-        host = os.getenv("MYSQL_WRITE_HOST", "localhost")
-        user = os.getenv("MYSQL_WRITE_USER")
-        password = os.getenv("MYSQL_WRITE_PASSWORD")
-        database = os.getenv("MYSQL_DATABASE")
+        """환경 변수에서 필수 쓰기 설정을 검증해 구성한다.
+
+        DOCUMENT_DB_*와 동일한 패턴으로, SALES_DB_*를 판매 도메인 전용
+        독립 블록으로 사용한다. 다른 도메인(구매 등)과 MYSQL_DATABASE 같은
+        공용 변수를 공유하지 않아, 다른 팀이 그 값을 바꿔도 판매 ETL이
+        엉뚱한 DB에 접속하는 사고를 막는다.
+        """
+        host = os.getenv("SALES_DB_HOST", "localhost")
+        user = os.getenv("SALES_DB_USER")
+        password = os.getenv("SALES_DB_PASSWORD")
+        database = os.getenv("SALES_DB_DATABASE")
 
         missing = [
             name
             for name, val in [
-                ("MYSQL_WRITE_USER", user),
-                ("MYSQL_DATABASE", database),
+                ("SALES_DB_USER", user),
+                ("SALES_DB_DATABASE", database),
             ]
             if not val
         ]
         if missing:
             raise RuntimeError(
                 f".env에 다음 값이 비어 있습니다: {', '.join(missing)}. "
-                "etl_writer 계정 정보를 .env에 채워주세요."
+                "판매 DB 쓰기 계정 정보를 .env에 채워주세요."
             )
 
         return cls(
