@@ -58,3 +58,6 @@ class GraphState(TypedDict, total=False):
     sources: list[dict[str, Any]]
     tables: list[dict[str, Any]]
     answer: str
+    timings_ms: dict[str, float]
+    retrieval_diagnostics: dict[str, object]
+    query_labels: list[str]

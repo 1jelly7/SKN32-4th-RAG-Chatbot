@@ -1,11 +1,14 @@
 """Document MCP가 경로 조회를 우회해 임의 파일을 읽지 않는 순서 계약."""
 
 import asyncio
+from pathlib import Path
+from typing import Any
 
 import pymysql
 import pytest
 
 import mcp_servers.document_tools.search as search_module
+import mcp_servers.document_tools.file_loader as file_loader_module
 from tests.auth_helpers import TEST_ADMIN_CONTEXT
 
 
@@ -85,3 +88,43 @@ def test_in_process_mcp_maps_document_database_error_to_query_error(
 
     with pytest.raises(MCPQueryError):
         asyncio.run(MCPClient(InProcessMCPPort()).document_search("policy", top_k=3, user_context=TEST_ADMIN_CONTEXT))
+
+
+def test_document_file_cache_uses_path_and_updated_at(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """같은 버전은 재파싱하지 않고 DB 갱신 시각이 바뀌면 다시 읽는다."""
+    path = tmp_path / "policy.txt"
+    path.write_text("정책 본문", encoding="utf-8")
+    calls = 0
+
+    def fake_load_text(file_path: Path) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {
+            "document_id": "original",
+            "path": str(file_path),
+            "title": "original",
+            "content": "정책 본문",
+            "metadata": {},
+        }
+
+    monkeypatch.setattr(file_loader_module, "load_text", fake_load_text)
+    file_loader_module.invalidate_document_cache()
+    record = {
+        "document_id": "doc-1",
+        "title": "정책",
+        "file_path": str(path),
+        "updated_at": "2026-08-01T00:00:00",
+    }
+
+    first = file_loader_module.load_document_files([record])
+    first[0]["content"] = "호출자 변경"
+    second = file_loader_module.load_document_files([record])
+    updated = file_loader_module.load_document_files(
+        [{**record, "updated_at": "2026-08-02T00:00:00"}]
+    )
+
+    assert calls == 2
+    assert second[0]["content"] == "정책 본문"
+    assert updated[0]["metadata"]["updated_at"] == "2026-08-02T00:00:00"

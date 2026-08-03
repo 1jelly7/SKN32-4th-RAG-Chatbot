@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from app.core.config import get_settings
+from app.core.openai_client import get_async_openai_client
+from app.logging.performance import log_llm_completion, start_timer
 from mcp_servers.data_tools.purchase.schema import SchemaResource
 
 SYSTEM_PROMPT = (
@@ -58,14 +60,13 @@ async def generate_sql(question: str, schema: SchemaResource) -> str:
     if not settings.openai_api_key:
         return _generate_sql_fallback(question)
 
-    from openai import AsyncOpenAI
-
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    client = get_async_openai_client(settings.openai_api_key)
     schema_description = (
         f"테이블: {', '.join(schema['tables'])}\n"
         f"컬럼: {schema['columns']}\n"
         f"용어집: {schema['business_glossary']}"
     )
+    started_ns = start_timer()
     response = await client.chat.completions.create(
         model=settings.openai_model,
         messages=[
@@ -73,6 +74,9 @@ async def generate_sql(question: str, schema: SchemaResource) -> str:
             {"role": "user", "content": f"스키마:\n{schema_description}\n\n질문: {question}"},
         ],
         temperature=0,
+        max_completion_tokens=400,
+        timeout=10,
     )
+    log_llm_completion("purchase_text2sql", settings.openai_model, started_ns, response)
     sql = response.choices[0].message.content or ""
     return sql.strip().strip("`").removeprefix("sql\n").strip()

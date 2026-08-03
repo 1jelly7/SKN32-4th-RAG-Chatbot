@@ -9,6 +9,7 @@ docs/team_share/03_cross_team_requests.md 참고).
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -90,7 +91,7 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
     retry_count = 0
     try:
         normalized = validate_and_normalize(sql)
-        explain_readonly(normalized)
+        await asyncio.to_thread(explain_readonly, normalized)
     except Exception as exc:  # noqa: BLE001 - 가드/EXPLAIN 실패는 재작성 신호일 뿐이다.
         retry_count = 1
         retried_sql = await generate_sql_with_error(question, schema, sql, str(exc))
@@ -104,9 +105,9 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
         # server.py가 QUERY_ERROR로 변환하게 한다(재시도는 최대 1회로 제한).
         sql = retried_sql
         normalized = validate_and_normalize(sql)
-        explain_readonly(normalized)
+        await asyncio.to_thread(explain_readonly, normalized)
 
-    rows = query_readonly(normalized)
+    rows = await asyncio.to_thread(query_readonly, normalized)
     elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
 
     views_used = sorted(referenced_tables(normalized) & ALLOWED_VIEWS)

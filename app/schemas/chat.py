@@ -76,6 +76,7 @@ class ErrorResponse(BaseModel):
     error_code: Literal[
         "INVALID_INPUT",
         "NO_RESULT",
+        "FORBIDDEN",
         "QUERY_ERROR",
         "EVIDENCE_INSUFFICIENT",
         "TIMEOUT",

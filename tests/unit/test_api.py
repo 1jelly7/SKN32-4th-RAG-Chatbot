@@ -17,6 +17,7 @@ from app.mcp.client import (
     MCPClient,
     MCPInternalError,
     MCPInvalidInputError,
+    MCPForbiddenError,
     MCPMalformedPayloadError,
     MCPNoResultError,
     MCPQueryError,
@@ -196,6 +197,21 @@ def test_cache_miss_invokes_graph_once_then_writes_and_hits() -> None:
     assert graph.mcp_calls == 1
 
 
+def test_chat_response_exposes_safe_request_and_server_timing_headers() -> None:
+    """브라우저 E2E 계측용 header에 식별자 원문이나 질문이 포함되지 않게 한다."""
+    application = _application(MemoryCache(), CountingGraph())
+
+    with TestClient(application) as client:
+        login(client)
+        response = client.post("/api/chat", json={"question": "민감할 수 있는 질문"})
+
+    assert response.status_code == 200
+    assert response.headers["x-request-id"] == response.json()["request_id"]
+    assert "app_total;dur=" in response.headers["server-timing"]
+    assert "cache_lookup;dur=" in response.headers["server-timing"]
+    assert "민감할 수 있는 질문" not in response.headers["server-timing"]
+
+
 def test_invalid_chat_request_does_not_invoke_cache_or_graph() -> None:
     cache = RecordingCache()
     graph = CountingGraph()
@@ -218,6 +234,7 @@ def test_invalid_chat_request_does_not_invoke_cache_or_graph() -> None:
     [
         (MCPNoResultError("query_purchase", "secret=hidden"), 404, "NO_RESULT"),
         (MCPInvalidInputError("query_purchase", "secret=hidden"), 400, "INVALID_INPUT"),
+        (MCPForbiddenError("query_purchase", "secret=hidden"), 403, "FORBIDDEN"),
         (MCPEvidenceInsufficientError("query_purchase", "secret=hidden"), 422, "EVIDENCE_INSUFFICIENT"),
         (MCPQueryError("query_purchase", "password=hidden"), 502, "QUERY_ERROR"),
         (MCPInternalError("query_purchase", "secret=hidden"), 502, "INTERNAL_ERROR"),

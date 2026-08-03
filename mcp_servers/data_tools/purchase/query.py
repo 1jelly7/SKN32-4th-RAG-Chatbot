@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -19,7 +20,7 @@ async def query_purchase(question: str) -> list[dict[str, Any]]:
     schema = get_schema_resource()
     sql = await generate_sql(question, schema)
     started_at = time.monotonic()
-    rows = query_readonly(sql)
+    rows = await asyncio.to_thread(query_readonly, sql)
     return [{
         "type": "database",
         "domain": "purchase",

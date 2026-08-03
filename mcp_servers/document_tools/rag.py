@@ -45,6 +45,11 @@ def invalidate_store_cache() -> None:
     _store_cache.clear()
 
 
+def warmup_retrieval() -> None:
+    """첫 검색 전에 정식 FAISS 인덱스를 읽기 전용으로 메모리에 적재한다."""
+    _load_persistent_store()
+
+
 async def retrieve(
     query: str,
     documents: list[RawDocument],

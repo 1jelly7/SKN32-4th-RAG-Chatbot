@@ -65,14 +65,14 @@ Host는 현재 같은 프로세스의 Tool service를 비동기 MCP port로 호�
   "status": "error",
   "domain": "document | purchase | sales | both",
   "message": "사용자에게 표시 가능한 오류 설명",
-  "error_code": "INVALID_INPUT | NO_RESULT | QUERY_ERROR | EVIDENCE_INSUFFICIENT | TIMEOUT | INTERNAL_ERROR",
+  "error_code": "INVALID_INPUT | NO_RESULT | FORBIDDEN | QUERY_ERROR | EVIDENCE_INSUFFICIENT | TIMEOUT | INTERNAL_ERROR",
   "data": [],
   "sources": [],
   "metadata": {}
 }
 ```
 
-Host의 공개 HTTP 매핑은 `INVALID_INPUT=400`, `NO_RESULT=404`,
+Host의 공개 HTTP 매핑은 `INVALID_INPUT=400`, `FORBIDDEN=403`, `NO_RESULT=404`,
 `EVIDENCE_INSUFFICIENT=422`, `QUERY_ERROR=502`, `INTERNAL_ERROR=502`,
 `TIMEOUT=504`다. MCP timeout은 `QUERY_ERROR`로 축약하지 않는다. malformed envelope는
 provider의 `INTERNAL_ERROR`와 별도로 Host 검증 실패로 처리하되 공개 코드는

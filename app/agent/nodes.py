@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -13,6 +14,7 @@ from typing import Any
 from app.agent.llm import AsyncLLMPort, complete
 from app.agent.prompts import ANSWER_PROMPT
 from app.agent.state import DataDomain, GraphState, Route
+from app.logging.performance import record_timing, start_timer
 from app.mcp.client import MCPClient, MCPClientError, MCPNoResultError
 
 SENSITIVE_FIELD_PARTS = ("api_key", "password", "secret", "token", "file_path")
@@ -65,10 +67,12 @@ def route_data_domain(question: str) -> DataDomain:
 
 async def router(state: GraphState) -> GraphState:
     """question을 분류해 route 필드에 기록하고 기존 상태를 보존한다."""
+    started_ns = start_timer()
     question = state.get("question", "")
     state["route"] = route_question(question)
     if state["route"] in ("DATABASE", "BOTH"):
         state["data_domain"] = route_data_domain(question)
+    record_timing(state.setdefault("timings_ms", {}), "agent_routing", started_ns)
     return state
 
 
@@ -88,6 +92,7 @@ async def document_retrieval(
         return state
 
     question = state.get("question", "")
+    started_ns = start_timer()
     try:
         state["document_evidence"] = await mcp_client.document_search(question, top_k=10, user_context=state.get("user_context"))
         # 캐시 키가 실제 문서 인덱스 버전을 참조하도록, MCP metadata에서 뽑아 state에 저장합니다.
@@ -107,6 +112,8 @@ async def document_retrieval(
         state["document_evidence"] = []
         state.setdefault("_errors", []).append("document_retrieval 실패")
         state.setdefault("_mcp_errors", []).append(exc)
+    finally:
+        record_timing(state.setdefault("timings_ms", {}), "document_mcp", started_ns)
     return state
 
 
@@ -131,30 +138,51 @@ async def database_retrieval(
     domain = state.get("data_domain", "both")
     allows_partial_result = domain == "both" or state.get("route") == "BOTH"
 
+    started_ns = start_timer()
     evidence: list[dict[str, Any]] = []
     retrieval_errors: list[MCPClientError] = []
-    if domain in ("purchase", "both"):
+    if domain == "both":
+        results = await asyncio.gather(
+            mcp_client.purchase_query(question, user_context=user_context),
+            mcp_client.sales_query(question, user_context=user_context),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, MCPNoResultError):
+                state.setdefault("_no_result_messages", []).append(str(result))
+            elif isinstance(result, MCPClientError):
+                state.setdefault("_errors", []).append("database_retrieval 실패")
+                retrieval_errors.append(result)
+            elif isinstance(result, BaseException):
+                record_timing(state.setdefault("timings_ms", {}), "database_mcp", started_ns)
+                raise result
+            else:
+                evidence.extend(result)
+    elif domain == "purchase":
         try:
             evidence.extend(await mcp_client.purchase_query(question, user_context=user_context))
         except MCPNoResultError as exc:
             state.setdefault("_no_result_messages", []).append(str(exc))
         except MCPClientError as exc:
             if not allows_partial_result:
+                record_timing(state.setdefault("timings_ms", {}), "database_mcp", started_ns)
                 raise
             state.setdefault("_errors", []).append("purchase_retrieval 실패")
             retrieval_errors.append(exc)
-    if domain in ("sales", "both"):
+    elif domain == "sales":
         try:
             evidence.extend(await mcp_client.sales_query(question, user_context=user_context))
         except MCPNoResultError as exc:
             state.setdefault("_no_result_messages", []).append(str(exc))
         except MCPClientError as exc:
             if not allows_partial_result:
+                record_timing(state.setdefault("timings_ms", {}), "database_mcp", started_ns)
                 raise
             state.setdefault("_errors", []).append("sales_retrieval 실패")
             retrieval_errors.append(exc)
 
     state["database_evidence"] = evidence
+    record_timing(state.setdefault("timings_ms", {}), "database_mcp", started_ns)
     if evidence or state.get("document_evidence"):
         return state
 
@@ -211,7 +239,9 @@ async def answer_synthesis(
         return state
 
     question = state.get("question", "")
+    llm_started_ns = start_timer()
     answer = await complete(ANSWER_PROMPT, _limit_evidence_for_answer(evidence), question, llm)
+    record_timing(state.setdefault("timings_ms", {}), "llm_answer", llm_started_ns)
     if evidence_status == "PARTIALLY_SUPPORTED":
         answer += "\n\n(일부 근거에 조회 오류가 있어, 확인된 부분만 반영한 답변입니다.)"
 

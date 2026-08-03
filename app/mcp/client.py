@@ -118,6 +118,16 @@ class InProcessMCPPort:
             }
         raise ValueError(f"지원하지 않는 MCP Tool입니다: {tool_name}")
 
+    async def warmup(self) -> None:
+        """요청 전에 허용 문서의 PDF 파싱 캐시와 FAISS 인덱스를 읽기 전용 예열한다."""
+        from mcp_servers.document_tools.document_db import lookup_document_paths
+        from mcp_servers.document_tools.file_loader import load_document_files
+        from mcp_servers.document_tools.rag import warmup_retrieval
+
+        records = await lookup_document_paths("")
+        await asyncio.to_thread(load_document_files, records)
+        await asyncio.to_thread(warmup_retrieval)
+
 
 class MCPClientError(RuntimeError):
     """MCP 경계에서 분류된 오류의 공통 기반 예외다."""
@@ -167,6 +177,12 @@ class MCPClient:
             raise ValueError("MCP timeout_seconds는 0보다 커야 합니다.")
         self._port = port
         self._timeout_seconds = timeout_seconds
+
+    async def warmup(self) -> None:
+        """transport가 제공하는 선택적 읽기 전용 예열을 실행한다."""
+        warmup = getattr(self._port, "warmup", None)
+        if callable(warmup):
+            await warmup()
 
     async def document_search(self, query: str, top_k: int, user_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """`search_documents` 성공 envelope를 문서 evidence 목록으로 정규화한다."""

@@ -353,6 +353,11 @@ DOCUMENT_DB_DATABASE=documents
 Data MCP를 주입하는 opt-in 테스트만 실행하며, ETL의 실제 MySQL 통합 테스트는 아직
 placeholder다.
 
+성능 재현 명령, 5초 예산, cache miss/hit 및 브라우저 E2E 결과, 안전한 운영 관측 필드는
+[`docs/performance.md`](docs/performance.md)에 기록한다. 성능 벤치마크도 반드시
+`conda run -n skn_3rd python -m scripts.benchmark_chat_performance --scenario all --iterations 5`
+형식으로 실행한다.
+
 ### 필수 단위 테스트
 
 - 동일 질문·동일 문맥·동일 버전이면 cache key가 동일하다.
