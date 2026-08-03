@@ -64,10 +64,13 @@ def _get_default_client() -> ReadOnlyMySQLClient:
     global _default_client
     if _default_client is None:
         settings = get_settings()
+        # sales 전용 조회 계정(sales_reader)이 설정돼 있으면 그걸 쓴다. 비어 있으면
+        # (아직 팀원이 .env를 안 바꾼 경우) 공용 mysql_read_*로 폴백한다. purchase는
+        # 여전히 mysql_read_*만 쓰므로 이 폴백이 있어도 도메인 간 계정이 섞이지 않는다.
         _default_client = ReadOnlyMySQLClient(
             host=settings.mysql_read_host,
-            user=settings.mysql_read_user,
-            password=settings.mysql_read_password,
+            user=settings.sales_read_user or settings.mysql_read_user,
+            password=settings.sales_read_password or settings.mysql_read_password,
             database=settings.sales_db_database,
         )
     return _default_client
