@@ -8,8 +8,8 @@
 --   mysql -u JangGGo -p1234 -h 127.0.0.1 purchase < database/purchase/schema.sql
 -- ============================================================
 
-CREATE DATABASE IF NOT EXISTS purchase CHARACTER SET utf8mb4;
-USE purchase;
+CREATE DATABASE IF NOT EXISTS purchase_db CHARACTER SET utf8mb4;
+USE purchase_db;
 
 -- ------------------------------------------------------------
 -- Vendors (공급업체 마스터) - 다른 테이블이 참조하므로 가장 먼저 생성

@@ -8,8 +8,6 @@ from typing import Any, Literal
 
 from mcp.server.mcpserver import MCPServer
 
-from app.auth.policy import require_database_access
-
 from mcp_servers.data_tools.purchase.query import query_purchase as run_purchase_query
 from mcp_servers.data_tools.sales.query import query_sales as run_sales_query
 
@@ -32,17 +30,12 @@ def _error_envelope(domain: str, code: str, message: str) -> dict[str, Any]:
     }
 
 
-async def _execute_query(
-    domain: str, question: str, query: DomainQuery, user_context: dict[str, object] | None
-) -> dict[str, Any]:
+async def _execute_query(domain: str, question: str, query: DomainQuery) -> dict[str, Any]:
     """도메인 service 결과를 공통 success/error envelope로 변환한다."""
     if not question or not question.strip():
         return _error_envelope(domain, "INVALID_INPUT", "질문이 비어 있습니다.")
     try:
-        require_database_access(user_context, f"{domain}_db")
         evidence = await query(question)
-    except PermissionError:
-        return _error_envelope(domain, "FORBIDDEN", "요청한 데이터베이스에 접근할 권한이 없습니다.")
     except Exception:  # noqa: BLE001 - provider 상세를 외부 envelope에 노출하지 않는다.
         logger.exception("data_tool_query_failed domain=%s question_length=%d", domain, len(question))
         return _error_envelope(domain, "QUERY_ERROR", "업무 데이터 조회에 실패했습니다.")
@@ -72,14 +65,12 @@ async def _execute_query(
     }
 
 
-async def execute_data_tool(
-    tool_name: DataToolName, question: str, user_context: dict[str, object] | None = None
-) -> dict[str, Any]:
+async def execute_data_tool(tool_name: DataToolName, question: str) -> dict[str, Any]:
     """Host transport와 MCP server가 공유하는 도메인 Tool dispatch를 수행한다."""
     if tool_name == "query_purchase":
-        return await _execute_query("purchase", question, run_purchase_query, user_context)
+        return await _execute_query("purchase", question, run_purchase_query)
     if tool_name == "query_sales":
-        return await _execute_query("sales", question, run_sales_query, user_context)
+        return await _execute_query("sales", question, run_sales_query)
     raise ValueError(f"지원하지 않는 Data MCP Tool입니다: {tool_name}")
 
 
@@ -88,14 +79,14 @@ def create_server() -> MCPServer:
     server = MCPServer(name="data-mcp", version="0.1.0")
 
     @server.tool()
-    async def query_purchase(question: str, user_context: dict[str, object]) -> dict[str, Any]:
+    async def query_purchase(question: str) -> dict[str, Any]:
         """구매·지출·공급업체 질문에만 사용하고 표준 purchase envelope를 반환한다."""
-        return await execute_data_tool("query_purchase", question, user_context)
+        return await execute_data_tool("query_purchase", question)
 
     @server.tool()
-    async def query_sales(question: str, user_context: dict[str, object]) -> dict[str, Any]:
+    async def query_sales(question: str) -> dict[str, Any]:
         """판매·매출·고객 질문에만 사용하고 표준 sales envelope를 반환한다."""
-        return await execute_data_tool("query_sales", question, user_context)
+        return await execute_data_tool("query_sales", question)
 
     return server
 
