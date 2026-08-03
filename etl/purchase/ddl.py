@@ -54,6 +54,7 @@ def build_all_ddl() -> str:
         "-- 생성 기준: ERP_Purchasing_Analytics.xlsx 실측 (5시트)",
         "-- 담당: 구매(rag_purchase) 도메인. 이 파일은 database/purchase/ 소유이며",
         "-- 통합/타 도메인 코드가 직접 수정하지 않는다.",
+        "use purchase;",
         "",
     ]
     for table_name in TABLE_LOAD_ORDER:
