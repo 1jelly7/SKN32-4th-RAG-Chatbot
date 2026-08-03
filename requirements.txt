@@ -16,3 +16,4 @@ mcp[cli]>=1.2
 python-dotenv>=1.0      # etl/sales/config.py가 .env 읽는 데 사용
 openpyxl>=3.1           # pandas가 .xlsx 읽을 때 내부적으로 필요 (엔진)
 sentence-transformers
+mysql-connector-python

@@ -1,8 +1,9 @@
 """구매 Data MCP에서 guard된 SELECT만 실행하는 읽기 전용 MySQL adapter.
 
 환경변수:
-- PURCHASE_READ_HOST / PURCHASE_READ_USER / PURCHASE_READ_PASSWORD / PURCHASE_READ_DATABASE
-  (읽기 전용 purchase_reader 계정 — 실제 행 데이터 조회)
+- PURCHASE_READ_USER / PURCHASE_READ_PASSWORD (읽기 전용 purchase_reader 계정 —
+  실제 행 데이터 조회). PURCHASE_READ_HOST/DATABASE가 비어 있으면 각각
+  MYSQL_READ_HOST / PURCHASE_DB_DATABASE로 폴백한다(app/core/config.py).
 - MYSQL_WRITE_HOST / MYSQL_WRITE_USER / MYSQL_WRITE_PASSWORD + PURCHASE_DB_DATABASE
   (EXPLAIN 사전검증 전용. 아래 ExplainOnlyMySQLClient 설명 참고)
 """
@@ -31,8 +32,6 @@ class ReadOnlyMySQLClient:
             cursorclass=pymysql.cursors.DictCursor,
             charset="utf8mb4",
             autocommit=False,
-            connect_timeout=5,
-            read_timeout=10,
         )
 
     def query(self, sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
@@ -70,8 +69,6 @@ class ExplainOnlyMySQLClient:
             cursorclass=pymysql.cursors.DictCursor,
             charset="utf8mb4",
             autocommit=False,
-            connect_timeout=5,
-            read_timeout=10,
         )
 
     def explain(self, sql: str, timeout_seconds: int = 10) -> None:
@@ -97,22 +94,15 @@ _default_explain_client: ExplainOnlyMySQLClient | None = None
 
 
 def _get_default_client() -> ReadOnlyMySQLClient:
-    """검증된 구매 읽기전용(purchase_reader) 설정으로 기본 client를 한 번만 만든다.
-
-    환경변수에서 읽기:
-    - PURCHASE_READ_HOST
-    - PURCHASE_READ_USER
-    - PURCHASE_READ_PASSWORD
-    - PURCHASE_READ_DATABASE
-    """
+    """검증된 구매 읽기전용(purchase_reader) 설정으로 기본 client를 한 번만 만든다."""
     global _default_client
     if _default_client is None:
         settings = get_settings()
         _default_client = ReadOnlyMySQLClient(
-            host=settings.purchase_read_host,
+            host=settings.purchase_read_host or settings.mysql_read_host,
             user=settings.purchase_read_user,
             password=settings.purchase_read_password,
-            database=settings.purchase_read_database,
+            database=settings.purchase_read_database or settings.purchase_db_database,
         )
     return _default_client
 

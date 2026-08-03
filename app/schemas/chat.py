@@ -73,6 +73,7 @@ class ErrorResponse(BaseModel):
 
     detail: str
     error_code: Literal[
+        "FORBIDDEN",
         "INVALID_INPUT",
         "NO_RESULT",
         "QUERY_ERROR",
