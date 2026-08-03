@@ -65,12 +65,23 @@ class InProcessMCPPort:
         if tool_name in ("query_purchase", "query_sales"):
             from mcp_servers.data_tools.server import execute_data_tool
 
-            return await execute_data_tool(tool_name, str(payload.get("question", "")))
+            return await execute_data_tool(tool_name, str(payload.get("question", "")), payload.get("user_context"))
         if tool_name == "search_documents":
+            from app.auth.policy import require_database_access
+            from mcp_servers.document_tools.search import DocumentSearchUnavailableError, search_documents
+
+            from mcp_servers.document_tools.rag import get_last_index_version
             from mcp_servers.document_tools.search import search_documents
 
             query = str(payload.get("query", ""))
             top_k = payload.get("top_k", 5)
+            try:
+                require_database_access(payload.get("user_context"), "document_db")
+            except PermissionError:
+                return {
+                    "status": "error", "domain": "document", "message": "문서 데이터베이스에 접근할 권한이 없습니다.",
+                    "error_code": "FORBIDDEN", "data": [], "sources": [], "metadata": {},
+                }
             if not query.strip() or not isinstance(top_k, int) or top_k <= 0:
                 return {
                     "status": "error", "domain": "document",
@@ -79,6 +90,12 @@ class InProcessMCPPort:
                 }
             try:
                 chunks = await search_documents(query, top_k)
+            except DocumentSearchUnavailableError:
+                return {
+                    "status": "error", "domain": "document",
+                    "message": "문서 조회 서비스를 현재 사용할 수 없습니다.",
+                    "error_code": "QUERY_ERROR", "data": [], "sources": [], "metadata": {},
+                }
             except Exception:  # noqa: BLE001 - 내부 상세를 Host 경계 밖으로 노출하지 않는다.
                 return {
                     "status": "error", "domain": "document",
@@ -93,8 +110,11 @@ class InProcessMCPPort:
             return {
                 "status": "success", "domain": "document", "message": None,
                 "data": [{"content": item["content"], "score": item["score"]} for item in chunks],
-                "sources": [{"document_id": item["document_id"], "title": item["title"]} for item in chunks],
-                "metadata": {"result_count": len(chunks)},
+                "sources": [
+                    {"document_id": item["document_id"], "title": item["title"], "page": item.get("page")}
+                    for item in chunks
+                ],
+                "metadata": {"result_count": len(chunks), "index_version": get_last_index_version()},
             }
         raise ValueError(f"지원하지 않는 MCP Tool입니다: {tool_name}")
 
@@ -123,6 +143,10 @@ class MCPInvalidInputError(MCPClientError):
     """Tool이 요청 payload를 처리할 수 없다고 명시했을 때 발생한다."""
 
 
+class MCPForbiddenError(MCPClientError):
+    """인증된 사용자에게도 허용되지 않은 DB 접근을 Tool이 거절했을 때 발생한다."""
+
+
 class MCPEvidenceInsufficientError(MCPClientError):
     """Tool은 정상 동작했지만 답변에 필요한 근거가 부족할 때 발생한다."""
 
@@ -144,9 +168,12 @@ class MCPClient:
         self._port = port
         self._timeout_seconds = timeout_seconds
 
-    async def document_search(self, query: str, top_k: int) -> list[dict[str, Any]]:
+    async def document_search(self, query: str, top_k: int, user_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """`search_documents` 성공 envelope를 문서 evidence 목록으로 정규화한다."""
-        envelope = await self._call_success("search_documents", {"query": query, "top_k": top_k}, "document")
+        payload: dict[str, Any] = {"query": query, "top_k": top_k}
+        if user_context is not None:
+            payload["user_context"] = user_context
+        envelope = await self._call_success("search_documents", payload, "document")
         evidence: list[dict[str, Any]] = []
         for index, item in enumerate(envelope.data):
             try:
@@ -167,14 +194,20 @@ class MCPClient:
             )
         return evidence
 
-    async def purchase_query(self, question: str) -> list[dict[str, Any]]:
+    async def purchase_query(self, question: str, user_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """`query_purchase` 성공 envelope를 구매 database evidence로 정규화한다."""
-        envelope = await self._call_success("query_purchase", {"question": question}, "purchase")
+        payload: dict[str, Any] = {"question": question}
+        if user_context is not None:
+            payload["user_context"] = user_context
+        envelope = await self._call_success("query_purchase", payload, "purchase")
         return _database_evidence("purchase", envelope)
 
-    async def sales_query(self, question: str) -> list[dict[str, Any]]:
+    async def sales_query(self, question: str, user_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """`query_sales` 성공 envelope를 판매 database evidence로 정규화한다."""
-        envelope = await self._call_success("query_sales", {"question": question}, "sales")
+        payload: dict[str, Any] = {"question": question}
+        if user_context is not None:
+            payload["user_context"] = user_context
+        envelope = await self._call_success("query_sales", payload, "sales")
         return _database_evidence("sales", envelope)
 
     async def data_query(self, domain: DataDomain, question: str) -> list[dict[str, Any]]:
@@ -236,6 +269,8 @@ def _parse_envelope(tool_name: ToolName, raw_response: object) -> ToolSuccessEnv
         raise MCPNoResultError(tool_name, error.message)
     if error.error_code == "INVALID_INPUT":
         raise MCPInvalidInputError(tool_name, error.message)
+    if error.error_code == "FORBIDDEN":
+        raise MCPForbiddenError(tool_name, error.message)
     if error.error_code == "EVIDENCE_INSUFFICIENT":
         raise MCPEvidenceInsufficientError(tool_name, error.message)
     if error.error_code == "INTERNAL_ERROR":

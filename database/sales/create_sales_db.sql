@@ -21,9 +21,9 @@ CREATE USER IF NOT EXISTS 'JangGGo'@'%' IDENTIFIED BY '1234';
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON `sales`.* TO 'JangGGo'@'%';
 
--- 3) (선택) 챗봇 조회 전용 계정도 함께 준비하려면 아래 주석을 해제한다.
---    query_sales(read-only) Tool이 이 계정을 사용한다 (mcp_servers/data_tools/sales/mysql.py).
--- CREATE USER IF NOT EXISTS 'chatbot_reader'@'%' IDENTIFIED BY '변경하세요';
--- GRANT SELECT ON `sales`.* TO 'chatbot_reader'@'%';
+-- 3) 챗봇 조회 전용 계정(sales_reader)은 여기서 만들지 않는다. 원본 테이블 전체에
+--    SELECT를 주는 대신, 뷰 5개(database/sales/views.sql)에만 최소 권한을 주는
+--    database/sales/grants_reader.sql을 따로 실행한다 (views.sql이 먼저 적용된
+--    뒤에, root 계정으로 실행 — 그 파일 상단 안내 참고).
 
 FLUSH PRIVILEGES;

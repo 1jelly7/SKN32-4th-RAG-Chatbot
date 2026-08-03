@@ -29,15 +29,59 @@ class Settings(BaseSettings):
     document_db_user: str
     document_db_password: str
     document_db_database: str
+    account_db_host: str = "127.0.0.1"
+    account_db_port: int = 3306
+    account_db_name: str = "account_db"
+    account_db_user: str = ""
+    account_db_password: str = ""
+    auth_secret_key: str = "change-this-in-production"
+    auth_access_token_expire_minutes: int = 60
+    auth_cookie_secure: bool = False
+    account_seed_admin_password: str | None = None
+    account_seed_hr_password: str | None = None
+    account_seed_finance_password: str | None = None
+
+    purchase_read_host: str
+    purchase_read_user: str
+    purchase_read_password: str
+    purchase_read_database: str
+
+    purchase_read_host: str
+    purchase_read_user: str
+    purchase_read_password: str
+    purchase_read_database: str
+
+    purchase_read_host: str
+    purchase_read_user: str
+    purchase_read_password: str
+    purchase_read_database: str
+
+    purchase_read_host: str
+    purchase_read_user: str
+    purchase_read_password: str
+    purchase_read_database: str
 
     # 임베딩 백엔드: "local"(기본값, 외부 API 불필요) 또는 "openai".
     embedding_backend: str = "local"
     # local 백엔드를 쓸 때의 임베딩 벡터 차원입니다.
     local_embedding_dimension: int = 384
+    sbert_model_name: str = "jhgan/ko-sroberta-multitask"
 
     # Data MCP가 조회할 도메인별 DB 이름입니다. (읽기 계정/호스트는 mysql_read_*를 재사용)
     purchase_db_database: str = "purchase"
     sales_db_database: str = "sales"
+
+    # 판매 도메인 전용 조회 계정입니다. sales.* 뷰에만 SELECT 권한을 가진
+    # sales_reader를 쓰기 위한 필드로, 비어 있으면 mysql_read_*로 폴백합니다
+    # (팀원이 아직 .env를 안 바꿔도 기존 계정으로 계속 동작하게 하기 위함).
+    # mysql_read_*는 purchase도 같이 쓰므로 여기서 바꾸지 않습니다.
+    sales_read_user: str = ""
+    sales_read_password: str = ""
+
+    # 구매 도메인 전용 조회 계정입니다. purchase_reader를 쓰기 위한 필드로,
+    # sales_read_*와 같은 패턴입니다. 비어 있으면 mysql_read_*로 폴백합니다.
+    purchase_read_user: str = ""
+    purchase_read_password: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

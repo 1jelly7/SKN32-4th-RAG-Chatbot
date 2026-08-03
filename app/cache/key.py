@@ -22,6 +22,10 @@ def make_cache_key(state: GraphState) -> str:
         "database_freshness_bucket": state.get("database_freshness_bucket"),
         "prompt_version": state.get("prompt_version"),
         "model_id": state.get("model_id"),
+        "user_id": state.get("user_context", {}).get("user_id"),
+        "session_id": state.get("user_context", {}).get("session_id"),
+        "role": state.get("user_context", {}).get("role"),
+        "allowed_databases": state.get("user_context", {}).get("allowed_databases", []),
     }
     serialized = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()

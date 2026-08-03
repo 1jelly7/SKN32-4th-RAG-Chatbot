@@ -14,12 +14,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.chat import router as chat_router
+from app.api.auth import router as auth_router
 from app.api.system import router as system_router
 from app.agent.graph import build_graph
 from app.agent.prompts import PROMPT_VERSION
 from app.core.dependencies import AppDependencies
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
+UI_CACHE_HEADERS = {"Cache-Control": "no-store"}
 CACHE_KEY_CONTEXT = {
     "document_index_version": "unknown",
     "database_freshness_bucket": "unknown",
@@ -36,6 +38,12 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
     사용할 수 있어야 한다.
     """
     app_dependencies = dependencies or AppDependencies()
+    if dependencies is None:
+        from app.core.config import get_settings
+        settings = get_settings()
+        app_dependencies.auth_secret = settings.auth_secret_key
+        app_dependencies.auth_expire_minutes = settings.auth_access_token_expire_minutes
+        app_dependencies.auth_cookie_secure = settings.auth_cookie_secure
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -45,9 +53,14 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
 
     application = FastAPI(title="RAG MCP Chatbot", lifespan=lifespan)
     application.state.dependencies = app_dependencies
+    application.state.auth_service = app_dependencies.auth_service
+    application.state.auth_secret = app_dependencies.auth_secret
+    application.state.auth_expire_minutes = app_dependencies.auth_expire_minutes or 60
+    application.state.auth_cookie_secure = bool(app_dependencies.auth_cookie_secure)
     application.state.graph = build_graph(app_dependencies.mcp, app_dependencies.llm)
     application.state.cache_key_context = dict(CACHE_KEY_CONTEXT)
     application.include_router(chat_router, prefix="/api")
+    application.include_router(auth_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
 
     # /api 이후에 등록해야 /api/* 요청이 정적 파일 라우트와 충돌하지 않습니다.
@@ -56,17 +69,17 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
     @application.get("/")
     def index() -> FileResponse:
         """번들된 채팅 UI의 진입 HTML을 반환한다."""
-        return FileResponse(WEB_DIR / "index.html")
+        return FileResponse(WEB_DIR / "index.html", headers=UI_CACHE_HEADERS)
 
     @application.get("/chat.js")
     def chat_js() -> FileResponse:
         """별도 정적 경로를 기대하는 UI를 위해 채팅 스크립트를 반환한다."""
-        return FileResponse(WEB_DIR / "chat.js")
+        return FileResponse(WEB_DIR / "chat.js", headers=UI_CACHE_HEADERS)
 
     @application.get("/style.css")
     def style_css() -> FileResponse:
         """별도 정적 경로를 기대하는 UI를 위해 스타일시트를 반환한다."""
-        return FileResponse(WEB_DIR / "style.css")
+        return FileResponse(WEB_DIR / "style.css", headers=UI_CACHE_HEADERS)
 
     return application
 

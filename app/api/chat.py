@@ -8,17 +8,20 @@ LLM, MySQL, FAISS를 직접 호출하지 않으며 외부 Tool 예외를 비밀�
 from __future__ import annotations
 
 import hashlib
+import logging
 import uuid
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.agent.state import GraphState
+from app.auth.dependencies import CurrentUser
 from app.cache.service import lookup_cached_answer, write_answer_cache
 from app.mcp.client import (
     MCPMalformedPayloadError,
     MCPEvidenceInsufficientError,
     MCPInternalError,
+    MCPForbiddenError,
     MCPInvalidInputError,
     MCPNoResultError,
     MCPQueryError,
@@ -27,6 +30,7 @@ from app.mcp.client import (
 from app.schemas.chat import ChatRequest, ChatResponse, ErrorResponse, Source, TableData
 
 router = APIRouter(tags=["chat"])
+logger = logging.getLogger(__name__)
 
 
 def _conversation_context_hash(session_id: str | None) -> str | None:
@@ -43,7 +47,7 @@ def _tool_error_response(status_code: int, error_code: str, detail: str) -> JSON
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, http_request: Request) -> ChatResponse | JSONResponse:
+async def chat(request: ChatRequest, http_request: Request, user: CurrentUser) -> ChatResponse | JSONResponse:
     """캐시 조회, Graph 실행, 검증된 응답 저장 순서로 채팅 요청을 처리한다.
 
     캐시 hit는 즉시 반환해 Graph와 그 하위 LLM/MCP 호출을 모두 차단한다. miss에서만
@@ -55,6 +59,7 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse | JS
         "session_id": request.session_id,
         "request_id": request_id,
         "conversation_context_hash": _conversation_context_hash(request.session_id),
+        "user_context": user,
     }
     state.update(http_request.app.state.cache_key_context)
     cache_repository = http_request.app.state.dependencies.cache
@@ -78,6 +83,8 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse | JS
         return _tool_error_response(404, "NO_RESULT", "조회 가능한 결과가 없습니다.")
     except MCPInvalidInputError:
         return _tool_error_response(400, "INVALID_INPUT", "조회 요청 형식이 올바르지 않습니다.")
+    except MCPForbiddenError:
+        return _tool_error_response(403, "FORBIDDEN", "요청한 데이터베이스에 접근할 권한이 없습니다.")
     except MCPEvidenceInsufficientError:
         return _tool_error_response(422, "EVIDENCE_INSUFFICIENT", "답변에 필요한 근거가 부족합니다.")
     except MCPTimeoutError:
@@ -91,8 +98,14 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse | JS
     except Exception:  # noqa: BLE001 - 경계 밖 오류의 상세를 노출하지 않는다.
         return _tool_error_response(500, "INTERNAL_ERROR", "답변 생성 중 오류가 발생했습니다.")
 
-    if result_state.get("evidence_status") == "INSUFFICIENT":
-        return _tool_error_response(422, "EVIDENCE_INSUFFICIENT", "보강 조회 후에도 답변에 필요한 근거가 부족합니다.")
+    logger.info(
+        "chat_completed request_id=%s route=%s labels=%s evidence_status=%s retrieval=%s",
+        request_id,
+        result_state.get("route"),
+        result_state.get("query_labels", []),
+        result_state.get("evidence_status"),
+        result_state.get("retrieval_diagnostics", {}),
+    )
 
     write_answer_cache(result_state, cache_repository)
     return ChatResponse(

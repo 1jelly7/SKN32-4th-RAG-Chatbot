@@ -8,7 +8,7 @@
 --   mysql -u JangGGo -p1234 -h 127.0.0.1 purchase < database/purchase/schema_v2_vendor_extras.sql
 -- ============================================================
 
-USE purchase;
+USE purchase_db;
 
 CREATE TABLE IF NOT EXISTS vendor_contracts (
     vendor_contract_id  BIGINT PRIMARY KEY,

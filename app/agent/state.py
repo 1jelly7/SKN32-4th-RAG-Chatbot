@@ -23,7 +23,8 @@ EvidenceStatus = Literal[
 class EvidencePolicy:
     """근거 품질 평가에 주입하는 결정적 정책값이다."""
 
-    min_relevance: float = 0.5
+    min_relevance: float = 0.38          # DB 근거 기준
+    min_document_score: float = 0.38     # 문서 근거 기준 (새로 추가)
     min_confidence: float = 0.5
     required_metadata_keys: tuple[str, ...] = ()
     max_freshness_seconds: float | None = None
@@ -39,11 +40,12 @@ class GraphState(TypedDict, total=False):
     data_domain: DataDomain
     cache_key: str
     cached: bool
-    conversation_context_hash: str
+    conversation_context_hash: str | None
     document_index_version: str
     database_freshness_bucket: str
     prompt_version: str
     model_id: str
+    user_context: dict[str, Any]
     document_evidence: list[dict[str, Any]]
     database_evidence: list[dict[str, Any]]
     evidence_policy: EvidencePolicy

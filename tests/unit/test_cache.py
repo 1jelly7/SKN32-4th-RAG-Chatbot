@@ -16,6 +16,11 @@ def test_cache_key_changes_by_conversation_context() -> None:
     assert make_cache_key(first) != make_cache_key(second)
 
 
+def test_cache_key_changes_by_authenticated_user() -> None:
+    base = {"question": "A", "user_context": {"user_id": 1, "session_id": "one"}}
+    assert make_cache_key(base) != make_cache_key({"question": "A", "user_context": {"user_id": 2, "session_id": "two"}})
+
+
 def test_cache_key_changes_by_all_version_suppliers() -> None:
     base = {
         "question": "A",

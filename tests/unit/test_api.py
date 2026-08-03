@@ -22,6 +22,7 @@ from app.mcp.client import (
     MCPQueryError,
     MCPTimeoutError,
 )
+from tests.auth_helpers import TEST_ADMIN_CONTEXT, authentication_dependencies, login
 
 
 class FakeLLMClient(LLMClient):
@@ -93,6 +94,7 @@ def _application(cache: MemoryCache, graph: object):
         mcp=FakeMCPClient(),
         cache=cache,
         configure_logging=lambda: None,
+        **authentication_dependencies(),
     )
     application = create_app(dependencies)
     application.state.graph = graph
@@ -135,10 +137,22 @@ def test_health_uses_injected_dependencies_without_file_logging(tmp_path: Path) 
     assert log_path.exists() is False
 
 
+def test_ui_entry_and_assets_disable_browser_cache() -> None:
+    """개발 중 UI 변경이 이전 HTML·CSS·JS 캐시에 가려지지 않게 한다."""
+    application = _application(MemoryCache(), CountingGraph())
+
+    with TestClient(application) as client:
+        for path in ("/", "/style.css", "/chat.js"):
+            response = client.get(path)
+            assert response.status_code == 200
+            assert response.headers["cache-control"] == "no-store"
+
+
 def test_cache_hit_skips_graph_llm_and_mcp_calls() -> None:
     cache = RecordingCache()
     graph = CountingGraph()
     application = _application(cache, graph)
+    application.state.cache_key_context["user_context"] = TEST_ADMIN_CONTEXT
     state = {"question": "캐시 질문", **application.state.cache_key_context}
     cache.set(
         make_cache_key(state),
@@ -149,6 +163,7 @@ def test_cache_hit_skips_graph_llm_and_mcp_calls() -> None:
     cache.events.clear()
 
     with TestClient(application) as client:
+        login(client)
         response = client.post("/api/chat", json={"question": "캐시 질문"})
 
     assert response.status_code == 200
@@ -167,6 +182,7 @@ def test_cache_miss_invokes_graph_once_then_writes_and_hits() -> None:
     application = _application(cache, graph)
 
     with TestClient(application) as client:
+        login(client)
         first = client.post("/api/chat", json={"question": "새 질문"})
         second = client.post("/api/chat", json={"question": "새 질문"})
 
@@ -186,6 +202,7 @@ def test_invalid_chat_request_does_not_invoke_cache_or_graph() -> None:
     application = _application(cache, graph)
 
     with TestClient(application) as client:
+        login(client)
         response = client.post("/api/chat", json={"question": ""})
 
     assert response.status_code == 422
@@ -214,6 +231,7 @@ def test_tool_errors_use_safe_contract_response(
     application = _application(MemoryCache(), ErrorGraph(error))
 
     with TestClient(application) as client:
+        login(client)
         response = client.post("/api/chat", json={"question": "오류 질문"})
 
     assert response.status_code == status_code
@@ -228,6 +246,7 @@ def test_session_id_is_hashed_into_cache_context() -> None:
     application = _application(cache, graph)
 
     with TestClient(application) as client:
+        login(client)
         first = client.post("/api/chat", json={"question": "세션 질문", "session_id": "session-a"})
         second = client.post("/api/chat", json={"question": "세션 질문", "session_id": "session-b"})
         repeat = client.post("/api/chat", json={"question": "세션 질문", "session_id": "session-a"})

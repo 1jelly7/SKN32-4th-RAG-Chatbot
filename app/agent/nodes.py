@@ -13,7 +13,7 @@ from typing import Any
 from app.agent.llm import AsyncLLMPort, complete
 from app.agent.prompts import ANSWER_PROMPT
 from app.agent.state import DataDomain, GraphState, Route
-from app.mcp.client import MCPClient, MCPClientError
+from app.mcp.client import MCPClient, MCPClientError, MCPNoResultError
 
 SENSITIVE_FIELD_PARTS = ("api_key", "password", "secret", "token", "file_path")
 
@@ -25,8 +25,14 @@ def route_question(question: str) -> Route:
     데이터 키워드를 결정적으로 판별한다. 두 요구가 함께 있으면 BOTH를 반환하며,
     키워드가 없는 질문은 GENERAL로 분류한다. 현재 구현은 LLM fallback을 호출하지 않는다.
     """
-    normalized = question.casefold()
-    document_terms = ("정책", "규정", "가이드", "매뉴얼", "문서", "지침", "절차", "휴가", "휴직", "취업규칙")
+    normalized = "".join(question.casefold().split())
+    document_terms = (
+        "정책", "규정", "가이드", "매뉴얼", "문서", "지침", "절차", "휴가", "휴직", "취업규칙",
+        # 아래는 실제 등록된 사내규정 10종의 제목에서 뽑은 단어들입니다.
+        # 원래 목록이 일반적인 단어("규정", "지침" 등) 위주라, 구체적인 명사로 질문하면
+        # (예: "법인카드", "회계") 하나도 안 걸려서 GENERAL로 잘못 분류되는 문제가 있었습니다.
+        "법인카드", "카드", "계약", "복지", "후생", "안전보건", "인사", "직원보수", "보수", "급여", "회계",
+    )
     database_terms = (
         "매출", "현황", "집계", "실적", "기간", "판매", "구매", "지출",
         "고객", "공급업체", "재고", "vip", "발주", "미수금", "미지급",
@@ -44,7 +50,7 @@ def route_question(question: str) -> Route:
 
 def route_data_domain(question: str) -> DataDomain:
     """DATABASE/BOTH 경로일 때 purchase(구매/지출)와 sales(판매) 도메인을 판별한다."""
-    normalized = question.casefold()
+    normalized = "".join(question.casefold().split())
     sales_terms = ("매출", "고객", "판매", "재고", "vip", "여신", "수주")
     purchase_terms = ("구매", "지출", "공급업체", "발주", "미지급", "벤더")
     if any(t in normalized for t in sales_terms) and not any(t in normalized for t in purchase_terms):
@@ -81,7 +87,18 @@ async def document_retrieval(
 
     question = state.get("question", "")
     try:
-        state["document_evidence"] = await mcp_client.document_search(question, top_k=4)
+        state["document_evidence"] = await mcp_client.document_search(question, top_k=10, user_context=state.get("user_context"))
+        # 캐시 키가 실제 문서 인덱스 버전을 참조하도록, MCP metadata에서 뽑아 state에 저장합니다.
+        # (이전에는 이 필드가 항상 비어 있어 인덱스가 갱신돼도 캐시가 무효화되지 않았습니다)
+        if state["document_evidence"]:
+            index_version = state["document_evidence"][0].get("metadata", {}).get("index_version")
+            if index_version:
+                state["document_index_version"] = index_version
+    except MCPNoResultError:
+        # "검색했지만 관련 문서가 0건"은 실패가 아니라 정상적인 빈 결과입니다.
+        # _errors/_mcp_errors에 기록하지 않아, evidence_eval이 자연스럽게 INSUFFICIENT로
+        # 판정하고(정책에 따라 1회 재조회) 응답도 500/502가 아닌 200으로 나가게 합니다.
+        state["document_evidence"] = []
     except MCPClientError as exc:
         if state.get("route") != "BOTH":
             raise
@@ -108,6 +125,7 @@ async def database_retrieval(
         return state
 
     question = state.get("question", "")
+    user_context = state.get("user_context")
     domain = state.get("data_domain", "both")
     allows_partial_result = domain == "both" or state.get("route") == "BOTH"
 
@@ -115,7 +133,9 @@ async def database_retrieval(
     retrieval_errors: list[MCPClientError] = []
     if domain in ("purchase", "both"):
         try:
-            evidence.extend(await mcp_client.purchase_query(question))
+            evidence.extend(await mcp_client.purchase_query(question, user_context=user_context))
+        except MCPNoResultError:
+            pass  # 조회 결과 0건은 실패가 아니라 정상적인 빈 결과입니다.
         except MCPClientError as exc:
             if not allows_partial_result:
                 raise
@@ -123,7 +143,9 @@ async def database_retrieval(
             retrieval_errors.append(exc)
     if domain in ("sales", "both"):
         try:
-            evidence.extend(await mcp_client.sales_query(question))
+            evidence.extend(await mcp_client.sales_query(question, user_context=user_context))
+        except MCPNoResultError:
+            pass  # 조회 결과 0건은 실패가 아니라 정상적인 빈 결과입니다.
         except MCPClientError as exc:
             if not allows_partial_result:
                 raise
@@ -156,9 +178,21 @@ async def answer_synthesis(
     route = state.get("route", "GENERAL")
     evidence = state.get("evidence", [])
     evidence_status = state.get("evidence_status", "SUPPORTED")
+    query_labels = state.get("query_labels", [])
+
+    # 실시간성이 중요한 질문(예: "오늘 기준 금리는?")인데 근거가 전혀 없으면,
+    # LLM이 오래된 학습 데이터로 추측 답변을 만들지 않도록 호출 자체를 건너뜁니다.
+    if route == "GENERAL" and "FRESHNESS_SENSITIVE" in query_labels and not evidence:
+        state["answer"] = (
+            "이 질문은 실시간성이 중요한 정보라 정확한 답변을 드리기 어렵습니다. "
+            "최신 출처를 직접 확인해 주세요."
+        )
+        state["sources"] = []
+        state["tables"] = []
+        return state
 
     if route != "GENERAL" and evidence_status == "INSUFFICIENT":
-        state["answer"] = "관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+        state["answer"] = "사내 자료에서 관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
         state["sources"] = []
         state["tables"] = []
         return state
@@ -169,7 +203,8 @@ async def answer_synthesis(
         state["tables"] = []
         return state
 
-    answer = await complete(ANSWER_PROMPT, evidence, llm)
+    question = state.get("question", "")
+    answer = await complete(ANSWER_PROMPT, evidence, question, llm)
     if evidence_status == "PARTIALLY_SUPPORTED":
         answer += "\n\n(일부 근거에 조회 오류가 있어, 확인된 부분만 반영한 답변입니다.)"
 

@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.integration.chat_fakes import build_fake_application, database_success, document_success
+from tests.auth_helpers import login
 
 
 @pytest.mark.integration
@@ -17,8 +18,8 @@ from tests.integration.chat_fakes import build_fake_application, database_succes
         (
             "휴가 규정 알려줘",
             {"status": "success", "domain": "document", "message": None, "data": [], "sources": [], "metadata": {}},
-            404,
-            "NO_RESULT",
+            200,
+            None,
             "search_documents",
         ),
         (
@@ -61,16 +62,21 @@ def test_graph_mcp_errors_use_http_contract(
     application, port, llm = build_fake_application(responses)
 
     with TestClient(application) as client:
+        login(client)
         result = client.post("/api/chat", json={"question": question})
 
     assert result.status_code == expected_status
-    assert result.json()["error_code"] == expected_code
-    assert [call.tool_name for call in port.calls] == [expected_tool]
+    if expected_code is None:
+        assert result.json()["evidence_status"] == "INSUFFICIENT"
+    else:
+        assert result.json()["error_code"] == expected_code
+    expected_calls = [expected_tool, expected_tool] if expected_code is None else [expected_tool]
+    assert [call.tool_name for call in port.calls] == expected_calls
     assert llm.calls == []
 
 
 @pytest.mark.integration
-def test_insufficient_evidence_retries_once_then_returns_422() -> None:
+def test_insufficient_evidence_retries_once_then_returns_safe_response() -> None:
     """저품질 evidence를 정상 답변으로 가장하지 않고 제한된 보강 후 종료한다."""
     low_quality_document = {
         "status": "success",
@@ -89,9 +95,11 @@ def test_insufficient_evidence_retries_once_then_returns_422() -> None:
     )
 
     with TestClient(application) as client:
+        login(client)
         response = client.post("/api/chat", json={"question": "휴가 규정 알려줘"})
 
-    assert response.status_code == 422
-    assert response.json()["error_code"] == "EVIDENCE_INSUFFICIENT"
+    assert response.status_code == 200
+    assert response.json()["evidence_status"] == "INSUFFICIENT"
+    assert response.json()["sources"] == []
     assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
     assert llm.calls == []
