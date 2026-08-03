@@ -1,6 +1,6 @@
 # Project Progress
 
-> Last updated: 2026-08-03 02:20 KST
+> Last updated: 2026-08-03 (purchase 세션) KST
 > Source logs: `docs/progress/<role>/YYYY-MM-DD.md`
 
 ## Current Verified State
@@ -13,6 +13,7 @@
 - 로그인·세션 기반 RBAC가 Chat API와 MCP 데이터 도구 경계에 적용됐으며, 관리자 실제 브라우저 로그인·새로고침 세션 복원·로그아웃 UI 전환을 확인했다.
 - `skn_3rd` 환경 전체 테스트는 134 passed, 2 skipped이며 `git diff --check`를 통과했다. 상세 기록은 `docs/progress/integration/2026-08-03.md` Session 2에 있다.
 - Sales `query_sales`는 뷰 5개, 조회 전용 계정, SQL 가드와 EXPLAIN 사전검증으로 강화됐고 실제 OpenAI·MySQL opt-in 테스트를 포함한 33개 검증을 통과했다.
+- Purchase `query_purchase`는 DB·계정이 아예 없던 상태에서 시작해 ETL 재작성·실적재(25/50/123/32/32건, 멱등성 확인)·뷰 5개·조회 전용 계정·스키마 리소스·프롬프트를 sales와 동등하게 완성했고, 실제 OpenAI·MySQL opt-in 테스트 33건과 브라우저 수동 확인(finance 정상 응답, hr FORBIDDEN)을 통과했다. 이전에 "DB 계정 권한 문제"로 알려졌던 P0-3의 근본 원인이 실은 DB 부재였음이 밝혀졌다.
 
 ## Area Status
 
@@ -21,7 +22,7 @@
 | Backend | Partially verified | 로그인·세션·RBAC를 Chat API와 MCP 데이터 도구 경계에 적용하고 권한별 캐시 분리를 검증했다. | `docs/progress/integration/2026-08-03.md` Session 2 | 운영 계정 DB·Redis·원격 MCP를 함께 연결한 opt-in E2E가 남아 있다. |
 | RAG | Partially verified | 문서 DB 등록·로컬 검색·대표 실제 API 흐름이 검증됐다. | `docs/progress/integration/2026-08-02.md` Session 3 | 라벨된 질의셋으로 최소 점수와 top-k 품질을 평가해야 한다. |
 | Sales | Partially verified | `query_sales`에 뷰 화이트리스트, SQL 가드, EXPLAIN 사전검증과 1회 재시도를 적용했고 실제 OpenAI·MySQL opt-in 계약 테스트를 통과했다. | `docs/progress/sales/2026-08-02.md` | 원격 MCP transport와 채팅 차트 응답 계약의 end-to-end 검증이 남아 있다. |
-| Purchase | Needs verification | 기존 fake 기반 Text2SQL 및 SQL guard 검증만 완료됐다. | `docs/progress/integration/2026-08-02.md` Sessions 1–2 | 실제 purchase DB 계약 테스트가 필요하다. |
+| Purchase | Verified | `query_purchase`를 sales와 동등한 3중 방어(뷰·조회 전용 계정·SQL 가드) + 시맨틱 레이어 + EXPLAIN 자기수정 구조로 완성했다. DB·ETL·뷰·계정을 전부 새로 만들고 실제 데이터로 적재·검증했다. | `docs/progress/purchase/2026-08-03.md` | `docs/team_share/04_chart_spec.md`(sales와 공유) 통합 담당 구현 대기, `server.py` envelope 확장 요청 대기. |
 | Integration | In progress | 실제 브라우저에서 관리자 로그인 후 UI 전환·세션 복원·로그아웃을 확인하고 전체 테스트를 재검증했다. | `docs/progress/integration/2026-08-03.md` Session 2 | 독립 프로세스/원격 MCP·Redis 및 운영 계정 저장소 E2E가 남아 있다. |
 
 ## Active Work
@@ -29,8 +30,7 @@
 - [ ] `[rag/integration]` 라벨된 사내 문서 질의셋으로 문서 최소 점수 `0.12`와 top-k의 recall/precision을 측정한다.
 - [ ] `[integration]` 원격 Document MCP transport와 독립 프로세스 E2E를 실행한다.
 - [ ] `[integration]` Redis 및 문서 version/freshness 기반 캐시 무효화를 검증한다.
-- [ ] `[purchase]` 실제 DB opt-in 계약 테스트를 실행하고 결과를 영역 로그에 기록한다.
-- [ ] `[backend/integration]` Sales가 제공하는 `chart_hint`·`metadata`를 보존하는 Data MCP envelope와 채팅 그래프 렌더링을 통합·검증한다.
+- [ ] `[backend/integration]` Sales/Purchase가 제공하는 `chart_hint`·`metadata`를 보존하는 Data MCP envelope와 채팅 그래프 렌더링을 통합·검증한다.
 - [ ] `[backend/integration]` 운영 계정 저장소·원격 MCP·Redis를 연결한 opt-in RBAC E2E와 HTTPS 세션 쿠키 설정을 검증한다.
 
 ## Verified Milestones
@@ -41,6 +41,7 @@
 - [x] 2026-08-03 로그인 UI·HttpOnly 세션·역할 기반 접근 제어를 적용하고, 실제 브라우저의 관리자 메인 화면 전환 문제를 수정했다.
 - [x] 2026-08-03 `skn_3rd` 환경에서 전체 pytest 134 passed, 2 skipped 및 `git diff --check` 통과를 확인했다.
 - [x] 2026-08-02 Sales Text2SQL을 뷰 기반 조회와 SQL 가드로 강화하고, 실제 OpenAI·MySQL opt-in 테스트 33건을 통과했다.
+- [x] 2026-08-03 Purchase DB·ETL·뷰·조회 전용 계정을 처음부터 새로 만들고, `query_purchase` Text2SQL을 sales 수준으로 완성해 실제 OpenAI·MySQL opt-in 테스트 33건 + 브라우저 RBAC 확인을 통과했다.
 
 ## Key Decisions
 
@@ -52,6 +53,8 @@
 | 2026-08-03 | 권한은 UI가 아닌 Chat API와 MCP 데이터 도구 양쪽에서 검증한다. | UI 경로 우회나 직접 MCP 호출에도 역할 범위를 보존한다. | 운영 저장소·원격 MCP를 포함한 E2E가 후속으로 필요하다. | `integration/2026-08-03.md` Session 2 |
 | 2026-08-03 | 로그인 오버레이의 `hidden` 상태를 CSS에서 명시적으로 `display: none` 처리한다. | 레이아웃의 `display: grid`가 기본 숨김 동작을 덮어쓰는 실제 UI 장애를 방지한다. | 다른 오버레이에도 hidden 스타일 충돌 여부를 검토한다. | `integration/2026-08-03.md` Session 2 |
 | 2026-08-02 | Sales Text2SQL은 원본 테이블 대신 의미 기반 뷰와 화이트리스트로 조회한다. | 도메인 컬럼·집계 정의를 일관되게 유지하고 임의 테이블 접근을 방지한다. | 원격 MCP 환경에서도 동일한 envelope와 권한 경계를 검증한다. | `docs/progress/sales/2026-08-02.md` |
+| 2026-08-03 | Purchase 구매액은 Cancelled 상태만 제외한다(Approved 포함). | purchase에는 sales의 Draft에 해당하는 상태가 없고, Approved도 승인된 확정 구매로 본다(사용자 결정). | 취소 외 상태 해석이 바뀌면 뷰 정의를 다시 검토해야 한다. | `docs/progress/purchase/2026-08-03.md` |
+| 2026-08-03 | Purchase는 EXPLAIN 전용 계정으로 공용 admin(JangGGo) 대신 도메인 전용 ETL 계정(PURCHASE_DB_*)을 쓴다. | JangGGo에는 purchase.* 권한이 없어(도메인별 계정 분리 설계) EXPLAIN이 Access denied로 실패했다. | sales와 계정 모델이 다르므로 향후 다른 도메인 추가 시 이 차이를 먼저 확인해야 한다. | `docs/progress/purchase/2026-08-03.md` |
 
 ## Blockers and Open Questions
 
@@ -67,18 +70,22 @@
   - 영향: 현재 인증·권한 검증은 결정적 메모리 저장소와 mock 기반 계약 테스트, 로컬 브라우저 흐름까지 확인됐다.
   - 필요 조치: 운영 계정 DB, HTTPS 세션 쿠키, 원격 MCP·Redis를 연결한 opt-in E2E를 실행한다.
 
-- **[Severity: Medium] [Sales/Integration] 차트와 도메인 metadata의 API 계약 통합 미완료**
-  - 영향: Sales 조회의 안전한 집계 결과는 준비됐지만 `chart_hint`·`metadata`와 그래프 렌더링이 최종 Chat API 계약까지 전달되는지 검증되지 않았다.
+- **[Severity: Medium] [Sales/Purchase/Integration] 차트와 도메인 metadata의 API 계약 통합 미완료**
+  - 영향: Sales·Purchase 조회의 안전한 집계 결과는 준비됐지만 `chart_hint`·`metadata`와 그래프 렌더링이 최종 Chat API 계약까지 전달되는지 검증되지 않았다.
   - 필요 조치: `docs/team_share/03_cross_team_requests.md`, `docs/team_share/04_chart_spec.md`에 맞춰 Data MCP envelope와 UI를 통합하고 회귀 테스트를 추가한다.
+
+- **[Severity: Low] [Purchase] `scripts/Create purchase views.py`가 옛 스키마를 전제로 함**
+  - 영향: 실수로 재실행하면 새 5테이블 스키마와 컬럼이 안 맞는 뷰가 생성돼 조회가 깨질 수 있다.
+  - 필요 조치: 스크립트 삭제 또는 상단에 "사용 중단" 주석 추가, 팀 공지.
 
 ## Next Steps
 
 1. **[P0] [RAG/Integration] 라벨된 문서 질의셋으로 검색 품질과 문서 최소 점수를 검증한다.**
 2. **[P0] [Integration] 원격 Document MCP와 Redis를 포함한 운영형 E2E를 실행한다.**
-3. **[P1] [Purchase] 실제 DB opt-in 계약 테스트를 수행한다.**
-4. **[P1] [Backend/Integration] Sales chart metadata와 채팅 그래프 계약을 통합·검증한다.**
-5. **[P1] [RAG] 원문 문서 변경 시 등록 스크립트와 대표 RAG API 검증을 함께 수행한다.**
-6. **[P1] [Backend/Integration] 운영 환경에서 계정 시드 비밀값과 `AUTH_SECRET_KEY`를 비밀 관리 수단으로 제공하고 RBAC E2E를 수행한다.**
+3. **[P1] [Backend/Integration] Sales/Purchase chart metadata와 채팅 그래프 계약을 통합·검증한다.**
+4. **[P1] [RAG] 원문 문서 변경 시 등록 스크립트와 대표 RAG API 검증을 함께 수행한다.**
+5. **[P1] [Backend/Integration] 운영 환경에서 계정 시드 비밀값과 `AUTH_SECRET_KEY`를 비밀 관리 수단으로 제공하고 RBAC E2E를 수행한다.**
+6. **[P2] [Purchase] `scripts/Create purchase views.py` 사용 중단 처리 및 팀 공지.**
 
 ## Recent Source Logs
 
@@ -86,3 +93,4 @@
 - `docs/progress/integration/2026-08-02.md` Sessions 1–2 — API/Agent/MCP 경계 및 정본 MCP 경로 정리.
 - `docs/progress/integration/2026-08-03.md` Session 2 — 로그인·세션·RBAC 구현, 시드 설정 오류 원인, 실제 브라우저 UI 전환 수정 및 134 passed 검증.
 - `docs/progress/sales/2026-08-02.md` — Sales Text2SQL 안전성 강화와 실제 OpenAI·MySQL opt-in 계약 테스트 33 passed.
+- `docs/progress/purchase/2026-08-03.md` — Purchase DB·ETL·뷰·계정을 처음부터 구축하고 Text2SQL을 sales 수준으로 완성, 실제 OpenAI·MySQL opt-in 테스트 33 passed + 브라우저 RBAC 확인.
