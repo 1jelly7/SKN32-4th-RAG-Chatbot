@@ -23,6 +23,7 @@ class DocumentChunk(TypedDict):
     content: str
     score: float
     updated_at: str
+    page: int | None
 
 
 class IndexMetadata(TypedDict):

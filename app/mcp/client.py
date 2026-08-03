@@ -69,6 +69,9 @@ class InProcessMCPPort:
         if tool_name == "search_documents":
             from mcp_servers.document_tools.search import search_documents
 
+            from mcp_servers.document_tools.rag import get_last_index_version
+            from mcp_servers.document_tools.search import search_documents
+
             query = str(payload.get("query", ""))
             top_k = payload.get("top_k", 5)
             if not query.strip() or not isinstance(top_k, int) or top_k <= 0:
@@ -93,8 +96,11 @@ class InProcessMCPPort:
             return {
                 "status": "success", "domain": "document", "message": None,
                 "data": [{"content": item["content"], "score": item["score"]} for item in chunks],
-                "sources": [{"document_id": item["document_id"], "title": item["title"]} for item in chunks],
-                "metadata": {"result_count": len(chunks)},
+                "sources": [
+                    {"document_id": item["document_id"], "title": item["title"], "page": item.get("page")}
+                    for item in chunks
+                ],
+                "metadata": {"result_count": len(chunks), "index_version": get_last_index_version()},
             }
         raise ValueError(f"지원하지 않는 MCP Tool입니다: {tool_name}")
 

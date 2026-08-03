@@ -102,6 +102,7 @@ class FaissStore:
                     "content": chunk["content"],
                     "score": float(score),
                     "updated_at": metadata.get("updated_at", ""),
+                    "page": metadata.get("page"),
                 }
             )
         return results

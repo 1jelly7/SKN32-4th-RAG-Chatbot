@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     embedding_backend: str = "local"
     # local 백엔드를 쓸 때의 임베딩 벡터 차원입니다.
     local_embedding_dimension: int = 384
+    sbert_model_name: str = "jhgan/ko-sroberta-multitask"
 
     # Data MCP가 조회할 도메인별 DB 이름입니다. (읽기 계정/호스트는 mysql_read_*를 재사용)
     purchase_db_database: str = "purchase"

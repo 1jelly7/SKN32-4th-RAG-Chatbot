@@ -25,8 +25,14 @@ def route_question(question: str) -> Route:
     데이터 키워드를 결정적으로 판별한다. 두 요구가 함께 있으면 BOTH를 반환하며,
     키워드가 없는 질문은 GENERAL로 분류한다. 현재 구현은 LLM fallback을 호출하지 않는다.
     """
-    normalized = question.casefold()
-    document_terms = ("정책", "규정", "가이드", "매뉴얼", "문서", "지침", "절차", "휴가", "휴직", "취업규칙")
+    normalized = "".join(question.casefold().split())
+    document_terms = (
+        "정책", "규정", "가이드", "매뉴얼", "문서", "지침", "절차", "휴가", "휴직", "취업규칙",
+        # 아래는 실제 등록된 사내규정 10종의 제목에서 뽑은 단어들입니다.
+        # 원래 목록이 일반적인 단어("규정", "지침" 등) 위주라, 구체적인 명사로 질문하면
+        # (예: "법인카드", "회계") 하나도 안 걸려서 GENERAL로 잘못 분류되는 문제가 있었습니다.
+        "법인카드", "카드", "계약", "복지", "후생", "안전보건", "인사", "직원보수", "보수", "급여", "회계",
+    )
     database_terms = (
         "매출", "현황", "집계", "실적", "기간", "판매", "구매", "지출",
         "고객", "공급업체", "재고", "vip", "발주", "미수금", "미지급",
@@ -44,7 +50,7 @@ def route_question(question: str) -> Route:
 
 def route_data_domain(question: str) -> DataDomain:
     """DATABASE/BOTH 경로일 때 purchase(구매/지출)와 sales(판매) 도메인을 판별한다."""
-    normalized = question.casefold()
+    normalized = "".join(question.casefold().split())
     sales_terms = ("매출", "고객", "판매", "재고", "vip", "여신", "수주")
     purchase_terms = ("구매", "지출", "공급업체", "발주", "미지급", "벤더")
     if any(t in normalized for t in sales_terms) and not any(t in normalized for t in purchase_terms):
@@ -81,7 +87,13 @@ async def document_retrieval(
 
     question = state.get("question", "")
     try:
-        state["document_evidence"] = await mcp_client.document_search(question, top_k=4)
+        state["document_evidence"] = await mcp_client.document_search(question, top_k=10)
+        # 캐시 키가 실제 문서 인덱스 버전을 참조하도록, MCP metadata에서 뽑아 state에 저장합니다.
+        # (이전에는 이 필드가 항상 비어 있어 인덱스가 갱신돼도 캐시가 무효화되지 않았습니다)
+        if state["document_evidence"]:
+            index_version = state["document_evidence"][0].get("metadata", {}).get("index_version")
+            if index_version:
+                state["document_index_version"] = index_version
     except MCPClientError as exc:
         if state.get("route") != "BOTH":
             raise

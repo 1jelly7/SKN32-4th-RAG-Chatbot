@@ -23,7 +23,7 @@ EvidenceStatus = Literal[
 class EvidencePolicy:
     """근거 품질 평가에 주입하는 결정적 정책값이다."""
 
-    min_relevance: float = 0.5
+    min_relevance: float = 0.38
     min_confidence: float = 0.5
     required_metadata_keys: tuple[str, ...] = ()
     max_freshness_seconds: float | None = None

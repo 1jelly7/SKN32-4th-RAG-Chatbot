@@ -4,7 +4,11 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
+from app.logging import get_logger
+from mcp_servers.document_tools.rag import get_last_index_version
 from mcp_servers.document_tools.search import search_documents
+
+logger = get_logger(__name__)
 
 
 def create_server() -> Any:
@@ -38,9 +42,9 @@ def create_server() -> Any:
         try:
             chunks = await search_documents(query, top_k=top_k)
         except Exception as exc:  # noqa: BLE001 - 사용자에게는 일반화된 오류만 노출합니다.
-            # TODO(implementation): raw 예외 문자열을 metadata에 싣지 않고 서버 내부의
-            # 비밀정보 없는 구조화 로그로만 남긴다. 공개 envelope에는 INTERNAL_ERROR와
-            # 일반화된 message만 포함하는 회귀 테스트가 완료 조건이다.
+            # 원본 예외는 서버 내부 로그로만 남기고, 외부 응답에는 절대 포함하지 않습니다.
+            # (내부 file_path, DB 드라이버 메시지 등 민감정보가 노출될 수 있기 때문)
+            logger.error("document_search 내부 오류: %s", exc, exc_info=True)
             return {
                 "status": "error",
                 "domain": "document",
@@ -48,7 +52,7 @@ def create_server() -> Any:
                 "error_code": "INTERNAL_ERROR",
                 "data": [],
                 "sources": [],
-                "metadata": {"detail": str(exc)},
+                "metadata": {},
             }
 
         if not chunks:
@@ -68,9 +72,9 @@ def create_server() -> Any:
             "message": None,
             "data": [{"content": c["content"], "score": c["score"]} for c in chunks],
             "sources": [
-                {"document_id": c["document_id"], "title": c["title"]} for c in chunks
+                {"document_id": c["document_id"], "title": c["title"], "page": c.get("page")} for c in chunks
             ],
-            "metadata": {"result_count": len(chunks)},
+            "metadata": {"result_count": len(chunks), "index_version": get_last_index_version()},
         }
 
     return server
