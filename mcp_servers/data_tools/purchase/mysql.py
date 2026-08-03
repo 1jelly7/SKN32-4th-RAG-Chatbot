@@ -74,8 +74,8 @@ def _get_default_client() -> ReadOnlyMySQLClient:
         settings = get_settings()
         _default_client = ReadOnlyMySQLClient(
             host=settings.mysql_read_host,
-            user=settings.mysql_read_user,
-            password=settings.mysql_read_password,
+            user=settings.purchase_read_user or settings.mysql_read_user,
+            password=settings.purchase_read_password or settings.mysql_read_password,
             database=settings.purchase_db_database,
         )
     return _default_client

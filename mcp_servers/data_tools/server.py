@@ -51,20 +51,32 @@ async def _execute_query(
     generated_sql = result.get("generated_sql")
     if not isinstance(rows, list) or not isinstance(generated_sql, str):
         return _error_envelope(domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다.")
+    metadata = result.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
     if not rows:
-        return _error_envelope(domain, "NO_RESULT", "조회 가능한 결과가 없습니다.")
+        message = result.get("message") or metadata.get("message")
+        if not isinstance(message, str) or not message.strip():
+            message = "해당 조건의 데이터가 없습니다. 보유 기간과 조건을 확인해 다시 질문해 주세요."
+        response = _error_envelope(domain, "NO_RESULT", message)
+        response["metadata"] = metadata
+        return response
 
+    response_metadata = dict(metadata)
+    response_metadata.update(
+        {
+            "generated_sql": generated_sql,
+            "row_count": len(rows),
+            "elapsed_ms": result.get("elapsed_ms"),
+        }
+    )
     return {
         "status": "success",
         "domain": domain,
         "message": None,
         "data": rows,
         "sources": [],
-        "metadata": {
-            "generated_sql": generated_sql,
-            "row_count": len(rows),
-            "elapsed_ms": result.get("elapsed_ms"),
-        },
+        "metadata": response_metadata,
     }
 
 

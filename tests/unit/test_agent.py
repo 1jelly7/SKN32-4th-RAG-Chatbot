@@ -574,6 +574,44 @@ def test_build_tables_marks_chartable_when_label_and_value_present():
     assert tables[0]["chartable"] is True
     assert tables[0]["label_column"] == "customer"
     assert tables[0]["value_column"] == "revenue"
+    assert tables[0]["chart_type"] == "bar"
+
+
+def test_build_tables_accepts_integer_period_and_sixty_line_points():
+    from app.agent.nodes import _build_tables
+
+    rows = [{"order_year": 2020 + index, "order_count": index, "total_sales": index * 1000} for index in range(60)]
+    tables = _build_tables([{"type": "database", "domain": "sales", "generated_sql": "x", "rows": rows}])
+
+    assert tables[0]["label_column"] == "order_year"
+    assert tables[0]["value_column"] == "total_sales"
+    assert tables[0]["chart_type"] == "line"
+    assert tables[0]["chartable"] is True
+
+
+@pytest.mark.asyncio
+async def test_answer_synthesis_limits_database_rows_only_for_llm_prompt() -> None:
+    fake_llm = FakeLLMPort("요약 답변")
+    rows = [{"month": str(index), "total": index} for index in range(60)]
+    state: GraphState = {
+        "question": "월별 매출", "route": "DATABASE", "evidence_status": "SUPPORTED",
+        "evidence": [{"type": "database", "domain": "sales", "rows": rows, "generated_sql": "SELECT"}],
+    }
+
+    result = await answer_synthesis(state, fake_llm)
+
+    assert len(fake_llm.calls[0].context[0]["rows"]) == 50
+    assert len(result["tables"][0]["rows"]) == 60
+
+
+@pytest.mark.asyncio
+async def test_answer_synthesis_returns_data_tool_empty_result_message() -> None:
+    result = await answer_synthesis(
+        {"route": "DATABASE", "evidence_status": "INSUFFICIENT", "_no_result_messages": ["해당 조건의 데이터가 없습니다."]},
+        FakeLLMPort("unused"),
+    )
+
+    assert result["answer"] == "해당 조건의 데이터가 없습니다."
 
 
 def test_build_tables_prefers_last_numeric_column_as_value():

@@ -162,6 +162,34 @@ provider의 `INTERNAL_ERROR`와 별도로 Host 검증 실패로 처리하되 공
 -> 결과와 실행 metadata 반환
 ```
 
+### 성공 응답 metadata
+
+판매 Tool은 공통 `generated_sql`, `row_count`, `elapsed_ms`와 함께 도메인 metadata를
+그대로 반환한다. `views_used`, `data_coverage`, `retry_count`, `currency`, `truncated`,
+`chart_hint`를 포함하며, `chart_hint`는 `bar` 또는 `line`이다. 빈 결과는
+`NO_RESULT`와 원인·재질문 방법이 포함된 `message`를 반환한다.
+
+```json
+{
+  "status": "success",
+  "domain": "sales",
+  "message": null,
+  "data": [{"order_month": "2026-01", "total_sales": 1234.5}],
+  "sources": [],
+  "metadata": {
+    "generated_sql": "SELECT ...",
+    "row_count": 1,
+    "elapsed_ms": 12.3,
+    "views_used": ["v_sales_order"],
+    "data_coverage": {"min_order_date": "...", "max_order_date": "..."},
+    "retry_count": 0,
+    "currency": "JOD",
+    "truncated": false,
+    "chart_hint": "line"
+  }
+}
+```
+
 ## 라우팅 규칙과 BOTH 병합
 
 | 질문 유형 | 호출 Tool | 병합 방식 |

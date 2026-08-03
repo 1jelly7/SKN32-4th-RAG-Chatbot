@@ -16,6 +16,8 @@ from app.agent.state import DataDomain, GraphState, Route
 from app.mcp.client import MCPClient, MCPClientError, MCPNoResultError
 
 SENSITIVE_FIELD_PARTS = ("api_key", "password", "secret", "token", "file_path")
+CHART_VALUE_COLUMN_PARTS = ("revenue", "amount", "total", "sales")
+LLM_ROW_LIMIT = 50
 
 
 def route_question(question: str) -> Route:
@@ -134,8 +136,8 @@ async def database_retrieval(
     if domain in ("purchase", "both"):
         try:
             evidence.extend(await mcp_client.purchase_query(question, user_context=user_context))
-        except MCPNoResultError:
-            pass  # 조회 결과 0건은 실패가 아니라 정상적인 빈 결과입니다.
+        except MCPNoResultError as exc:
+            state.setdefault("_no_result_messages", []).append(str(exc))
         except MCPClientError as exc:
             if not allows_partial_result:
                 raise
@@ -144,8 +146,8 @@ async def database_retrieval(
     if domain in ("sales", "both"):
         try:
             evidence.extend(await mcp_client.sales_query(question, user_context=user_context))
-        except MCPNoResultError:
-            pass  # 조회 결과 0건은 실패가 아니라 정상적인 빈 결과입니다.
+        except MCPNoResultError as exc:
+            state.setdefault("_no_result_messages", []).append(str(exc))
         except MCPClientError as exc:
             if not allows_partial_result:
                 raise
@@ -192,7 +194,12 @@ async def answer_synthesis(
         return state
 
     if route != "GENERAL" and evidence_status == "INSUFFICIENT":
-        state["answer"] = "사내 자료에서 관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+        no_result_messages = state.get("_no_result_messages", [])
+        state["answer"] = (
+            no_result_messages[0]
+            if no_result_messages
+            else "사내 자료에서 관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+        )
         state["sources"] = []
         state["tables"] = []
         return state
@@ -204,7 +211,7 @@ async def answer_synthesis(
         return state
 
     question = state.get("question", "")
-    answer = await complete(ANSWER_PROMPT, evidence, question, llm)
+    answer = await complete(ANSWER_PROMPT, _limit_evidence_for_answer(evidence), question, llm)
     if evidence_status == "PARTIALLY_SUPPORTED":
         answer += "\n\n(일부 근거에 조회 오류가 있어, 확인된 부분만 반영한 답변입니다.)"
 
@@ -223,6 +230,17 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
+def _limit_evidence_for_answer(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """화면 표는 보존하면서 답변 프롬프트의 DB 행만 제한한다."""
+    limited: list[dict[str, Any]] = []
+    for item in evidence:
+        copied_item = dict(item)
+        if copied_item.get("type") == "database" and isinstance(copied_item.get("rows"), list):
+            copied_item["rows"] = copied_item["rows"][:LLM_ROW_LIMIT]
+        limited.append(copied_item)
+    return limited
+
+
 def _build_tables(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """database 타입 근거를 프론트엔드가 표/차트로 그릴 수 있는 형태로 변환합니다."""
     tables: list[dict[str, Any]] = []
@@ -238,22 +256,30 @@ def _build_tables(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
         columns = [column for column in rows[0] if not _is_sensitive_field_name(column)]
         row_values = [[_json_safe(row.get(col)) for col in columns] for row in rows]
 
-        # 라벨 컬럼(문자열)과 값 컬럼(숫자)을 하나씩 찾아, 막대그래프를 그릴 수 있는지 판단합니다.
-        # 값 컬럼은 "마지막" 숫자 컬럼을 우선합니다 - SELECT에서 보통
-        # "라벨, 건수, 합계" 순으로 나열되는 경우가 많아, 합계처럼 더 의미 있는
-        # 값이 뒤쪽 컬럼에 오는 경우가 많기 때문입니다.
+        # 기간 컬럼은 정수여도 라벨로 허용하고, 금액·합계 계열 값을 우선 선택합니다.
         label_column = None
         value_column = None
         if rows:
             sample = rows[0]
             for col in columns:
                 val = sample.get(col)
-                if label_column is None and isinstance(val, str):
+                is_period = col.casefold().endswith(("_month", "_year", "_quarter"))
+                if label_column is None and (isinstance(val, str) or is_period):
                     label_column = col
                 if isinstance(val, (int, float, Decimal)) and not isinstance(val, bool):
-                    value_column = col  # 계속 덮어써서 마지막 숫자 컬럼이 남게 합니다.
+                    if any(part in col.casefold() for part in CHART_VALUE_COLUMN_PARTS):
+                        value_column = col
+                    elif value_column is None:
+                        value_column = col
+                    elif not any(part in value_column.casefold() for part in CHART_VALUE_COLUMN_PARTS):
+                        value_column = col
 
-        chartable = label_column is not None and value_column is not None and len(rows) <= 30
+        is_time_series = label_column is not None and label_column.casefold().endswith(
+            ("_month", "_year", "_quarter")
+        )
+        chart_type = _metadata_value(item, "chart_hint") or ("line" if is_time_series else "bar")
+        max_chart_rows = 60 if chart_type == "line" else 12
+        chartable = label_column is not None and value_column is not None and len(rows) <= max_chart_rows
 
         tables.append(
             {
@@ -262,6 +288,7 @@ def _build_tables(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "columns": columns,
                 "rows": row_values,
                 "chartable": chartable,
+                "chart_type": chart_type if chartable else None,
                 "label_column": label_column,
                 "value_column": value_column,
                 "table_name": _metadata_value(item, "table_name", "view_name"),
