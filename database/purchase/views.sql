@@ -1,5 +1,7 @@
--- purchase_db 조회용 View 5개 (챗봇 Text2SQL이 조회하는 대상)
--- 실행: mysql -u JangGGo -p1234 -h 127.0.0.1 purchase_db < database/purchase/views.sql
+-- purchase DB 조회용 View 5개 (챗봇 Text2SQL이 조회하는 대상)
+-- 실행 (bash): mysql -u purchase -p1234 -h 127.0.0.1 purchase < database/purchase/views.sql
+-- 실행 (PowerShell): Get-Content database/purchase/views.sql | mysql -u purchase -p1234 -h 127.0.0.1 purchase
+-- DB 이름은 purchase_db가 아니라 purchase다(etl/purchase/config.py 기준).
 
 CREATE OR REPLACE VIEW v_purchase_order AS
 SELECT PO_ID, company_id, PO_Number, PO_Date, Vendor_ID,
