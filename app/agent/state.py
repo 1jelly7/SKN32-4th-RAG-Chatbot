@@ -37,6 +37,8 @@ class GraphState(TypedDict, total=False):
     session_id: str | None
     request_id: str
     route: Route
+    routing_method: str
+    document_search_query: str
     data_domain: DataDomain
     cache_key: str
     cached: bool
@@ -58,3 +60,6 @@ class GraphState(TypedDict, total=False):
     sources: list[dict[str, Any]]
     tables: list[dict[str, Any]]
     answer: str
+    timings_ms: dict[str, float]
+    retrieval_diagnostics: dict[str, object]
+    query_labels: list[str]

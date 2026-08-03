@@ -1,5 +1,6 @@
 """문서 DB 경로 조회→파일 로드→RAG 순서를 고정하는 Document MCP 서비스."""
 
+import asyncio
 import logging
 
 import pymysql
@@ -37,5 +38,5 @@ async def search_documents(
             extra={"event": "document_path_lookup_failed"},
         )
         raise DocumentSearchUnavailableError("Document path lookup is unavailable.") from exc
-    documents = load_document_files(path_records)
+    documents = await asyncio.to_thread(load_document_files, path_records)
     return await retrieve(query, documents, top_k)

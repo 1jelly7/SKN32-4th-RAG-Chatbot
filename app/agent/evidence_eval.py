@@ -10,6 +10,7 @@ import json
 from typing import Any
 
 from app.agent.state import EvidencePolicy, GraphState
+from app.logging.performance import record_timing, start_timer
 
 DEFAULT_EVIDENCE_POLICY = EvidencePolicy()
 
@@ -24,6 +25,7 @@ async def evidence_eval(
     명시적 반증이나 동일 fact의 상이한 값에만 사용한다. 계약 문서가 허용하는 1회
     보완 검색은 현재 이 함수에 구현돼 있지 않다.
     """
+    started_ns = start_timer()
     document_evidence = state.get("document_evidence") or []
     database_evidence = state.get("database_evidence") or []
     all_evidence = document_evidence + database_evidence
@@ -33,6 +35,7 @@ async def evidence_eval(
         state["evidence"] = []
         state["evidence_status"] = "SUPPORTED"
         state["evidence_reason"] = "일반 질문은 외부 근거가 필요하지 않습니다."
+        record_timing(state.setdefault("timings_ms", {}), "evidence_eval", started_ns)
         return state
 
     active_policy = policy or state.get("evidence_policy", DEFAULT_EVIDENCE_POLICY)
@@ -58,6 +61,7 @@ async def evidence_eval(
     else:
         state["evidence_status"] = "SUPPORTED"
         state["evidence_reason"] = "수집된 근거가 현재 품질 정책을 충족합니다."
+    record_timing(state.setdefault("timings_ms", {}), "evidence_eval", started_ns)
     return state
 
 

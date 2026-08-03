@@ -45,6 +45,11 @@ def invalidate_store_cache() -> None:
     _store_cache.clear()
 
 
+def warmup_retrieval() -> None:
+    """첫 검색 전에 정식 FAISS 인덱스를 읽기 전용으로 메모리에 적재한다."""
+    _load_persistent_store()
+
+
 async def retrieve(
     query: str,
     documents: list[RawDocument],
@@ -76,10 +81,20 @@ async def retrieve(
     query_vector = embed([query])[0]
 
     # documents로 필터링하면 후보가 줄어들 수 있으므로 넉넉히 더 가져옵니다.
-    candidates = store.search(query_vector, top_k * 5)
-
-    filtered = [c for c in candidates if c["document_id"] in allowed_document_ids]
-    results = filtered[:top_k]
+    vector_candidates = store.search(query_vector, top_k * 5)
+    lexical_candidates = store.search_text(query, top_k * 5)
+    merged_candidates: dict[str, DocumentChunk] = {}
+    for candidate in vector_candidates + lexical_candidates:
+        if candidate["document_id"] not in allowed_document_ids:
+            continue
+        current = merged_candidates.get(candidate["chunk_id"])
+        if current is None or candidate["score"] > current["score"]:
+            merged_candidates[candidate["chunk_id"]] = candidate
+    results = sorted(
+        merged_candidates.values(),
+        key=lambda candidate: candidate["score"],
+        reverse=True,
+    )[:top_k]
 
     # index_version을 각 chunk에 실어서, 상위(search.py/server.py)가 MCP envelope의
     # metadata에 담을 수 있게 합니다. 응답 스키마(DocumentChunk)에는 없는 필드라

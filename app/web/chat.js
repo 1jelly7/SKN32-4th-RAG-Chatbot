@@ -110,8 +110,15 @@ function renderSources(sources, route) {
 
 function renderTable(table) {
   const headerHtml = table.columns.map(column => `<th>${escapeHtml(column)}</th>`).join('');
-  const rowsHtml = table.rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('');
+  const rowsHtml = table.rows.map(row => `<tr>${row.map((cell, index) => `<td${typeof cell === 'number' ? ' class="numeric"' : ''}>${escapeHtml(formatCell(cell, table.domain, table.columns[index]))}</td>`).join('')}</tr>`).join('');
   return `<div class="table-wrap"><div class="table-meta">${escapeHtml(table.domain)} 데이터 · ${table.rows.length}건</div><table class="data-table"><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table><details class="sql-detail"><summary>생성된 SQL 보기</summary><pre>${escapeHtml(table.sql)}</pre></details></div>`;
+}
+
+function formatCell(value, domain, column) {
+  if (typeof value !== 'number') return value;
+  const formatted = value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const isCurrencyColumn = /revenue|amount|sales|total|spend|price|cost/i.test(column || '');
+  return domain === 'sales' && isCurrencyColumn ? `${formatted} JOD` : formatted;
 }
 
 function renderChartPlaceholder(table) {
@@ -126,7 +133,9 @@ function drawChart(canvasId, table) {
   const valueIndex = table.columns.indexOf(table.value_column);
   const canvas = document.getElementById(canvasId);
   if (!canvas || typeof Chart === 'undefined' || labelIndex < 0 || valueIndex < 0) return;
-  new Chart(canvas, { type: 'bar', data: { labels: table.rows.map(row => String(row[labelIndex])), datasets: [{ label: table.value_column, data: table.rows.map(row => Number(row[valueIndex]) || 0), backgroundColor: '#2563eb', borderRadius: 5 }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { autoSkip: false, maxRotation: 50 } }, y: { beginAtZero: true } } } });
+  const chartType = table.chart_type || 'bar';
+  const currencySuffix = table.domain === 'sales' ? ' JOD' : '';
+  new Chart(canvas, { type: chartType, data: { labels: table.rows.map(row => String(row[labelIndex])), datasets: [{ label: table.value_column, data: table.rows.map(row => Number(row[valueIndex]) || 0), backgroundColor: '#2563eb', borderColor: '#2563eb', borderRadius: chartType === 'bar' ? 5 : 0, tension: chartType === 'line' ? 0.25 : 0, fill: false }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: context => `${context.dataset.label}: ${Number(context.parsed.y).toLocaleString()}${currencySuffix}` } } }, scales: { x: { ticks: { autoSkip: false, maxRotation: 50 } }, y: { beginAtZero: true, ticks: { callback: value => Number(value).toLocaleString() } } } } });
 }
 
 function scrollToLatest() {

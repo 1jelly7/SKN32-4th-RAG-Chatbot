@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import uuid
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.agent.state import GraphState
 from app.auth.dependencies import CurrentUser
+from app.cache.key import make_cache_key
 from app.cache.service import lookup_cached_answer, write_answer_cache
+from app.logging.performance import record_timing, start_timer
 from app.mcp.client import (
     MCPMalformedPayloadError,
     MCPEvidenceInsufficientError,
@@ -53,19 +54,30 @@ async def chat(request: ChatRequest, http_request: Request, user: CurrentUser) -
     캐시 hit는 즉시 반환해 Graph와 그 하위 LLM/MCP 호출을 모두 차단한다. miss에서만
     request별 state를 만들며, Tool 오류의 내부 메시지는 응답에 전달하지 않는다.
     """
-    request_id = str(uuid.uuid4())
+    request_id = http_request.state.request_id
+    timings = http_request.state.stage_timings
     state: GraphState = {
         "question": request.question,
         "session_id": request.session_id,
         "request_id": request_id,
         "conversation_context_hash": _conversation_context_hash(request.session_id),
         "user_context": user,
+        "timings_ms": timings,
     }
     state.update(http_request.app.state.cache_key_context)
     cache_repository = http_request.app.state.dependencies.cache
 
+    cache_started_ns = start_timer()
     cached_value = lookup_cached_answer(state, cache_repository)
+    record_timing(timings, "cache_lookup", cache_started_ns)
     if cached_value is not None:
+        logger.info(
+            "request_id=%s cache=hit role=%s timings_ms=%s",
+            request_id,
+            user.get("role"),
+            timings,
+            extra={"event": "chat_performance"},
+        )
         # 동일 freshness 입력의 hit는 외부 provider 호출을 금지하는 완전한 단락점이다.
         return ChatResponse(
             answer=cached_value.get("answer", ""),
@@ -78,6 +90,7 @@ async def chat(request: ChatRequest, http_request: Request, user: CurrentUser) -
         )
 
     try:
+        graph_started_ns = start_timer()
         result_state = await http_request.app.state.graph.ainvoke(state)
     except MCPNoResultError:
         return _tool_error_response(404, "NO_RESULT", "조회 가능한 결과가 없습니다.")
@@ -97,6 +110,9 @@ async def chat(request: ChatRequest, http_request: Request, user: CurrentUser) -
         return _tool_error_response(502, "INTERNAL_ERROR", "조회 서비스 응답을 처리할 수 없습니다.")
     except Exception:  # noqa: BLE001 - 경계 밖 오류의 상세를 노출하지 않는다.
         return _tool_error_response(500, "INTERNAL_ERROR", "답변 생성 중 오류가 발생했습니다.")
+    finally:
+        if "graph_started_ns" in locals():
+            record_timing(timings, "graph_total", graph_started_ns)
 
     logger.info(
         "chat_completed request_id=%s route=%s labels=%s evidence_status=%s retrieval=%s",
@@ -107,7 +123,21 @@ async def chat(request: ChatRequest, http_request: Request, user: CurrentUser) -
         result_state.get("retrieval_diagnostics", {}),
     )
 
+    index_version = result_state.get("document_index_version")
+    if index_version and index_version != http_request.app.state.cache_key_context.get("document_index_version"):
+        http_request.app.state.cache_key_context["document_index_version"] = index_version
+        result_state["cache_key"] = make_cache_key(result_state)
+    cache_write_started_ns = start_timer()
     write_answer_cache(result_state, cache_repository)
+    record_timing(timings, "cache_write", cache_write_started_ns)
+    logger.info(
+        "request_id=%s cache=miss role=%s route=%s timings_ms=%s",
+        request_id,
+        user.get("role"),
+        result_state.get("route"),
+        timings,
+        extra={"event": "chat_performance"},
+    )
     return ChatResponse(
         answer=result_state.get("answer", ""),
         sources=[Source(**source) for source in result_state.get("sources", [])],

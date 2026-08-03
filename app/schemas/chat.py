@@ -36,6 +36,7 @@ class TableData(BaseModel):
     rows: list[list[Any]]
     # 프론트엔드가 차트를 그릴 때 참고할 힌트입니다. (숫자 컬럼이 있을 때만 채워짐)
     chartable: bool = False
+    chart_type: Literal["bar", "line"] | None = None
     label_column: str | None = None
     value_column: str | None = None
     table_name: str | None = None
@@ -76,6 +77,7 @@ class ErrorResponse(BaseModel):
         "FORBIDDEN",
         "INVALID_INPUT",
         "NO_RESULT",
+        "FORBIDDEN",
         "QUERY_ERROR",
         "EVIDENCE_INSUFFICIENT",
         "TIMEOUT",
