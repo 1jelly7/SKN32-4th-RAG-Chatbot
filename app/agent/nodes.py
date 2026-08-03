@@ -13,6 +13,7 @@ from typing import Any
 
 from app.agent.llm import AsyncLLMPort, complete
 from app.agent.prompts import ANSWER_PROMPT
+from app.agent.query_expansion import expand_document_queries
 from app.agent.state import DataDomain, GraphState, Route
 from app.logging.performance import record_timing, start_timer
 from app.mcp.client import MCPClient, MCPClientError, MCPNoResultError
@@ -35,11 +36,16 @@ def route_question(question: str) -> Route:
         # 아래는 실제 등록된 사내규정 10종의 제목에서 뽑은 단어들입니다.
         # 원래 목록이 일반적인 단어("규정", "지침" 등) 위주라, 구체적인 명사로 질문하면
         # (예: "법인카드", "회계") 하나도 안 걸려서 GENERAL로 잘못 분류되는 문제가 있었습니다.
-        "법인카드", "카드", "계약", "복지", "후생", "안전보건", "인사", "직원보수", "보수", "급여", "회계",
+        "법인카드", "회사카드", "업무용카드", "카드", "계약", "복지", "후생", "안전보건", "인사", "직원보수", "보수", "급여", "회계",
+        "겸직", "겸업", "부업", "이중취업", "영리활동", "외부활동", "사외활동", "취업제한",
+        "부당한업무지시", "부당지시", "업무지시거부", "직장내괴롭힘", "고충처리", "부가급여", "부가급부",
+        "복리후생", "급여외혜택", "인사규정", "복무규정", "근로조건", "수입금", "수납", "징수",
+        "세입", "금전수납", "납부금관리", "특별안전보건교육", "안전보건교육", "산업안전교육", "법정의무교육",
     )
     database_terms = (
         "매출", "현황", "집계", "실적", "기간", "판매", "구매", "지출",
-        "고객", "공급업체", "재고", "vip", "발주", "미수금", "미지급",
+        "고객", "공급업체", "거래처", "협력사", "벤더", "매입현황", "구매실적", "지급현황", "비용집계",
+        "구매액", "재고", "vip", "발주", "미수금", "미지급",
     )
     has_document = any(term in normalized for term in document_terms)
     has_database = any(term in normalized for term in database_terms)
@@ -56,7 +62,9 @@ def route_data_domain(question: str) -> DataDomain:
     """DATABASE/BOTH 경로일 때 purchase(구매/지출)와 sales(판매) 도메인을 판별한다."""
     normalized = "".join(question.casefold().split())
     sales_terms = ("매출", "고객", "판매", "재고", "vip", "여신", "수주")
-    purchase_terms = ("구매", "지출", "공급업체", "발주", "미지급", "벤더")
+    purchase_terms = (
+        "구매", "지출", "공급업체", "거래처", "협력사", "발주", "미지급", "벤더", "매입", "지급", "비용집계",
+    )
     if any(t in normalized for t in sales_terms) and not any(t in normalized for t in purchase_terms):
         return "sales"
     if any(t in normalized for t in purchase_terms) and not any(t in normalized for t in sales_terms):
@@ -92,9 +100,68 @@ async def document_retrieval(
         return state
 
     question = state.get("question", "")
+    search_queries = expand_document_queries(question)
     started_ns = start_timer()
     try:
-        state["document_evidence"] = await mcp_client.document_search(question, top_k=10, user_context=state.get("user_context"))
+        results: list[object] = []
+        if search_queries:
+            first_results = await asyncio.gather(
+                mcp_client.document_search(
+                    search_queries[0],
+                    top_k=10,
+                    user_context=state.get("user_context"),
+                ),
+                return_exceptions=True,
+            )
+            results.extend(first_results)
+
+        direct_evidence = [
+            item
+            for result in results
+            if isinstance(result, list)
+            for item in result
+        ]
+        policy = state.get("evidence_policy")
+        min_document_score = float(getattr(policy, "min_document_score", 0.38))
+        direct_score = max((float(item.get("score", 0.0)) for item in direct_evidence), default=0.0)
+        direct_search_failed = any(
+            isinstance(result, MCPClientError) and not isinstance(result, MCPNoResultError)
+            for result in results
+        )
+        should_expand = (
+            len(search_queries) > 1
+            and direct_score < min_document_score
+            and not direct_search_failed
+        )
+        if should_expand:
+            expanded_results = await asyncio.gather(
+                *(
+                    mcp_client.document_search(query, top_k=10, user_context=state.get("user_context"))
+                    for query in search_queries[1:]
+                ),
+                return_exceptions=True,
+            )
+            results.extend(expanded_results)
+
+        evidence: list[dict[str, Any]] = []
+        retrieval_errors: list[MCPClientError] = []
+        for result in results:
+            if isinstance(result, MCPNoResultError):
+                continue
+            if isinstance(result, MCPClientError):
+                retrieval_errors.append(result)
+                continue
+            if isinstance(result, BaseException):
+                raise result
+            evidence.extend(result)
+
+        state["document_evidence"] = _merge_document_evidence(evidence, limit=10)
+        if retrieval_errors:
+            if not state["document_evidence"] and state.get("route") != "BOTH":
+                raise retrieval_errors[0]
+            state.setdefault("_errors", []).append("document_retrieval 일부 실패")
+            state.setdefault("_mcp_errors", []).extend(retrieval_errors)
+
         # 캐시 키가 실제 문서 인덱스 버전을 참조하도록, MCP metadata에서 뽑아 state에 저장합니다.
         # (이전에는 이 필드가 항상 비어 있어 인덱스가 갱신돼도 캐시가 무효화되지 않았습니다)
         if state["document_evidence"]:
@@ -115,6 +182,21 @@ async def document_retrieval(
     finally:
         record_timing(state.setdefault("timings_ms", {}), "document_mcp", started_ns)
     return state
+
+
+def _merge_document_evidence(
+    evidence: list[dict[str, Any]],
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """확장 검색에서 중복된 문서 청크를 제거하고 관련도 순으로 제한한다."""
+    merged: dict[tuple[object, object, object], dict[str, Any]] = {}
+    for item in evidence:
+        key = (item.get("document_id"), item.get("page"), item.get("content"))
+        current = merged.get(key)
+        if current is None or float(item.get("score", 0.0)) > float(current.get("score", 0.0)):
+            merged[key] = item
+    return sorted(merged.values(), key=lambda item: float(item.get("score", 0.0)), reverse=True)[:limit]
 
 
 async def database_retrieval(
@@ -214,8 +296,9 @@ async def answer_synthesis(
     # LLM이 오래된 학습 데이터로 추측 답변을 만들지 않도록 호출 자체를 건너뜁니다.
     if route == "GENERAL" and "FRESHNESS_SENSITIVE" in query_labels and not evidence:
         state["answer"] = (
-            "이 질문은 실시간성이 중요한 정보라 정확한 답변을 드리기 어렵습니다. "
-            "최신 출처를 직접 확인해 주세요."
+            "**요약**\n- 최신 근거가 없어 정확한 답변을 제공할 수 없습니다.\n\n"
+            "**세부 내용**\n- 실시간성이 중요한 정보이므로 최신 출처 확인이 필요합니다.\n\n"
+            "**근거 문서**\n- 확인된 최신 근거 없음"
         )
         state["sources"] = []
         state["tables"] = []
@@ -223,17 +306,26 @@ async def answer_synthesis(
 
     if route != "GENERAL" and evidence_status == "INSUFFICIENT":
         no_result_messages = state.get("_no_result_messages", [])
-        state["answer"] = (
+        detail = (
             no_result_messages[0]
             if no_result_messages
-            else "사내 자료에서 관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+            else "관련 키워드와 동의어로 검색했지만 답을 뒷받침할 충분한 근거를 확인하지 못했습니다."
+        )
+        state["answer"] = (
+            "**요약**\n- 확인된 사내 근거가 부족해 답변할 수 없습니다.\n\n"
+            f"**세부 내용**\n- {detail}\n\n"
+            "**근거 문서**\n- 확인된 근거 없음"
         )
         state["sources"] = []
         state["tables"] = []
         return state
 
     if route != "GENERAL" and evidence_status == "CONTRADICTED":
-        state["answer"] = "서로 모순되는 근거가 확인되어 신뢰할 수 있는 단일 답변을 만들 수 없습니다. 담당자 확인이 필요합니다."
+        state["answer"] = (
+            "**요약**\n- 서로 모순되는 근거가 확인되어 단일 답변을 제시할 수 없습니다.\n\n"
+            "**세부 내용**\n- 적용 문서 또는 담당 부서의 확인이 필요합니다.\n\n"
+            "**근거 문서**\n- 상충하는 근거가 있어 확정하지 않음"
+        )
         state["sources"] = []
         state["tables"] = []
         return state

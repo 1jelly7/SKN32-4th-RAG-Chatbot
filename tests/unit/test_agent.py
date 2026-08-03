@@ -42,9 +42,13 @@ def _tool_success(
     [
         ("휴가 규정이 어떻게 되나요", "DOCUMENT"),
         ("법인카드 지침 알려줘", "DOCUMENT"),
+        ("사외 활동 허용 범위를 알려줘", "DOCUMENT"),
+        ("특별안전보건교육 대상은 누구야", "DOCUMENT"),
         ("고객별 매출 순위 알려줘", "DATABASE"),
         ("공급업체별 지출 총액이 얼마야", "DATABASE"),
+        ("협력사별 지급 현황을 알려줘", "DATABASE"),
         ("법인카드 지침이랑 매출 현황 같이 알려줘", "BOTH"),
+        ("법인카드 지침과 공급업체별 구매 지출을 알려줘", "BOTH"),
         ("오늘 날씨 어때", "GENERAL"),
     ],
 )
@@ -78,6 +82,7 @@ def test_route_data_domain_uses_both_for_purchase_and_sales_terms() -> None:
         ("고객별 매출 순위", "DATABASE", "sales"),
         ("구매와 판매 현황을 알려줘", "DATABASE", "both"),
         ("휴가 규정과 구매 및 판매 현황을 알려줘", "BOTH", "both"),
+        ("법인카드 지침과 공급업체별 구매 지출을 알려줘", "BOTH", "purchase"),
     ],
 )
 async def test_router_preserves_route_and_data_domain(
@@ -611,7 +616,9 @@ async def test_answer_synthesis_returns_data_tool_empty_result_message() -> None
         FakeLLMPort("unused"),
     )
 
-    assert result["answer"] == "해당 조건의 데이터가 없습니다."
+    assert "해당 조건의 데이터가 없습니다." in result["answer"]
+    assert "**요약**" in result["answer"]
+    assert "**근거 문서**" in result["answer"]
 
 
 def test_build_tables_prefers_last_numeric_column_as_value():
@@ -684,7 +691,8 @@ async def test_general_answer_receives_question_without_retrieval_context() -> N
     assert result["answer"] == "사과는 일반적으로 빨간색입니다."
     assert fake_llm.calls[0].question == "사과는 무슨 색인가?"
     assert fake_llm.calls[0].prompt == ANSWER_PROMPT
-    assert "not the only source of knowledge" in ANSWER_PROMPT
+    assert "일반적인 법률·노무 상식이나 추측으로 보충하지 마세요" in ANSWER_PROMPT
+    assert all(heading in ANSWER_PROMPT for heading in ("**요약**", "**세부 내용**", "**근거 문서**"))
 
 
 @pytest.mark.asyncio
@@ -721,5 +729,5 @@ async def test_empty_internal_search_is_not_reported_as_mcp_failure() -> None:
     )
 
     assert result["evidence_status"] == "INSUFFICIENT"
-    assert "사내 자료" in result["answer"]
-    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
+    assert "사내 근거" in result["answer"]
+    assert [call.tool_name for call in port.calls] == ["search_documents"] * 4

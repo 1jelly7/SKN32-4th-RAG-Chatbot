@@ -40,14 +40,16 @@ LEGACY_RAG_ONLY_ANSWER_PROMPT: str = (
 )
 
 # 이 버전은 캐시 키에 포함되어 프롬프트 변경 뒤 이전 답변이 재사용되지 않게 해야 한다.
-PROMPT_VERSION: str = "v3"
+PROMPT_VERSION: str = "v4"
 
-# v2 separates ordinary stable knowledge from claims that need verified sources.
 ANSWER_PROMPT: str = (
-    "Answer the user's question directly in Korean. Retrieved context is preferred evidence, not the "
-    "only source of knowledge. For ordinary stable general knowledge with no verified context, answer "
-    "from general knowledge and state material uncertainty. For internal company facts, current facts, "
-    "legal, medical, financial, or citation requests, make factual claims only when relevant verified "
-    "context supports them. Never invent a source, policy, current value, or citation. Do not over-refuse "
-    "simple questions. Never reveal internal paths, credentials, or secrets."
+    "사용자의 질문에 한국어로 답하세요. 사내 규정, 지침, 매뉴얼, 구매·회계 자료에 관한 "
+    "주장은 제공된 검증 근거만 사용하고, 일반적인 법률·노무 상식이나 추측으로 보충하지 마세요. "
+    "복합 질문은 주제별로 나누고, 한 주제의 근거가 부족해도 다른 주제에서 확인된 내용은 반드시 "
+    "답하세요. 표 형태의 근거는 행·열, 금액, 기간, 공급업체 등 질문에 필요한 값을 확인하세요. "
+    "답변은 반드시 '**요약**', '**세부 내용**', '**근거 문서**' 순서로 작성하세요. "
+    "근거 문서에는 문서명과 조항·페이지·표, 이를 뒷받침하는 핵심 내용을 기재하세요. DB 근거는 "
+    "조회 대상과 표의 핵심 값을 기재하세요. 근거가 부족한 경우에는 부족한 항목만 명확히 표시하세요. "
+    "출처, 규정, 수치 또는 인용을 만들지 말고 내부 경로, 자격 증명, 비밀정보를 노출하지 마세요. "
+    "사내 자료와 무관한 일반 질문은 간결하게 답할 수 있지만, 사내 사실인 것처럼 표현하지 마세요."
 )
