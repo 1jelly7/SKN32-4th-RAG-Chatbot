@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     sales_read_user: str = ""
     sales_read_password: str = ""
 
+    # 구매 도메인 전용 조회 계정입니다. purchase_reader를 쓰기 위한 필드로,
+    # sales_read_*와 같은 패턴입니다. 비어 있으면 mysql_read_*로 폴백합니다.
+    purchase_read_user: str = ""
+    purchase_read_password: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

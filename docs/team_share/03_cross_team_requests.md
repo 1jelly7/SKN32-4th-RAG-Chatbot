@@ -20,11 +20,14 @@
 > 결과에 맞춰 **재작성**, 신규 항목 P1-10(envelope 확장)·P1-11(차트 UI, `04_chart_spec.md`
 > 링크)을 추가했다. "보류"로 남겨뒀던 그래프 기능은 이번에 사용자가 범위에 다시 넣었다.
 
+> 2026-08-03 추가: 실제 채팅 화면 테스트 중 새 P0 1건(purchase DB 접근 거부로 정상
+> 질문이 502가 됨)과 4-1절 차트 버그 2건(04_chart_spec.md)을 발견해 추가했다.
+
 | 우선순위 | 의미 | 항목 수 |
 |---|---|---|
 | **완료** | 이번 세션에 확인·구현됨 | 4건 |
-| **P0** | 지금 당장 막혀있음 — 우리가 구현을 시작해도 실행 자체가 안 됨 | 0건 (전부 완료로 이동) |
-| **P1** | 이번 기능(표·SQL·그래프 노출)이 제대로 동작하려면 필요 | 9건 |
+| **P0** | 지금 당장 막혀있음 — 정상적인 질문도 실행이 안 됨 | 1건 |
+| **P1** | 이번 기능(표·SQL·그래프 노출)이 제대로 동작하려면 필요 | 9건 + 차트 버그 2건(04번 문서) |
 | **P2** | 정합성·정리 차원, 급하지 않음 | 2건 |
 
 ---
@@ -60,6 +63,34 @@
   있어서 연속 질문에도 이전 표·차트가 사라지지 않는다. 각 `<canvas>` id가
   `chart-${Date.now()}-${chartCounter}`로 매번 고유해서 `.destroy()` 호출도 불필요하다
   (`04_chart_spec.md` 0절 참고).
+
+---
+
+## P0 — 지금 당장 막혀있는 것
+
+### P0-3. (신규, 2026-08-03) purchase 조회가 DB 접근 거부로 항상 실패함
+
+- **대상팀**: 통합(backend) 또는 rag_purchase 담당 (계정 발급은 purchase가, `mysql.py`
+  연결 코드는 통합 담당 검토가 필요할 수 있음)
+- **근거**: 채팅 화면에서 "공급업체별 발주액 알려줘"(정상적인 purchase 범위 질문, 도메인
+  밖 아님)를 물으면 화면에 "서버 오류: 조회 서비스에서 오류가 발생했습니다."(502)가 뜬다.
+  `query_purchase()`를 직접 호출해 재현한 실제 예외:
+  ```
+  OperationalError: (1044, "Access denied for user 'JangGGo'@'%' to database 'purchase'")
+  ```
+  [mcp_servers/data_tools/purchase/mysql.py](../../mcp_servers/data_tools/purchase/mysql.py)의
+  `_get_default_client()`가 `settings.mysql_read_user`(공용 admin 계정 `JangGGo`)를 그대로
+  쓰는데, 이 계정은 `purchase` DB에 대한 조회 권한이 없다. 도메인 라우팅(`route_data_domain`)
+  자체는 정상 동작한다 — 문제는 순수하게 DB 계정 연결이다.
+- **요청 내용**: sales가 `sales_reader` 패턴을 위해 만들어둔 것과 동일하게,
+  `app/core/config.py`에 이미 `purchase_read_user`/`purchase_read_password` 필드를
+  추가해뒀다(비어 있으면 `mysql_read_*`로 폴백). `mcp_servers/data_tools/purchase/mysql.py`의
+  `_get_default_client()`가 `settings.purchase_read_user or settings.mysql_read_user`를
+  쓰도록 한 줄 수정하고, `.env`의 `PURCHASE_READ_USER=purchase_reader`/
+  `PURCHASE_READ_PASSWORD`(이미 존재)에 맞는 DB 권한(`purchase.*`에 `SELECT`)이 실제로
+  부여돼 있는지 확인이 필요하다.
+- **완료 기준**: "공급업체별 발주액 알려줘" 같은 정상 purchase 질문이 502 없이 결과를
+  반환함.
 
 ---
 
@@ -220,8 +251,6 @@
 
 ---
 
----
-
 ## 요약 표 (복붙용)
 
 | 코드 | 제목 | 대상팀 | 우선순위 | 상태 |
@@ -230,6 +259,7 @@
 | 구 P0-2 | .env 읽기 전용 DB 계정 추가 (sales 쪽) | 통합 | — | 완료(sales), purchase는 별도 진행 중 |
 | 구 P1-1 | XSS 이스케이프 처리 | 통합 | — | 완료(이미 반영돼 있었음) |
 | 구 P1-2 | innerHTML += 버그 수정 | 통합 | — | 완료(이미 반영돼 있었음) |
+| P0-3 | purchase DB 접근 거부(502) — `purchase_read_user` 연결 필요 (신규) | 통합/purchase | P0 | 미착수 |
 | P1-3 | 표 가로 스크롤 CSS | 통합 | P1 | 미착수 |
 | P1-4 | 0건 안내 문구가 최종 답변에 반영되는지 확인 | 통합 | P1 | 미착수 |
 | P1-5 | 표·답변 숫자 표기 통일 | 통합 | P1 | 미착수 |
@@ -239,6 +269,8 @@
 | P1-9 | mcp_servers/data/ 중복 정리 | 통합 | P1 | 미착수 |
 | P1-10 | server.py envelope가 거절 사유·안내 문장 전달하도록 확장 (신규) | 통합 | P1 | 미착수 |
 | P1-11 | 채팅 그래프(막대+꺾은선) UI 구현, 스펙은 [04_chart_spec.md](04_chart_spec.md) (신규) | 통합 | P1 | 스펙 전달 완료, 구현 대기 |
+| 04-A | 60행 시계열 질문에서 차트 안 그려짐 (`nodes.py` chartable 상한 30) (신규) | 통합 | P1 | [04_chart_spec.md](04_chart_spec.md) 4-1절, 미착수 |
+| 04-B | 차트 크기가 저절로 진동함 (Chart.js `maintainAspectRatio`/CSS 고정 높이 필요) (신규) | 통합 | P1 | [04_chart_spec.md](04_chart_spec.md) 4-1절, 미착수 |
 | P2-1 | MCP 조회 로그 파일 정책 추가 | 통합 | P2 | 미착수 |
 | P2-2 | finance_db_database 필드명 정리 | 통합 | P2 | 미착수 |
 
