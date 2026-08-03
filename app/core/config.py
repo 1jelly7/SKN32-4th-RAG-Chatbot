@@ -40,6 +40,18 @@ class Settings(BaseSettings):
     purchase_db_database: str = "purchase"
     sales_db_database: str = "sales"
 
+    # 판매 도메인 전용 조회 계정입니다. sales.* 뷰에만 SELECT 권한을 가진
+    # sales_reader를 쓰기 위한 필드로, 비어 있으면 mysql_read_*로 폴백합니다
+    # (팀원이 아직 .env를 안 바꿔도 기존 계정으로 계속 동작하게 하기 위함).
+    # mysql_read_*는 purchase도 같이 쓰므로 여기서 바꾸지 않습니다.
+    sales_read_user: str = ""
+    sales_read_password: str = ""
+
+    # 구매 도메인 전용 조회 계정입니다. purchase_reader를 쓰기 위한 필드로,
+    # sales_read_*와 같은 패턴입니다. 비어 있으면 mysql_read_*로 폴백합니다.
+    purchase_read_user: str = ""
+    purchase_read_password: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

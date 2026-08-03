@@ -1,35 +1,119 @@
-"""판매 자연어 질의를 Text2SQL과 읽기 전용 조회로 연결하는 도메인 서비스."""
+"""판매 자연어 질의를 Text2SQL과 읽기 전용 조회로 연결하는 도메인 서비스.
+
+처리 순서: 입력 검증 -> LLM SQL 생성 -> 정적 가드 -> EXPLAIN 사전검증 ->
+(실패 시 오류를 보여주고 1회만 재작성) -> 실제 실행 -> 결과 정리.
+답할 수 없는 질문은 SQL을 만들지 않고 빈 결과를 반환해 server.py가
+NO_RESULT로 처리하게 한다(친절한 사유 메시지는 공통 envelope 확장 후 과제,
+docs/team_share/03_cross_team_requests.md 참고).
+"""
 
 from __future__ import annotations
 
 import time
 from typing import Any
 
-from mcp_servers.data_tools.sales.mysql import query_readonly
+from mcp_servers.data_tools.sales.mysql import explain_readonly, query_readonly
 from mcp_servers.data_tools.sales.schema import get_schema_resource
-from mcp_servers.data_tools.sales.text2sql import generate_sql
+from mcp_servers.data_tools.sales.sql_guard import ALLOWED_VIEWS, referenced_tables, validate_and_normalize
+from mcp_servers.data_tools.sales.text2sql import generate_sql, generate_sql_with_error
+
+MAX_QUESTION_LENGTH = 500
+ROW_LIMIT = 200
+
+
+def _empty_evidence(generated_sql: str, elapsed_ms: float, retry_count: int) -> list[dict[str, Any]]:
+    """rows=[]로 반환해 server.py가 NO_RESULT 오류로 처리하게 한다."""
+    schema = get_schema_resource()
+    return [
+        {
+            "type": "database",
+            "domain": "sales",
+            "generated_sql": generated_sql,
+            "row_count": 0,
+            "rows": [],
+            "elapsed_ms": elapsed_ms,
+            "metadata": {
+                "views_used": [],
+                "data_coverage": schema["data_coverage"],
+                "retry_count": retry_count,
+                "currency": schema["currency"],
+                "truncated": False,
+                "chart_hint": None,
+            },
+        }
+    ]
+
+
+def _chart_hint(rows: list[dict[str, Any]]) -> str | None:
+    """결과 첫 행의 컬럼명으로 막대/꺾은선 중 어느 쪽이 어울릴지 가볍게 추정한다.
+
+    지금은 server.py가 이 값을 그대로 버리지만, docs/team_share/04_chart_spec.md의
+    UI 구현이 따라올 때 한 줄만 병합하면 쓸 수 있도록 미리 계산해둔다.
+    """
+    if not rows:
+        return None
+    first_keys = rows[0].keys()
+    if any(k.endswith(("_month", "_quarter", "_year")) for k in first_keys):
+        return "line"
+    return "bar"
 
 
 async def query_sales(question: str) -> list[dict[str, Any]]:
-    """판매 질문을 Text2SQL → read-only 조회 순서로 처리한다.
+    """판매 질문을 Text2SQL -> 가드 -> EXPLAIN -> read-only 조회 순서로 처리한다.
 
     서버가 공통 envelope로 감싸기 전의 내부 database evidence를 반환한다. 판매 질문에만
     사용하며 쓰기 SQL, ETL, 구매 테이블 조회를 수행하지 않는다.
     """
-    schema = get_schema_resource()
-    sql = await generate_sql(question, schema)
+    started_at = time.monotonic()
+    question = question.strip()
 
-    started_at = time.time()
-    rows = query_readonly(sql)
-    elapsed_ms = round((time.time() - started_at) * 1000, 1)
+    if not question or len(question) > MAX_QUESTION_LENGTH:
+        return _empty_evidence("", round((time.monotonic() - started_at) * 1000, 1), retry_count=0)
+
+    schema = get_schema_resource()
+
+    sql = await generate_sql(question, schema)
+    if not sql:
+        # LLM이 뷰·지표로 답할 수 없다고 판단했다(NO_SQL) — 범위 밖/모호한 질문.
+        elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
+        return _empty_evidence("", elapsed_ms, retry_count=0)
+
+    retry_count = 0
+    try:
+        normalized = validate_and_normalize(sql)
+        explain_readonly(normalized)
+    except Exception as exc:  # noqa: BLE001 - 가드/EXPLAIN 실패는 재작성 신호일 뿐이다.
+        retry_count = 1
+        retried_sql = await generate_sql_with_error(question, schema, sql, str(exc))
+        if not retried_sql:
+            elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
+            return _empty_evidence(sql, elapsed_ms, retry_count=retry_count)
+        # 재시도 결과도 검증한다. 여기서 또 실패하면 예외를 그대로 올려
+        # server.py가 QUERY_ERROR로 변환하게 한다(재시도는 최대 1회로 제한).
+        sql = retried_sql
+        normalized = validate_and_normalize(sql)
+        explain_readonly(normalized)
+
+    rows = query_readonly(normalized)
+    elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
+
+    views_used = sorted(referenced_tables(normalized) & ALLOWED_VIEWS)
 
     return [
         {
             "type": "database",
             "domain": "sales",
-            "generated_sql": sql,
+            "generated_sql": normalized,
             "row_count": len(rows),
             "rows": rows,
             "elapsed_ms": elapsed_ms,
+            "metadata": {
+                "views_used": views_used,
+                "data_coverage": schema["data_coverage"],
+                "retry_count": retry_count,
+                "currency": schema["currency"],
+                "truncated": len(rows) >= ROW_LIMIT,
+                "chart_hint": _chart_hint(rows),
+            },
         }
     ]
