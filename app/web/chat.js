@@ -18,15 +18,26 @@ const logoutButton = document.querySelector('#logout-button');
 
 let chartCounter = 0;
 let auth_state_revision = 0;
+let activeRequestController = null;
 
+function clearApplicationState() {
+  activeRequestController?.abort();
+  activeRequestController = null;
+  messages.replaceChildren();
+  input.value = '';
+  autoResize();
+  sendButton.disabled = false;
+  currentUser.textContent = '';
+  renderSources([], null);
+  setSourcesOpen(false);
+}
 function showLogin() { loginScreen.hidden = false; document.querySelector('.app-shell').setAttribute('aria-hidden', 'true'); document.querySelector('#username').focus(); }
 function showApplication(user) { loginScreen.hidden = true; document.querySelector('.app-shell').removeAttribute('aria-hidden'); currentUser.textContent = `${user.display_name} (${user.role})`; }
 async function restoreSession() { const response = await fetch('/api/auth/me'); if (response.ok) showApplication(await response.json()); else showLogin(); }
-loginForm.addEventListener('submit', async event => { event.preventDefault(); loginError.textContent = ''; loginButton.disabled = true; try { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: document.querySelector('#username').value, password: document.querySelector('#password').value }) }); if (!response.ok) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.'); showApplication((await response.json()).user); document.querySelector('#password').value = ''; } catch (error) { loginError.textContent = error.message; } finally { loginButton.disabled = false; } });
-logoutButton.addEventListener('click', async () => { await fetch('/api/auth/logout', { method: 'POST' }); showLogin(); });
+loginForm.addEventListener('submit', async event => { event.preventDefault(); loginError.textContent = ''; loginButton.disabled = true; try { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: document.querySelector('#username').value, password: document.querySelector('#password').value }) }); if (!response.ok) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.'); clearApplicationState(); showApplication((await response.json()).user); document.querySelector('#password').value = ''; } catch (error) { loginError.textContent = error.message; } finally { loginButton.disabled = false; } });
+logoutButton.addEventListener('click', async () => { auth_state_revision += 1; clearApplicationState(); try { await fetch('/api/auth/logout', { method: 'POST' }); } finally { showLogin(); } });
 
 loginForm.addEventListener('submit', () => { auth_state_revision += 1; }, true);
-logoutButton.addEventListener('click', () => { auth_state_revision += 1; }, true);
 
 restoreSession = async function restore_session_with_revision() {
   const revision = auth_state_revision;
@@ -153,14 +164,17 @@ form.addEventListener('submit', async event => {
   input.value = '';
   autoResize();
   sendButton.disabled = true;
+  const requestRevision = auth_state_revision;
+  activeRequestController = new AbortController();
 
   const loadingId = `loading-${Date.now()}`;
   messages.insertAdjacentHTML('beforeend', `<div class="msg-row assistant loading-row" id="${loadingId}"><span class="avatar" aria-hidden="true">${robotIcon}</span><div class="msg"><span class="msg-label">사내 지식 챗봇</span><span class="loading">답변을 준비하고 있습니다</span></div></div>`);
   scrollToLatest();
 
   try {
-    const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+    const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: activeRequestController.signal, body: JSON.stringify({ question }) });
     const data = await response.json();
+    if (requestRevision !== auth_state_revision) return;
     if (response.status === 401) { showLogin(); throw new Error('세션이 만료되었습니다. 다시 로그인하세요.'); }
     if (!response.ok) throw new Error(data.detail || `요청에 실패했습니다 (${response.status})`);
 
@@ -176,8 +190,11 @@ form.addEventListener('submit', async event => {
     chartPlaceholders.forEach(({ id, table }) => drawChart(id, table));
     renderSources(data.sources, data.route);
   } catch (error) {
+    if (requestRevision !== auth_state_revision || error.name === 'AbortError') return;
     document.getElementById(loadingId).outerHTML = `<div class="msg-row assistant"><span class="avatar" aria-hidden="true">!</span><div class="msg error"><span class="msg-label">요청 오류</span><div class="answer">${escapeHtml(userFriendlyError(error))}</div></div></div>`;
   } finally {
+    if (requestRevision !== auth_state_revision) return;
+    activeRequestController = null;
     sendButton.disabled = false;
     scrollToLatest();
     input.focus();

@@ -7,12 +7,13 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 from typing import Any
 
 
 def issue_session(payload: dict[str, Any], secret: str, expires_minutes: int) -> str:
     """서버가 재검증할 수 있는 만료 시각 포함 HMAC 세션 토큰을 발급한다."""
-    data = {**payload, "exp": int(time.time()) + expires_minutes * 60}
+    data = {**payload, "sid": str(uuid.uuid4()), "exp": int(time.time()) + expires_minutes * 60}
     encoded = _encode(data)
     signature = hmac.new(secret.encode("utf-8"), encoded.encode("ascii"), hashlib.sha256).digest()
     return f"{encoded}.{_b64(signature)}"

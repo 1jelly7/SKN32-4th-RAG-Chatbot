@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from app.agent.llm import AsyncLLMPort
 from app.auth.repository import SettingsAccountRepository
+from app.auth.session_store import SessionStore
 from app.auth.service import AuthenticationService
 from app.cache.repository import CacheRepository, MemoryCache
 from app.logging import configure_logging
@@ -28,4 +29,5 @@ class AppDependencies:
     auth_secret: str | None = None
     auth_expire_minutes: int | None = None
     auth_cookie_secure: bool | None = None
+    session_store: SessionStore = field(default_factory=SessionStore)
     configure_logging: Callable[[], None] = configure_logging

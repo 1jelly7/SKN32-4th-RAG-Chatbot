@@ -40,7 +40,7 @@ class GraphState(TypedDict, total=False):
     data_domain: DataDomain
     cache_key: str
     cached: bool
-    conversation_context_hash: str
+    conversation_context_hash: str | None
     document_index_version: str
     database_freshness_bucket: str
     prompt_version: str

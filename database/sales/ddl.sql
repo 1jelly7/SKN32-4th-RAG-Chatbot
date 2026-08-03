@@ -3,6 +3,7 @@
 -- 담당: 판매(rag_sales) 도메인. 이 파일은 database/sales/ 소유이며
 -- 통합/타 도메인 코드가 직접 수정하지 않는다.
 
+USE sales;
 
 CREATE TABLE IF NOT EXISTS `customers` (
     `customer_id` BIGINT,

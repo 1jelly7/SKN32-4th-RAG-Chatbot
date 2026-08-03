@@ -19,3 +19,12 @@ def test_hidden_login_screen_is_not_overridden_by_grid_layout() -> None:
     """hidden 속성이 로그인 오버레이를 실제로 화면에서 제거해야 한다."""
     stylesheet = WEB_STYLE.read_text(encoding="utf-8")
     assert ".login-screen[hidden] { display: none; }" in stylesheet
+
+
+def test_logout_clears_messages_and_aborts_pending_chat() -> None:
+    """이전 사용자의 DOM과 늦게 도착한 응답이 다음 로그인에 남지 않아야 한다."""
+    script = WEB_SCRIPT.read_text(encoding="utf-8")
+    assert "function clearApplicationState()" in script
+    assert "messages.replaceChildren();" in script
+    assert "activeRequestController?.abort();" in script
+    assert "signal: activeRequestController.signal" in script

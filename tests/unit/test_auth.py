@@ -12,6 +12,17 @@ from app.core.dependencies import AppDependencies
 from app.main import create_app
 
 
+class _MarkerGraph:
+    """사용자별 cache miss 여부를 검증하는 비동기 그래프 대역."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def ainvoke(self, state: dict[str, object]) -> dict[str, object]:
+        self.calls += 1
+        return {**state, "answer": f"private-{state['user_context']['username']}", "sources": [], "tables": [], "route": "GENERAL"}
+
+
 def _client() -> TestClient:
     repository = MemoryAccountRepository([
         Account(1, "admin", hash_password("admin-password"), "Admin", "admin", True),
@@ -40,8 +51,10 @@ def test_login_me_logout_and_protected_chat() -> None:
         assert "password_hash" not in login.text
         assert login.cookies.get("chatbot_session")
         assert client.get("/api/auth/me").json()["allowed_databases"] == allowed_databases("admin")
+        previous_token = login.cookies.get("chatbot_session")
         assert client.post("/api/auth/logout").status_code == 204
         assert client.get("/api/auth/me").status_code == 401
+        assert client.get("/api/auth/me", cookies={"chatbot_session": previous_token}).status_code == 401
 
 
 def test_inactive_account_cannot_log_in() -> None:
@@ -52,3 +65,25 @@ def test_inactive_account_cannot_log_in() -> None:
 def test_role_database_policy() -> None:
     assert allowed_databases("hr") == ["account_db", "document_db"]
     assert allowed_databases("finance") == ["document_db", "purchase_db", "sales_db"]
+
+
+def test_answer_cache_is_not_shared_between_authenticated_users() -> None:
+    """동일 역할·질문이라도 다른 사용자의 private answer cache를 재사용하지 않는다."""
+    repository = MemoryAccountRepository([
+        Account(1, "admin", hash_password("admin-password"), "Admin", "admin", True),
+        Account(5, "admin-two", hash_password("admin-two-password"), "Admin Two", "admin", True),
+    ])
+    graph = _MarkerGraph()
+    app = create_app(AppDependencies(cache=MemoryCache(), auth_service=AuthenticationService(repository), auth_secret="test-secret-that-is-long-enough-for-signing"))
+    app.state.graph = graph
+
+    with TestClient(app) as first_client, TestClient(app) as second_client:
+        assert first_client.post("/api/auth/login", json={"username": "admin", "password": "admin-password"}).status_code == 200
+        first = first_client.post("/api/chat", json={"question": "same-question"})
+        assert second_client.post("/api/auth/login", json={"username": "admin-two", "password": "admin-two-password"}).status_code == 200
+        second = second_client.post("/api/chat", json={"question": "same-question"})
+
+    assert first.json()["cached"] is False
+    assert second.json()["cached"] is False
+    assert second.json()["answer"] == "private-admin-two"
+    assert graph.calls == 2
