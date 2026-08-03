@@ -5,7 +5,7 @@ ERP 구매 분석 데이터를 MySQL 데이터베이스에 적재하는 메인 E
 구성:
 - 데이터 소스: data/raw/source_data/ERP_Purchasing_Analytics.xlsx
 - 대상 데이터베이스: MySQL purchase 데이터베이스
-- 사용자: JangGGo
+- 사용자: purchase
 """
 
 from pathlib import Path
@@ -15,9 +15,9 @@ from etl.purchase.load import initialize_client, create_tables, _client
 # 데이터베이스 연결 정보
 DB_CONFIG = {
     'host': 'localhost',  # MySQL 호스트 (로컬 개발용)
-    'user': 'JangGGo',  # 사용자명
+    'user': 'purchase',  # 사용자명
     'password': '1234',  # 여기에 비밀번호를 입력하세요
-    'database': 'purchase_db',  # 데이터베이스명
+    'database': 'purchase',  # 데이터베이스명
 }
 
 # 처리할 시트 및 테이블 매핑 (외래키 의존성 순서)

@@ -52,17 +52,6 @@ async def query_purchase(question: str) -> list[dict[str, Any]]:
     schema = get_schema_resource()
 
     sql = await generate_sql(question, schema)
-    started_at = time.monotonic()
-    rows = query_readonly(sql)
-    return [{
-        "type": "database",
-        "domain": "purchase",
-        "generated_sql": sql,
-        "row_count": len(rows),
-        "rows": rows,
-        "elapsed_ms": round((time.monotonic() - started_at) * 1000, 1),
-
-    }]
     if not sql:
         # LLM이 뷰·용어집으로 답할 수 없다고 판단했다(NO_SQL) — 범위 밖/모호한 질문.
         elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)

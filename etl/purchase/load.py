@@ -154,7 +154,7 @@ def create_tables() -> None:
     connection = _client._get_connection()
     cursor = connection.cursor()
 
-    # 테이블 생성 SQL (fresh_purchase_db_setup.sql과 일치)
+    # 테이블 생성 SQL (fresh_purchase_setup.sql과 일치)
     create_statements = [
         # 1. vendors 테이블 (먼저 생성 - 외래키 의존성이 없음)
         """

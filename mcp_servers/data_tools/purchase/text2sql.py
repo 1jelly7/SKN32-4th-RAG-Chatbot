@@ -14,9 +14,6 @@ from app.core.config import get_settings
 from mcp_servers.data_tools.purchase.schema import SchemaResource
 
 SYSTEM_PROMPT = (
-    "당신은 구매 데이터베이스 전용 SQL 생성기입니다. "
-    "제공된 뷰(VIEW)와 컬럼만 사용해 MySQL 단일 SELECT 문을 생성하세요. "
-    "쓰기 문장과 DDL을 생성하지 말고 LIMIT을 포함하세요. SQL만 출력하세요."
     "당신은 구매 데이터베이스 전용 SQL 생성기입니다. 아래 규칙을 반드시 지키세요.\n"
     "1. 제공된 뷰(view)만 사용하세요. 원본 테이블 이름을 쓰면 권한 오류가 납니다.\n"
     "2. 단일 SELECT 문 하나만 생성하세요. 세미콜론으로 여러 문장을 잇지 마세요.\n"
@@ -36,39 +33,7 @@ SYSTEM_PROMPT = (
     "SQL 코드만 출력하고 다른 설명은 하지 마세요."
 )
 
-# API 키가 없을 때 쓰는 키워드 -> SQL 템플릿 매핑 (데모/오프라인 모드)
-_FALLBACK_TEMPLATES: list[tuple[tuple[str, ...], str]] = [
-    (
-        ("지출", "발주액", "구매액", "총액"),
-        "SELECT vendor_id, COUNT(po_id) as po_count, SUM(total_amount) as total_spend "
-        "FROM v_purchase_order GROUP BY vendor_id ORDER BY total_spend DESC LIMIT 20;",
-    ),
-    (
-        ("미지급", "outstanding"),
-        "SELECT vendor_id, invoice_number, total_amount, outstanding_amount, status "
-        "FROM v_vendor_invoice WHERE outstanding_amount > 0 "
-        "ORDER BY outstanding_amount DESC LIMIT 50;",
-    ),
-    (
-        ("상태", "Closed", "Sent"),
-        "SELECT status, COUNT(po_id) as count, SUM(total_amount) as total "
-        "FROM v_purchase_order GROUP BY status ORDER BY total DESC LIMIT 20;",
-    ),
-    (
-        ("공급업체", "벤더", "vendor"),
-        "SELECT vendor_id, vendor_name, country, payment_terms FROM v_vendor "
-        "ORDER BY vendor_name LIMIT 50;",
-    ),
-    (
-        ("품목", "상품", "구매"),
-        "SELECT description, SUM(quantity) as total_qty, SUM(line_total) as total_amount "
-        "FROM v_purchase_order_line GROUP BY description "
-        "ORDER BY total_qty DESC LIMIT 20;",
-    ),
-]
 
-_DEFAULT_FALLBACK_SQL = "SELECT * FROM v_purchase_order ORDER BY po_date DESC LIMIT 20;"
-<<<<<<< Updated upstream
 def _format_schema(schema: SchemaResource) -> str:
     """스키마 Resource를 LLM 프롬프트에 넣을 텍스트로 직렬화한다."""
     views = schema.get("views", [])
@@ -81,7 +46,6 @@ def _format_schema(schema: SchemaResource) -> str:
         f"- {name}({', '.join(view_columns.get(name, []))})" for name in views
     )
 
-_DEFAULT_FALLBACK_SQL = "SELECT * FROM v_purchase_order ORDER BY po_date DESC LIMIT 20;"
     glossary_lines = []
     for term, definition in glossary.items():
         if isinstance(definition, dict):
@@ -95,8 +59,6 @@ _DEFAULT_FALLBACK_SQL = "SELECT * FROM v_purchase_order ORDER BY po_date DESC LI
         f"[답할 수 없는 질문 예시] {', '.join(out_of_scope)}\n\n"
         f"[데이터 보유 기간] {data_range}\n"
     )
-=======
->>>>>>> Stashed changes
 
 
 async def _call_llm(user_content: str) -> str:
@@ -113,26 +75,6 @@ async def _call_llm(user_content: str) -> str:
     from openai import AsyncOpenAI
 
     client = AsyncOpenAI(api_key=settings.openai_api_key)
-
-    # 스키마 설명 구성 (뷰 기반)
-    views = schema.get("views", schema.get("tables", []))
-    columns = schema.get("columns", {})
-    glossary = schema.get("business_glossary", {})
-
-    schema_description = (
-        f"허용된 뷰 (5개): {', '.join(views)}\n\n"
-        f"각 뷰의 컬럼:\n"
-    )
-
-    for view, cols in columns.items():
-        schema_description += f"  {view}: {', '.join(cols)}\n"
-
-    schema_description += f"\n업무 용어:\n"
-    for i, (term, definition) in enumerate(glossary.items()):
-        if i >= 10:  # 처음 10개만
-            break
-        schema_description += f"  {term}: {definition}\n"
-
     response = await client.chat.completions.create(
         model=settings.openai_model,
         messages=[
@@ -141,8 +83,6 @@ async def _call_llm(user_content: str) -> str:
         ],
         temperature=0,
     )
-
-<<<<<<< Updated upstream
     text = response.choices[0].message.content or ""
     return text.strip().strip("`").removeprefix("sql\n").strip()
 
@@ -182,9 +122,3 @@ async def generate_sql_with_error(
         "위 오류를 고쳐서 SQL을 다시 작성하세요."
     )
     return _extract_sql(await _call_llm(user_content))
-
-
-=======
->>>>>>> Stashed changes
-    sql = response.choices[0].message.content or ""
-    return sql.strip().strip("`").removeprefix("sql\n").strip()

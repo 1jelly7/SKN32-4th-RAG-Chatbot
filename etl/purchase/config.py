@@ -8,9 +8,9 @@ from pathlib import Path
 # ========== 데이터베이스 설정 ==========
 DB_CONFIG = {
     'host': 'localhost',           # MySQL 서버 호스트
-    'user': 'JangGGo',             # MySQL 사용자명
+    'user': 'purchase',             # MySQL 사용자명
     'password': '1234',                # MySQL 비밀번호 (여기에 입력하세요)
-    'database': 'purchase_db',        # 데이터베이스명
+    'database': 'purchase',        # 데이터베이스명
 }
 
 # ========== 데이터 경로 설정 ==========

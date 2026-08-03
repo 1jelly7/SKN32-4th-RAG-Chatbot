@@ -41,26 +41,6 @@ class Settings(BaseSettings):
     account_seed_hr_password: str | None = None
     account_seed_finance_password: str | None = None
 
-    purchase_read_host: str
-    purchase_read_user: str
-    purchase_read_password: str
-    purchase_read_database: str
-
-    purchase_read_host: str
-    purchase_read_user: str
-    purchase_read_password: str
-    purchase_read_database: str
-
-    purchase_read_host: str
-    purchase_read_user: str
-    purchase_read_password: str
-    purchase_read_database: str
-
-    purchase_read_host: str
-    purchase_read_user: str
-    purchase_read_password: str
-    purchase_read_database: str
-
     # 임베딩 백엔드: "local"(기본값, 외부 API 불필요) 또는 "openai".
     embedding_backend: str = "local"
     # local 백엔드를 쓸 때의 임베딩 벡터 차원입니다.
@@ -79,9 +59,12 @@ class Settings(BaseSettings):
     sales_read_password: str = ""
 
     # 구매 도메인 전용 조회 계정입니다. purchase_reader를 쓰기 위한 필드로,
-    # sales_read_*와 같은 패턴입니다. 비어 있으면 mysql_read_*로 폴백합니다.
+    # sales_read_*와 같은 패턴입니다. host/database가 비어 있으면 mysql_read_host/
+    # purchase_db_database로 폴백합니다(mcp_servers/data_tools/purchase/mysql.py).
+    purchase_read_host: str = ""
     purchase_read_user: str = ""
     purchase_read_password: str = ""
+    purchase_read_database: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
