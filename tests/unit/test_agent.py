@@ -146,8 +146,8 @@ async def test_evidence_eval_uses_calibrated_document_score_threshold() -> None:
     state: GraphState = {
         "route": "DOCUMENT",
         "document_evidence": [
-            {"type": "document", "content": "휴가 규정", "score": 0.13},
-            {"type": "document", "content": "낮은 점수", "score": 0.10},
+            {"type": "document", "content": "휴가 규정", "score": 0.5},
+            {"type": "document", "content": "낮은 점수", "score": 0.2},
         ],
         "database_evidence": [],
     }

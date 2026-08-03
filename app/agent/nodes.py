@@ -13,7 +13,7 @@ from typing import Any
 from app.agent.llm import AsyncLLMPort, complete
 from app.agent.prompts import ANSWER_PROMPT
 from app.agent.state import DataDomain, GraphState, Route
-from app.mcp.client import MCPClient, MCPClientError
+from app.mcp.client import MCPClient, MCPClientError, MCPNoResultError
 
 SENSITIVE_FIELD_PARTS = ("api_key", "password", "secret", "token", "file_path")
 
@@ -94,6 +94,11 @@ async def document_retrieval(
             index_version = state["document_evidence"][0].get("metadata", {}).get("index_version")
             if index_version:
                 state["document_index_version"] = index_version
+    except MCPNoResultError:
+        # "검색했지만 관련 문서가 0건"은 실패가 아니라 정상적인 빈 결과입니다.
+        # _errors/_mcp_errors에 기록하지 않아, evidence_eval이 자연스럽게 INSUFFICIENT로
+        # 판정하고(정책에 따라 1회 재조회) 응답도 500/502가 아닌 200으로 나가게 합니다.
+        state["document_evidence"] = []
     except MCPClientError as exc:
         if state.get("route") != "BOTH":
             raise
@@ -128,6 +133,8 @@ async def database_retrieval(
     if domain in ("purchase", "both"):
         try:
             evidence.extend(await mcp_client.purchase_query(question))
+        except MCPNoResultError:
+            pass  # 조회 결과 0건은 실패가 아니라 정상적인 빈 결과입니다.
         except MCPClientError as exc:
             if not allows_partial_result:
                 raise
@@ -136,6 +143,8 @@ async def database_retrieval(
     if domain in ("sales", "both"):
         try:
             evidence.extend(await mcp_client.sales_query(question))
+        except MCPNoResultError:
+            pass  # 조회 결과 0건은 실패가 아니라 정상적인 빈 결과입니다.
         except MCPClientError as exc:
             if not allows_partial_result:
                 raise
@@ -168,9 +177,21 @@ async def answer_synthesis(
     route = state.get("route", "GENERAL")
     evidence = state.get("evidence", [])
     evidence_status = state.get("evidence_status", "SUPPORTED")
+    query_labels = state.get("query_labels", [])
+
+    # 실시간성이 중요한 질문(예: "오늘 기준 금리는?")인데 근거가 전혀 없으면,
+    # LLM이 오래된 학습 데이터로 추측 답변을 만들지 않도록 호출 자체를 건너뜁니다.
+    if route == "GENERAL" and "FRESHNESS_SENSITIVE" in query_labels and not evidence:
+        state["answer"] = (
+            "이 질문은 실시간성이 중요한 정보라 정확한 답변을 드리기 어렵습니다. "
+            "최신 출처를 직접 확인해 주세요."
+        )
+        state["sources"] = []
+        state["tables"] = []
+        return state
 
     if route != "GENERAL" and evidence_status == "INSUFFICIENT":
-        state["answer"] = "관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+        state["answer"] = "사내 자료에서 관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
         state["sources"] = []
         state["tables"] = []
         return state
@@ -181,7 +202,8 @@ async def answer_synthesis(
         state["tables"] = []
         return state
 
-    answer = await complete(ANSWER_PROMPT, evidence, llm)
+    question = state.get("question", "")
+    answer = await complete(ANSWER_PROMPT, evidence, question, llm)
     if evidence_status == "PARTIALLY_SUPPORTED":
         answer += "\n\n(일부 근거에 조회 오류가 있어, 확인된 부분만 반영한 답변입니다.)"
 
