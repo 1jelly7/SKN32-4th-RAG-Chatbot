@@ -3,7 +3,9 @@
 처리 순서: 입력 검증 -> LLM SQL 생성 -> 정적 가드 -> EXPLAIN 사전검증 ->
 (실패 시 오류를 보여주고 1회만 재작성) -> 실제 실행 -> 결과 정리.
 답할 수 없는 질문은 SQL을 만들지 않고 빈 결과를 반환해 server.py가
-NO_RESULT로 처리하게 한다. (mcp_servers/data_tools/sales/query.py와 동일 패턴)
+NO_RESULT로 처리하게 한다(친절한 사유 메시지는 공통 envelope 확장 후 과제,
+docs/team_share/03_cross_team_requests.md 참고. mcp_servers/data_tools/sales/query.py와
+동일 구조).
 """
 
 from __future__ import annotations
@@ -17,10 +19,12 @@ from mcp_servers.data_tools.purchase.sql_guard import ALLOWED_VIEWS, referenced_
 from mcp_servers.data_tools.purchase.text2sql import generate_sql, generate_sql_with_error
 
 MAX_QUESTION_LENGTH = 500
+ROW_LIMIT = 200
 
 
 def _empty_evidence(generated_sql: str, elapsed_ms: float, retry_count: int) -> list[dict[str, Any]]:
     """rows=[]로 반환해 server.py가 NO_RESULT 오류로 처리하게 한다."""
+    schema = get_schema_resource()
     return [
         {
             "type": "database",
@@ -31,10 +35,28 @@ def _empty_evidence(generated_sql: str, elapsed_ms: float, retry_count: int) -> 
             "elapsed_ms": elapsed_ms,
             "metadata": {
                 "views_used": [],
+                "data_coverage": schema["data_coverage"],
                 "retry_count": retry_count,
+                "currency": schema["currency"],
+                "truncated": False,
+                "chart_hint": None,
             },
         }
     ]
+
+
+def _chart_hint(rows: list[dict[str, Any]]) -> str | None:
+    """결과 첫 행의 컬럼명으로 막대/꺾은선 중 어느 쪽이 어울릴지 가볍게 추정한다.
+
+    지금은 server.py가 이 값을 그대로 버리지만, docs/team_share/04_chart_spec.md의
+    UI 구현이 따라올 때 한 줄만 병합하면 쓸 수 있도록 미리 계산해둔다.
+    """
+    if not rows:
+        return None
+    first_keys = rows[0].keys()
+    if any(k.endswith(("_month", "_quarter", "_year")) for k in first_keys):
+        return "line"
+    return "bar"
 
 
 async def query_purchase(question: str) -> list[dict[str, Any]]:
@@ -53,7 +75,7 @@ async def query_purchase(question: str) -> list[dict[str, Any]]:
 
     sql = await generate_sql(question, schema)
     if not sql:
-        # LLM이 뷰·용어집으로 답할 수 없다고 판단했다(NO_SQL) — 범위 밖/모호한 질문.
+        # LLM이 뷰·지표로 답할 수 없다고 판단했다(NO_SQL) — 범위 밖/모호한 질문.
         elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
         return _empty_evidence("", elapsed_ms, retry_count=0)
 
@@ -88,8 +110,11 @@ async def query_purchase(question: str) -> list[dict[str, Any]]:
             "elapsed_ms": elapsed_ms,
             "metadata": {
                 "views_used": views_used,
+                "data_coverage": schema["data_coverage"],
                 "retry_count": retry_count,
+                "currency": schema["currency"],
+                "truncated": len(rows) >= ROW_LIMIT,
+                "chart_hint": _chart_hint(rows),
             },
         }
     ]
-

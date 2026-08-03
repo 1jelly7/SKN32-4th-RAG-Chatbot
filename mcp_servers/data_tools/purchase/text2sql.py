@@ -1,9 +1,9 @@
-"""구매 질문을 시맨틱 레이어(뷰·용어집) 안에서 SELECT SQL로 변환하는 Text2SQL adapter.
+"""구매 질문을 시맨틱 레이어(뷰·지표) 안에서 SELECT SQL로 변환하는 Text2SQL adapter.
 
-LLM에게는 원본 테이블이 아니라 뷰 5개와 컬럼·용어집 정의만 준다("구매액이 뭔지"
-같은 판단을 LLM이 하지 못하게). API 키가 없을 때 질문과 무관한 고정 SQL을
-돌려주던 이전 fallback은 제거했다 — 조용한 오답보다 시끄러운 실패가 안전하다
-(mcp_servers/data_tools/sales/text2sql.py와 동일 원칙).
+LLM에게는 원본 테이블이 아니라 뷰 5개와 지표 정의만 준다("구매액이 뭔지" 같은 판단을
+LLM이 하지 못하게). API 키가 없을 때 질문과 무관한 고정 SQL을 돌려주던 이전
+fallback은 제거했다 — 조용한 오답보다 시끄러운 실패가 안전하다
+(mcp_servers/data_tools/sales/text2sql.py와 동일 원칙·구조).
 """
 
 from __future__ import annotations
@@ -18,46 +18,50 @@ SYSTEM_PROMPT = (
     "1. 제공된 뷰(view)만 사용하세요. 원본 테이블 이름을 쓰면 권한 오류가 납니다.\n"
     "2. 단일 SELECT 문 하나만 생성하세요. 세미콜론으로 여러 문장을 잇지 마세요.\n"
     "3. 결과 건수를 제한하기 위해 LIMIT을 반드시 포함하세요.\n"
-    "4. 아래 [허용된 뷰]에 명시된 컬럼명만 그대로 사용하세요. 존재하지 않는 컬럼을 "
-    "만들어내지 마세요.\n"
-    "5. 업무 용어(구매액, 미지급액 등)의 정의는 제공된 용어집을 그대로 따르세요. "
-    "스스로 다른 컬럼이나 계산식을 만들지 마세요.\n"
-    "6. 발주 총액/구매액 집계는 v_purchase_order.total_amount를 쓰세요. "
-    "v_purchase_order_line은 품목·상품 단위로 물을 때만 쓰세요(라인에는 헤더 "
-    "금액이 없습니다 — fan-out 방지).\n"
-    "7. 공급업체의 연락처·주소 같은 PII는 제공된 뷰에 없습니다. 만들어내지 마세요.\n"
-    "8. SELECT * 를 쓰지 마세요. 필요한 컬럼만 나열하세요.\n"
-    "9. 카테고리 비교(공급업체별, 품목별 등)는 LIMIT 20 이하로 제한하세요.\n"
-    "10. 제공된 뷰·용어집으로 답할 수 없거나 범위 밖 질문이면 SQL을 만들지 말고 "
-    "정확히 다음 한 줄만 출력하세요: NO_SQL\n"
+    "4. '이번 달', '최근 3개월' 같은 상대 기간은 제공된 오늘 날짜를 기준으로 실제 "
+    "날짜(YYYY-MM-DD)로 바꿔 쓰세요. CURDATE()나 NOW()를 쓰지 마세요.\n"
+    "5. 지표(구매액, 미지급금 등)의 정의는 제공된 지표 정의를 그대로 따르세요. 스스로 "
+    "다른 컬럼이나 계산식을 만들지 마세요. 특히 '구매액'은 공급업체별·기간별로 묶어도 "
+    "항상 v_purchase_order.po_amount를 쓰세요. v_purchase_order_line은 품목·상품 "
+    "단위로 물을 때만 쓰세요(라인에는 헤더 금액이 없습니다 — fan-out 방지).\n"
+    "5-1. '2025년'처럼 연도 전체를 물으면 그 해 1월부터 12월까지 전부 포함하세요. "
+    "오늘 날짜의 월(月) 숫자로 범위를 제한하지 마세요 — 오늘이 몇 월인지는 과거 "
+    "연도의 데이터 범위와 무관합니다.\n"
+    "6. 공급업체의 업종·국가 같은 정보를 상식으로 추측하지 마세요. 데이터에 실제로 "
+    "적힌 값만 조건으로 쓰세요. 공급업체의 연락처·주소 같은 개인정보는 제공된 뷰에 "
+    "없습니다. 만들어내지 마세요.\n"
+    "7. SELECT * 를 쓰지 마세요. 필요한 컬럼만 나열하세요.\n"
+    "8. 기간을 라벨로 쓸 때는 po_month/invoice_month처럼 이미 문자열로 만들어진 "
+    "컬럼을 쓰세요. 직접 DATE_FORMAT을 다시 만들지 마세요.\n"
+    "9. 시간 흐름을 보여주는 질문(추이·월별·연도별)은 기간 컬럼 기준 오름차순으로 "
+    "ORDER BY 하세요.\n"
+    "10. SELECT 목록에서 보여주고 싶은 금액·수량 같은 값 컬럼은 맨 마지막에 두세요.\n"
+    "11. 카테고리 비교(공급업체별, 품목별 등)는 LIMIT 12 이하로, 기간 추이는 LIMIT 60 "
+    "이하로 제한하세요.\n"
+    "12. 제공된 뷰·지표로 답할 수 없는 질문이면 SQL을 만들지 말고 정확히 다음 한 "
+    "줄만 출력하세요: NO_SQL\n"
     "SQL 코드만 출력하고 다른 설명은 하지 마세요."
 )
 
 
 def _format_schema(schema: SchemaResource) -> str:
     """스키마 Resource를 LLM 프롬프트에 넣을 텍스트로 직렬화한다."""
-    views = schema.get("views", [])
-    view_columns = schema.get("view_columns", {})
-    glossary = schema.get("business_glossary", {})
-    out_of_scope = schema.get("out_of_scope", [])
-    data_range = schema.get("data_range", {})
-
     views_desc = "\n".join(
-        f"- {name}({', '.join(view_columns.get(name, []))})" for name in views
+        f"- {name}({', '.join(spec['columns'])}): {spec['description']}"
+        for name, spec in schema["views"].items()
     )
-
-    glossary_lines = []
-    for term, definition in glossary.items():
-        if isinstance(definition, dict):
-            continue  # 상태값 등 중첩 딕셔너리는 SQL 생성에 직접 필요하지 않으므로 건너뜀
-        glossary_lines.append(f"- {term}: {definition}")
-    glossary_desc = "\n".join(glossary_lines)
-
+    metrics_desc = "\n".join(
+        f"- {term}: {metric['aggregation']}({metric['view']}.{metric['column']}) {metric['note']}".rstrip()
+        for term, metric in schema["metrics"].items()
+    )
+    coverage = schema["data_coverage"]
+    coverage_text = f"{coverage.get('min_po_date') or '?'} ~ {coverage.get('max_po_date') or '?'}"
     return (
         f"[허용된 뷰]\n{views_desc}\n\n"
-        f"[업무 용어 정의]\n{glossary_desc}\n\n"
-        f"[답할 수 없는 질문 예시] {', '.join(out_of_scope)}\n\n"
-        f"[데이터 보유 기간] {data_range}\n"
+        f"[지표 정의]\n{metrics_desc}\n\n"
+        f"[답할 수 없는 지표] {', '.join(schema['out_of_scope'])}\n\n"
+        f"[데이터 보유 기간] {coverage_text}\n"
+        f"[통화] {schema['currency']} 단일"
     )
 
 

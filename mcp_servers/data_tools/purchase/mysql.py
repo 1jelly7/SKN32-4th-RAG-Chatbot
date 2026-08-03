@@ -4,8 +4,10 @@
 - PURCHASE_READ_USER / PURCHASE_READ_PASSWORD (읽기 전용 purchase_reader 계정 —
   실제 행 데이터 조회). PURCHASE_READ_HOST/DATABASE가 비어 있으면 각각
   MYSQL_READ_HOST / PURCHASE_DB_DATABASE로 폴백한다(app/core/config.py).
-- MYSQL_WRITE_HOST / MYSQL_WRITE_USER / MYSQL_WRITE_PASSWORD + PURCHASE_DB_DATABASE
-  (EXPLAIN 사전검증 전용. 아래 ExplainOnlyMySQLClient 설명 참고)
+- PURCHASE_DB_HOST / PURCHASE_DB_USER / PURCHASE_DB_PASSWORD + PURCHASE_DB_DATABASE
+  (EXPLAIN 사전검증 전용. purchase 도메인 전용 ETL/admin 계정을 쓴다 — 공용
+  MYSQL_WRITE_*(JangGGo)에는 purchase.* 권한이 없다. 아래 ExplainOnlyMySQLClient
+  설명 참고)
 """
 
 from __future__ import annotations
@@ -108,14 +110,19 @@ def _get_default_client() -> ReadOnlyMySQLClient:
 
 
 def _get_default_explain_client() -> ExplainOnlyMySQLClient:
-    """admin(mysql_write_*) 계정으로 EXPLAIN 전용 client를 한 번만 만든다."""
+    """admin(purchase 도메인 전용 ETL 계정)으로 EXPLAIN 전용 client를 한 번만 만든다.
+
+    sales는 admin이 공용 JangGGo(mysql_write_*)라 그 계정을 그대로 재사용하지만,
+    purchase는 도메인 전용 별도 계정(PURCHASE_DB_*)을 쓴다 — JangGGo에는 purchase.*
+    권한이 없다(실제로 EXPLAIN 시도 시 Access denied로 확인됨).
+    """
     global _default_explain_client
     if _default_explain_client is None:
         settings = get_settings()
         _default_explain_client = ExplainOnlyMySQLClient(
-            host=settings.mysql_write_host,
-            user=settings.mysql_write_user,
-            password=settings.mysql_write_password,
+            host=settings.purchase_db_host or settings.mysql_write_host,
+            user=settings.purchase_db_user or settings.mysql_write_user,
+            password=settings.purchase_db_password or settings.mysql_write_password,
             database=settings.purchase_db_database,
         )
     return _default_explain_client
