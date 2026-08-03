@@ -15,93 +15,59 @@
 
 ## 우선순위 요약
 
+> 2026-08-02 sales 세션 갱신: `query_sales` 구현을 실제로 마치면서 아래 항목 중 다수의
+> 상태가 바뀌었다. P0-1·P0-2(sales 쪽)·P1-1·P1-2는 **완료 확인**, P1-6·P1-8은 실제 구현
+> 결과에 맞춰 **재작성**, 신규 항목 P1-10(envelope 확장)·P1-11(차트 UI, `04_chart_spec.md`
+> 링크)을 추가했다. "보류"로 남겨뒀던 그래프 기능은 이번에 사용자가 범위에 다시 넣었다.
+
 | 우선순위 | 의미 | 항목 수 |
 |---|---|---|
-| **P0** | 지금 당장 막혀있음 — 우리가 구현을 시작해도 실행 자체가 안 됨 | 2건 |
-| **P1** | 이번 기능(표·SQL 노출)이 제대로 동작하려면 필요 | 9건 |
+| **완료** | 이번 세션에 확인·구현됨 | 4건 |
+| **P0** | 지금 당장 막혀있음 — 우리가 구현을 시작해도 실행 자체가 안 됨 | 0건 (전부 완료로 이동) |
+| **P1** | 이번 기능(표·SQL·그래프 노출)이 제대로 동작하려면 필요 | 9건 |
 | **P2** | 정합성·정리 차원, 급하지 않음 | 2건 |
-| **보류** | 이번 범위에서 요청하지 않음(사유 명시) | 1건 |
 
 ---
 
-## P0 — 지금 당장 막혀있는 것
+## 완료 — 이번 세션에 확인·구현됨
 
-### P0-1. `app/agent/nodes.py`의 존재하지 않는 모듈 import
+### (완료) 구 P0-1. `app/agent/nodes.py`의 존재하지 않는 모듈 import
 
-- **대상팀**: 통합(backend)
-- **근거**: [app/agent/nodes.py:17](../../app/agent/nodes.py)
-  ```python
-  from mcp_servers.data_tools.finance.query import query_finance
-  ```
-  `finance` 폴더는 이미 `purchase`로 이름이 바뀌어서 존재하지 않는다
-  (`2c10b07 Replace finance domain with purchase across project` 커밋 참고).
-- **영향**: **현재 브랜치에서 `app/agent/graph.py`를 import하는 순간 실패한다.**
-  `query_sales`/`query_purchase`를 아무리 잘 만들어도 LangGraph 전체가 못 돈다.
-- **요청 내용**: `finance` → `purchase`로 import 경로 수정, 관련 변수명(`query_finance`
-  등)도 함께 정리.
-- **완료 기준**: `python -c "import app.agent.graph"`가 에러 없이 통과.
+- **상태**: 해결됨. Agent는 `MCPClient.purchase_query()`를 통해 정본 purchase Tool을
+  호출하며, 앱 진입점 import로 경로가 검증된다(SPEC.md 14.1절 C-01).
 
-### P0-2. `.env`에 읽기 전용 DB 계정 정보가 없음
+### (완료) 구 P0-2. `.env` 읽기 전용 DB 계정 — sales 쪽 해결
 
-- **대상팀**: 통합(backend) — 계정 발급은 sales/purchase가 각자 하더라도, `.env` 항목
-  추가와 [app/core/config.py](../../app/core/config.py)의 필드 정리는 통합 담당과
-  맞춰야 한다.
-- **근거**: `.env`에 `MYSQL_WRITE_*`(ETL용)만 있고 `MYSQL_READ_*`가 없다. README의
-  "Read/write separation" 원칙([docs/interface.md](../interface.md))을 지키려면 반드시
-  필요하다.
-- **요청 내용**:
-  ```env
-  MYSQL_READ_HOST=localhost
-  MYSQL_READ_USER=chatbot_reader          # sales용
-  MYSQL_READ_PASSWORD=
-  SALES_DB_DATABASE=sales
-  ```
-  추가로 **sales와 purchase가 같은 조회 계정을 쓸지, 따로 쓸지**를 통합·구매 담당과
-  함께 정해야 한다. **권장: 계정을 분리한다** — 그래야 "sales 계정으로는 purchase
-  데이터를 원천적으로 못 본다"는 방어(01번 문서 8.1절)가 DB 권한 레벨에서 실제로
-  성립한다. 계정을 하나로 합치면 이 방어가 무력화된다.
-- **완료 기준**: sales·purchase 각자의 `query_readonly()`가 실제로 연결에 성공.
+- **상태**: sales는 해결됨. `SALES_READ_USER`/`SALES_READ_PASSWORD` +
+  `app/core/config.py`의 `sales_read_user`/`sales_read_password` 필드로 `sales_reader`
+  전용 조회 계정을 만들었다(SPEC.md 5절). `MYSQL_READ_*`는 건드리지 않아 purchase에
+  영향이 없다.
+- **아직 필요한 것**: purchase가 같은 패턴(`PURCHASE_DB_*`+`PURCHASE_READ_*`)을
+  독립적으로 추가할 예정이다(사용자 확인: "purchase는 두자, 내일 팀원과 논의 후
+  진행"). sales 쪽에서 미리 관찰한 바로는 purchase 담당이 `.env`에 자체 블록을
+  추가하는 작업을 이미 진행 중이었다 — 통합 담당은 두 블록이 서로 겹치지 않는지만
+  최종 확인하면 된다.
+
+### (완료) 구 P1-1. XSS 이스케이프 처리
+
+- **상태**: 이미 반영돼 있었다. `04_chart_spec.md` 작성 중 `chat.js`를 다시 읽어보니
+  `escapeHtml()`이 사용자 입력·DB 값·LLM 답변 등 모든 출력 지점에 이미 적용돼 있었다
+  (`367833c` 병합에서 반영된 것으로 보인다). 재발 방지를 위한 확인만 필요.
+
+### (완료) 구 P1-2. `innerHTML +=` 버그
+
+- **상태**: 이미 반영돼 있었다. `insertAdjacentHTML('beforeend', ...)`로 이미 바뀌어
+  있어서 연속 질문에도 이전 표·차트가 사라지지 않는다. 각 `<canvas>` id가
+  `chart-${Date.now()}-${chartCounter}`로 매번 고유해서 `.destroy()` 호출도 불필요하다
+  (`04_chart_spec.md` 0절 참고).
 
 ---
 
-## P1 — 표·SQL 노출 기능이 제대로 동작하려면 필요한 것
+## P1 — 표·SQL·그래프 노출 기능이 제대로 동작하려면 필요한 것
 
 이번에 `query_sales`가 SQL과 결과 표를 화면에 노출하기로 하면서(D-14), 기존
 [app/web/chat.js](../../app/web/chat.js) 등의 코드가 실제로 그 역할을 감당할 수 있는지
-확인했다. 아래 9건은 전부 그 과정에서 실제 코드를 읽고 발견한 것이다.
-
-### P1-1. 사용자 입력·DB 값·LLM 답변에 이스케이프 처리가 없음 (보안, 최우선)
-
-- **대상팀**: 통합(backend)
-- **근거**: [app/web/chat.js](../../app/web/chat.js)가 다음을 전부 아무 처리 없이
-  `innerHTML`에 그대로 꽂아넣는다.
-  ```js
-  messages.innerHTML += `<div class="msg user"><b>나</b>${question}</div>`;   // 사용자 입력
-  `<td>${cell ?? ''}</td>`                                                     // DB 조회 값
-  `<pre>${table.sql}</pre>`                                                    // 생성된 SQL
-  data.answer.replace(/\n/g, '<br>')                                           // LLM 답변
-  ```
-- **영향**: 질문창에 `<img src=x onerror=alert(1)>`을 입력하면 그대로 실행된다.
-  DB 값·LLM 답변 경로로도 같은 문제가 생길 수 있다. **표와 SQL을 더 많이 보여줄수록
-  이 문제의 노출 면적이 커진다.**
-- **요청 내용**: HTML 특수문자 이스케이프 함수 하나 추가해서 위 4곳에 전부 적용.
-  ```js
-  function esc(v) {
-    return String(v ?? '').replace(/[&<>"']/g, c =>
-      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-  ```
-- **완료 기준**: 질문창에 `<script>alert(1)</script>` 입력 시 실행되지 않고 문자
-  그대로 화면에 표시됨.
-
-### P1-2. 두 번째 질문부터 이전 표·그래프가 깨짐
-
-- **대상팀**: 통합(backend)
-- **근거**: [app/web/chat.js:81,111](../../app/web/chat.js)가 `messages.innerHTML +=`
-  방식을 쓰는데, 이건 기존 DOM 전체를 문자열로 다시 그린다. `<canvas>`처럼 이미 그려진
-  요소는 태그만 복원되고 내용은 사라진다.
-- **요청 내용**: `insertAdjacentHTML('beforeend', ...)`로 교체.
-- **완료 기준**: 질문을 3번 연속 했을 때 첫 번째 질문의 표가 그대로 남아있음.
+확인했다. (구 P1-1·P1-2는 이미 해결돼 있었음을 확인해 위 "완료" 절로 옮겼다.)
 
 ### P1-3. 표가 옆으로 넘칠 때 스크롤이 안 됨
 
@@ -143,17 +109,23 @@
   표기. 우측 정렬.
 - **완료 기준**: 표와 답변 문장에서 같은 값이 같은 형식으로 보임.
 
-### P1-6. `rows_for_llm`을 답변 생성 프롬프트가 실제로 쓰도록 연결
+### P1-6. (재작성) LLM 프롬프트용 행 수를 화면과 분리
 
 - **대상팀**: 통합(backend)
-- **근거**: `query_sales`가 화면용 `rows`(전체)와 LLM용 `rows_for_llm`(최대 50행)을
-  나눠서 반환하기로 했다(SPEC.md 8.3절). 그런데 [app/agent/nodes.py](../../app/agent/nodes.py)의
-  `answer_synthesis`는 지금 `evidence` 전체를 그대로 프롬프트에 넣는다.
-- **요청 내용**: `answer_synthesis`가 `rows`가 아니라 `rows_for_llm`을 프롬프트 재료로
-  쓰도록 한 줄 수정. (지금 당장 데이터가 작아서 급한 문제는 아니지만, 나중에 결과가
-  커지면 프롬프트 토큰이 갑자기 불어난다)
-- **완료 기준**: 결과가 50행 넘는 질문에서 LLM 프롬프트에 50행만 들어감(로그로 확인
-  가능).
+- **상태 변경**: 초안(구 P1-6)은 `query_sales`가 `rows`(화면용 전체)와
+  `rows_for_llm`(LLM용 50행)을 나눠 반환할 계획이었다. **실제로는 이 분리를 구현하지
+  않았다** — `mcp_servers/data_tools/server.py::_execute_query`의 공통 envelope가
+  `rows` 하나만 그대로 `data`에 실어 보내는 구조로 고정돼 있어서, sales가 아무리
+  `rows_for_llm` 필드를 따로 만들어도 전달할 방법이 없었기 때문이다(SPEC.md 8.3·8.4절).
+- **근거**: 데이터가 800건·5년치로 늘면서 `sales_order_lines` 뷰(2,207행) 같은 큰
+  결과에서 `LIMIT 200`이 실제로 잘리기 시작했다(초안 작성 시점의 70건 데이터에서는
+  "제일 큰 표도 192행"이라 이 문제가 없었다). 지금은 화면과 LLM이 똑같이 최대 200행을
+  본다 — LLM 프롬프트 토큰이 늘어날 수 있다.
+- **요청 내용**: 아래 P1-10(envelope 확장)이 먼저 되어야 순서상 가능하다. envelope가
+  `metadata`를 통과시키게 되면, `answer_synthesis`가 `rows`를 그대로 쓰지 않고 앞
+  N행만 잘라 프롬프트에 넣도록 수정.
+- **완료 기준**: 결과가 큰 질문에서 LLM 프롬프트에 들어가는 행 수가 화면 표시 행 수보다
+  작게 제한됨(로그로 확인 가능).
 
 ### P1-7. 조회 캐시가 데이터 갱신을 못 따라감
 
@@ -168,16 +140,50 @@
   남기고 라우터가 그 값을 읽는 방식 등)
 - **완료 기준**: ETL 재실행 후 같은 질문의 캐시 키가 바뀜.
 
-### P1-8. `metadata` 응답 형식에 새 필드 반영
+### P1-8. (재작성) `metadata` 응답 형식에 새 필드 반영
 
 - **대상팀**: 통합(backend)
-- **근거**: [docs/interface.md](../interface.md)의 공통 응답 형식에 `views_used`,
-  `data_coverage`, `retry_count` 같은 필드가 아직 없다. `query_sales`/`query_purchase`가
-  이 필드들을 채워 반환하기로 했다(SPEC.md 8.4절).
-- **요청 내용**: `docs/interface.md`의 "Tool 3: 판매 데이터 조회" 응답 예시와 공통
-  `metadata` 설명에 위 필드 추가. ([docs/ownership.md](../ownership.md)의 "공통 영역
-  변경 절차"에 따라 통합 담당과 도메인 담당이 함께 검토)
-- **완료 기준**: `docs/interface.md`가 실제 반환 형식과 일치.
+- **근거**: `query_sales`는 이제 실제로 `metadata`에 `views_used`, `data_coverage`,
+  `retry_count`, `currency`, `truncated`, `chart_hint` 6개 필드를 채워 반환한다
+  (SPEC.md 8.3절, `mcp_servers/data_tools/sales/query.py`). 하지만
+  `mcp_servers/data_tools/server.py::_execute_query`가 성공 응답에서는 이 중
+  `generated_sql`/`row_count`/`elapsed_ms` 3개로 줄이고, 실패 응답에서는 `metadata`를
+  아예 빈 객체로 버린다(SPEC.md 8.4·9.1절). `docs/interface.md`도 이 실제 필드명과
+  맞지 않는다.
+- **요청 내용**: (1) `server.py::_execute_query`가 도메인이 반환한 `metadata` 전체(또는
+  최소 `views_used`/`data_coverage`/`chart_hint`)를 통과시키도록 확장. (2) 그 다음
+  `docs/interface.md`의 "Tool 3: 판매 데이터 조회" 응답 예시를 실제 필드명으로 갱신.
+  ([docs/ownership.md](../ownership.md)의 "공통 영역 변경 절차"에 따라 통합 담당과
+  도메인 담당이 함께 검토)
+- **완료 기준**: `docs/interface.md`가 실제 반환 형식과 일치하고, sales의 `chart_hint`가
+  응답까지 도달함(P1-11 차트 작업의 전제 조건이기도 하다).
+
+### P1-10. (신규) `server.py` envelope가 도메인별 거절 사유·안내 문장을 전달하지 못함
+
+- **대상팀**: 통합(backend)
+- **근거**: sales 설계(SPEC.md 9.2절, D-08)는 "답할 수 없습니다"로 끝내지 않고 왜 안
+  되는지·대안을 함께 안내하려 했다(예: "영업이익은 원가 정보가 없어 계산할 수
+  없습니다. 매출 기준으로는 안내해 드릴 수 있습니다."). 그런데 `server.py`는 `rows`가
+  비어있으면 이유를 가리지 않고 고정 문장 "조회 가능한 결과가 없습니다."로 덮어쓴다
+  (`_error_envelope`, `error_code: NO_RESULT`). 범위 밖 질문·답할 수 없는 지표·정말
+  0건인 경우가 전부 사용자 입장에서 구분 없이 똑같이 보인다.
+- **요청 내용**: `query_sales`/`query_purchase`가 `metadata`(또는 새 필드, 예:
+  `reason`/`message`)에 거절 사유를 담아 반환하도록 도메인 쪽 계약을 먼저 정하고,
+  `server.py`가 그 값을 `message`에 반영하도록 확장.
+- **완료 기준**: "이번 달 영업이익 알려줘"와 "2026년 8월 매출 알려줘"(우연히 0건인 경우)가
+  화면에서 서로 다른 안내 문장을 받음.
+
+### P1-11. (신규) 채팅 그래프(막대+꺾은선) UI 구현
+
+- **대상팀**: 통합(backend)
+- **근거**: 5년치 데이터로 확장되며 그래프 기능이 다시 개발 범위에 들어왔다(사용자
+  결정: sales는 SQL 생성 프롬프트 규칙만, UI는 통합 담당). sales가 실제 OpenAI 호출로
+  재현한 버그(정수형 `order_year` 컬럼이 라벨일 때 `_build_tables`가 문자열 컬럼만
+  찾아 차트가 안 그려짐)를 포함해 상세 스펙을 이미 작성해뒀다.
+- **요청 내용**: [04_chart_spec.md](04_chart_spec.md) 전체(요약: `TableData.chart_type`
+  필드 추가, `_build_tables` 라벨/값 컬럼 선택 개선, `chat.js`의 `drawChart`가
+  `chart_type`을 반영하도록 수정, Chart.js를 CDN에서 `app/web/vendor/`로 이관).
+- **완료 기준**: 04번 문서 5절의 검증 체크리스트 전부 통과.
 
 ### P1-9. `mcp_servers/data/`와 `mcp_servers/data_tools/` 중복 정리
 
@@ -214,36 +220,27 @@
 
 ---
 
-## 보류 — 이번에는 요청하지 않는 것
-
-### 채팅창 그래프(Chart.js) 관련 전부
-
-- **사유**: PM 판단으로 이번 범위에서 뺐다. 표와 SQL 노출까지만 이번에 처리하고,
-  막대그래프 렌더링은 나중에 별도로 다시 다룬다.
-- **나중에 참고할 것**: [01_rag_sales_text2sql.md 14.2절](01_rag_sales_text2sql.md)에
-  Chart.js 관련 이슈(CDN 오프라인 문제, "그래프 그릴 수 있는 표"의 조건)를 미리
-  정리해뒀다. 재개할 때 그대로 이어서 쓰면 된다.
-
 ---
 
 ## 요약 표 (복붙용)
 
-| 코드 | 제목 | 대상팀 | 우선순위 |
-|---|---|---|---|
-| P0-1 | nodes.py의 finance import 오류 수정 | 통합 | P0 |
-| P0-2 | .env 읽기 전용 DB 계정 추가 (sales/purchase 분리 권장) | 통합 | P0 |
-| P1-1 | XSS 이스케이프 처리 | 통합 | P1 |
-| P1-2 | innerHTML += 버그 수정 | 통합 | P1 |
-| P1-3 | 표 가로 스크롤 CSS | 통합 | P1 |
-| P1-4 | 0건 안내 문구가 최종 답변에 반영되는지 확인 | 통합 | P1 |
-| P1-5 | 표·답변 숫자 표기 통일 | 통합 | P1 |
-| P1-6 | rows_for_llm을 답변 생성에 연결 | 통합 | P1 |
-| P1-7 | 캐시 freshness bucket 채우기 | 통합 | P1 |
-| P1-8 | interface.md metadata 필드 확장 | 통합 | P1 |
-| P1-9 | mcp_servers/data/ 중복 정리 | 통합 | P1 |
-| P2-1 | MCP 조회 로그 파일 정책 추가 | 통합 | P2 |
-| P2-2 | finance_db_database 필드명 정리 | 통합 | P2 |
-| 보류 | 채팅창 그래프 기능 | 통합 | 나중에 |
+| 코드 | 제목 | 대상팀 | 우선순위 | 상태 |
+|---|---|---|---|---|
+| 구 P0-1 | nodes.py의 finance import 오류 수정 | 통합 | — | 완료 |
+| 구 P0-2 | .env 읽기 전용 DB 계정 추가 (sales 쪽) | 통합 | — | 완료(sales), purchase는 별도 진행 중 |
+| 구 P1-1 | XSS 이스케이프 처리 | 통합 | — | 완료(이미 반영돼 있었음) |
+| 구 P1-2 | innerHTML += 버그 수정 | 통합 | — | 완료(이미 반영돼 있었음) |
+| P1-3 | 표 가로 스크롤 CSS | 통합 | P1 | 미착수 |
+| P1-4 | 0건 안내 문구가 최종 답변에 반영되는지 확인 | 통합 | P1 | 미착수 |
+| P1-5 | 표·답변 숫자 표기 통일 | 통합 | P1 | 미착수 |
+| P1-6 | LLM 프롬프트용 행 수를 화면과 분리 (P1-10 선행 필요) | 통합 | P1 | 미착수 |
+| P1-7 | 캐시 freshness bucket 채우기 | 통합 | P1 | 미착수 |
+| P1-8 | interface.md/metadata 실제 필드명으로 갱신 (P1-10과 연관) | 통합 | P1 | 미착수 |
+| P1-9 | mcp_servers/data/ 중복 정리 | 통합 | P1 | 미착수 |
+| P1-10 | server.py envelope가 거절 사유·안내 문장 전달하도록 확장 (신규) | 통합 | P1 | 미착수 |
+| P1-11 | 채팅 그래프(막대+꺾은선) UI 구현, 스펙은 [04_chart_spec.md](04_chart_spec.md) (신규) | 통합 | P1 | 스펙 전달 완료, 구현 대기 |
+| P2-1 | MCP 조회 로그 파일 정책 추가 | 통합 | P2 | 미착수 |
+| P2-2 | finance_db_database 필드명 정리 | 통합 | P2 | 미착수 |
 
 ---
 
@@ -252,4 +249,6 @@
 - 전체 스펙: [SPEC.md](../../SPEC.md)
 - sales 가이드: [01_rag_sales_text2sql.md](01_rag_sales_text2sql.md)
 - purchase 가이드: [02_rag_purchase_text2sql.md](02_rag_purchase_text2sql.md)
+- 차트 구현 스펙: [04_chart_spec.md](04_chart_spec.md)
+- sales 진행 이력: [docs/progress/sales/2026-08-02.md](../progress/sales/2026-08-02.md)
 - 프로젝트 공통 규칙: [RULE.md](../../RULE.md)
