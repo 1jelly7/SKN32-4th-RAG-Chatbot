@@ -264,6 +264,42 @@ def get_schema_resource() -> SchemaResource:
                 "NET45": "순매출채권 45일 (6개 업체)",
                 "NET60": "순매출채권 60일 (8개 업체)",
             },
+            "구매액": "purchase_orders.total_amount (발주 금액 기준, Cancelled 제외)",
+            "지출": "purchase_orders.total_amount 합계",
+            "미지급금": "outstanding_amount = total_amount - amount_paid",
+            "미지급액": "vendor_invoices.outstanding_amount",
+            "발주": "purchase_orders 테이블 (49건, 취소 제외)",
+            "발주 상세": "purchase_order_lines 테이블 (123줄)",
+            "입고": "goods_receipts 테이블 (32건)",
+            "청구서": "vendor_invoices 테이블 (32개)",
+            "공급업체": "vendors 테이블 (25개, 모두 Jordan)",
+            "3-way 매칭": "invoice_matching (데이터 없음 — 거절)",
+            "공급업체 평가": "vendor_ratings (데이터 없음 — 거절)",
+
+            # 발주 상태
+            "발주 상태": {
+                "Approved": "5건 - 승인됨 (미착수)",
+                "Sent": "12건 - 발송됨 (유효한 발주)",
+                "Partially Received": "10건 - 부분 수령 (진행 중)",
+                "Received": "9건 - 완전 수령 (완료)",
+                "Closed": "13건 - 완료됨",
+                "Cancelled": "1건 - 취소됨 (구매액에서 제외)",
+            },
+
+            # 지급 상태
+            "지급 상태": {
+                "Paid": "완전히 지급됨",
+                "Partially Paid": "일부만 지급됨 (미지급액 있음)",
+                "Overdue": "지급 기한 초과 (미지급)",
+            },
+
+            # 결제 조건
+            "결제 조건": {
+                "COD": "선급금 (7개 업체)",
+                "NET30": "순매출채권 30일 (4개 업체)",
+                "NET45": "순매출채권 45일 (6개 업체)",
+                "NET60": "순매출채권 60일 (8개 업체)",
+            },
             "지출": "purchase_orders.total_amount 또는 vendor_invoices.total_amount 합계",
             "공급업체": "vendors 테이블",
             "미지급금": "vendor_invoices.outstanding_amount",

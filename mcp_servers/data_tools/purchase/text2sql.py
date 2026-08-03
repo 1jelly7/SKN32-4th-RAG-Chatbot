@@ -67,6 +67,7 @@ _FALLBACK_TEMPLATES: list[tuple[tuple[str, ...], str]] = [
     ),
 ]
 
+_DEFAULT_FALLBACK_SQL = "SELECT * FROM v_purchase_order ORDER BY po_date DESC LIMIT 20;"
 def _format_schema(schema: SchemaResource) -> str:
     """스키마 Resource를 LLM 프롬프트에 넣을 텍스트로 직렬화한다."""
     views = schema.get("views", [])
@@ -137,6 +138,7 @@ async def _call_llm(user_content: str) -> str:
         ],
         temperature=0,
     )
+
     text = response.choices[0].message.content or ""
     return text.strip().strip("`").removeprefix("sql\n").strip()
 

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     purchase_read_password: str
     purchase_read_database: str
 
+    purchase_read_host: str
+    purchase_read_user: str
+    purchase_read_password: str
+    purchase_read_database: str
+
     # 임베딩 백엔드: "local"(기본값, 외부 API 불필요) 또는 "openai".
     embedding_backend: str = "local"
     # local 백엔드를 쓸 때의 임베딩 벡터 차원입니다.

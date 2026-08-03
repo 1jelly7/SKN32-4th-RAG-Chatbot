@@ -6,6 +6,14 @@
 - PURCHASE_READ_PASSWORD
 - PURCHASE_READ_DATABASE
 """
+"""구매 Data MCP에서 SELECT만 실행하는 읽기 전용 MySQL adapter.
+
+환경변수:
+- PURCHASE_READ_HOST
+- PURCHASE_READ_USER
+- PURCHASE_READ_PASSWORD
+- PURCHASE_READ_DATABASE
+"""
 """구매 Data MCP에서 guard된 SELECT만 실행하는 읽기 전용 MySQL adapter.
 
 환경변수:
@@ -28,6 +36,7 @@ from mcp_servers.data_tools.purchase.sql_guard import validate_and_normalize
 
 class ReadOnlyMySQLClient:
     """구매 DB의 SELECT 전용 계정을 지연 연결 방식으로 사용한다."""
+
 
     """SELECT 전용 purchase_reader 계정을 사용하는 데이터 조회 어댑터."""
 
@@ -124,7 +133,17 @@ _default_explain_client: ExplainOnlyMySQLClient | None = None
 
 
 
+
 def _get_default_client() -> ReadOnlyMySQLClient:
+    """
+    검증된 구매 DB 설정으로 기본 client를 한 번만 만든다.
+
+    환경변수에서 읽기:
+    - PURCHASE_READ_HOST
+    - PURCHASE_READ_USER
+    - PURCHASE_READ_PASSWORD
+    - PURCHASE_READ_DATABASE
+    """
     """
     검증된 구매 DB 설정으로 기본 client를 한 번만 만든다.
 
@@ -139,6 +158,10 @@ def _get_default_client() -> ReadOnlyMySQLClient:
     if _default_client is None:
         settings = get_settings()
         _default_client = ReadOnlyMySQLClient(
+            host=settings.purchase_read_host,
+            user=settings.purchase_read_user,
+            password=settings.purchase_read_password,
+            database=settings.purchase_read_database,
             host=settings.purchase_read_host,
             user=settings.purchase_read_user,
             password=settings.purchase_read_password,
