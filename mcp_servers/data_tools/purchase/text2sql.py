@@ -68,6 +68,7 @@ _FALLBACK_TEMPLATES: list[tuple[tuple[str, ...], str]] = [
 ]
 
 _DEFAULT_FALLBACK_SQL = "SELECT * FROM v_purchase_order ORDER BY po_date DESC LIMIT 20;"
+<<<<<<< Updated upstream
 def _format_schema(schema: SchemaResource) -> str:
     """스키마 Resource를 LLM 프롬프트에 넣을 텍스트로 직렬화한다."""
     views = schema.get("views", [])
@@ -94,6 +95,8 @@ _DEFAULT_FALLBACK_SQL = "SELECT * FROM v_purchase_order ORDER BY po_date DESC LI
         f"[답할 수 없는 질문 예시] {', '.join(out_of_scope)}\n\n"
         f"[데이터 보유 기간] {data_range}\n"
     )
+=======
+>>>>>>> Stashed changes
 
 
 async def _call_llm(user_content: str) -> str:
@@ -139,6 +142,7 @@ async def _call_llm(user_content: str) -> str:
         temperature=0,
     )
 
+<<<<<<< Updated upstream
     text = response.choices[0].message.content or ""
     return text.strip().strip("`").removeprefix("sql\n").strip()
 
@@ -180,5 +184,7 @@ async def generate_sql_with_error(
     return _extract_sql(await _call_llm(user_content))
 
 
+=======
+>>>>>>> Stashed changes
     sql = response.choices[0].message.content or ""
     return sql.strip().strip("`").removeprefix("sql\n").strip()

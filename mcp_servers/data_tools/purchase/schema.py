@@ -264,6 +264,7 @@ def get_schema_resource() -> SchemaResource:
                 "NET45": "순매출채권 45일 (6개 업체)",
                 "NET60": "순매출채권 60일 (8개 업체)",
             },
+<<<<<<< Updated upstream
             "구매액": "purchase_orders.total_amount (발주 금액 기준, Cancelled 제외)",
             "지출": "purchase_orders.total_amount 합계",
             "미지급금": "outstanding_amount = total_amount - amount_paid",
@@ -343,6 +344,8 @@ def get_schema_resource() -> SchemaResource:
                 "NET45": "순매출채권 45일 (6개 업체)",
                 "NET60": "순매출채권 60일 (8개 업체)",
             },
+=======
+>>>>>>> Stashed changes
         },
 
         # ====================================================================

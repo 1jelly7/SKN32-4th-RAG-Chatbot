@@ -6,6 +6,7 @@
 - PURCHASE_READ_PASSWORD
 - PURCHASE_READ_DATABASE
 """
+<<<<<<< Updated upstream
 """구매 Data MCP에서 SELECT만 실행하는 읽기 전용 MySQL adapter.
 
 환경변수:
@@ -22,6 +23,8 @@
 - MYSQL_WRITE_HOST / MYSQL_WRITE_USER / MYSQL_WRITE_PASSWORD + PURCHASE_DB_DATABASE
   (EXPLAIN 사전검증 전용. 아래 ExplainOnlyMySQLClient 설명 참고)
 """
+=======
+>>>>>>> Stashed changes
 
 from __future__ import annotations
 
@@ -37,11 +40,16 @@ from mcp_servers.data_tools.purchase.sql_guard import validate_and_normalize
 class ReadOnlyMySQLClient:
     """구매 DB의 SELECT 전용 계정을 지연 연결 방식으로 사용한다."""
 
+<<<<<<< Updated upstream
 
     """SELECT 전용 purchase_reader 계정을 사용하는 데이터 조회 어댑터."""
 
     def __init__(self, host: str, user: str, password: str, database: str) -> None:
         """읽기 전용 연결 설정을 보관하고 자동 커밋을 사용하지 않는다."""
+=======
+    def __init__(self, host: str, user: str, password: str, database: str) -> None:
+        """연결 설정만 보관하며 생성 시점에는 DB에 접속하지 않는다."""
+>>>>>>> Stashed changes
         self._connection_kwargs = dict(
             host=host,
             user=user,
@@ -50,6 +58,7 @@ class ReadOnlyMySQLClient:
             cursorclass=pymysql.cursors.DictCursor,
             charset="utf8mb4",
             autocommit=False,
+<<<<<<< Updated upstream
             connect_timeout=5,
             read_timeout=10,
         )
@@ -57,6 +66,27 @@ class ReadOnlyMySQLClient:
     def query(self, sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
         """guard를 통과한 단일 SELECT를 timeout과 읽기 전용 세션으로 실행한다."""
         normalized = validate_and_normalize(sql)
+=======
+        )
+
+    def query(self, sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
+        """단일 SELECT를 행 제한·timeout과 함께 실행하고 연결을 항상 닫는다."""
+        stripped = sql.strip()
+        normalized = stripped.rstrip(";")
+
+        if ";" in normalized or "--" in normalized or "/*" in normalized or "#" in normalized:
+            raise ValueError("단일 SELECT 문만 실행할 수 있습니다.")
+
+        if not normalized.upper().startswith("SELECT"):
+            raise ValueError("SELECT 문만 실행할 수 있습니다.")
+
+        for keyword in _FORBIDDEN_KEYWORDS:
+            if re.search(rf"\b{keyword}\b", normalized, re.IGNORECASE):
+                raise ValueError(f"허용되지 않는 SQL 키워드가 포함되어 있습니다: {keyword}")
+
+        if not re.search(r"\bLIMIT\b", normalized, re.IGNORECASE):
+            normalized = f"{normalized} LIMIT 200"
+>>>>>>> Stashed changes
 
         connection = pymysql.connect(**self._connection_kwargs)
         try:
@@ -134,6 +164,7 @@ _default_explain_client: ExplainOnlyMySQLClient | None = None
 
 
 
+
 def _get_default_client() -> ReadOnlyMySQLClient:
     """
     검증된 구매 DB 설정으로 기본 client를 한 번만 만든다.
@@ -144,6 +175,7 @@ def _get_default_client() -> ReadOnlyMySQLClient:
     - PURCHASE_READ_PASSWORD
     - PURCHASE_READ_DATABASE
     """
+<<<<<<< Updated upstream
     """
     검증된 구매 DB 설정으로 기본 client를 한 번만 만든다.
 
@@ -154,6 +186,8 @@ def _get_default_client() -> ReadOnlyMySQLClient:
     - PURCHASE_READ_DATABASE
     """
     """검증된 구매 읽기전용(purchase_reader) 설정으로 기본 client를 한 번만 만든다."""
+=======
+>>>>>>> Stashed changes
     global _default_client
     if _default_client is None:
         settings = get_settings()
@@ -162,6 +196,7 @@ def _get_default_client() -> ReadOnlyMySQLClient:
             user=settings.purchase_read_user,
             password=settings.purchase_read_password,
             database=settings.purchase_read_database,
+<<<<<<< Updated upstream
             host=settings.purchase_read_host,
             user=settings.purchase_read_user,
             password=settings.purchase_read_password,
@@ -170,6 +205,8 @@ def _get_default_client() -> ReadOnlyMySQLClient:
             user=settings.purchase_read_user,
             password=settings.purchase_read_password,
             database=settings.purchase_read_database,
+=======
+>>>>>>> Stashed changes
         )
     return _default_client
 
@@ -189,6 +226,7 @@ def _get_default_explain_client() -> ExplainOnlyMySQLClient:
 
 
 def query_readonly(sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
+<<<<<<< Updated upstream
     """기본 ReadOnlyMySQLClient로 위임하는 편의 함수다."""
     return _get_default_client().query(sql, timeout_seconds)
 
@@ -196,3 +234,7 @@ def query_readonly(sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
 def explain_readonly(sql: str, timeout_seconds: int = 10) -> None:
     """기본 ExplainOnlyMySQLClient로 위임하는 편의 함수다."""
     _get_default_explain_client().explain(sql, timeout_seconds)
+=======
+    """기본 구매 DB client에 검증된 SELECT 실행을 위임한다."""
+    return _get_default_client().query(sql, timeout_seconds)
+>>>>>>> Stashed changes

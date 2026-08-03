@@ -61,6 +61,7 @@ async def query_purchase(question: str) -> list[dict[str, Any]]:
         "row_count": len(rows),
         "rows": rows,
         "elapsed_ms": round((time.monotonic() - started_at) * 1000, 1),
+<<<<<<< Updated upstream
     }]
     if not sql:
         # LLM이 뷰·용어집으로 답할 수 없다고 판단했다(NO_SQL) — 범위 밖/모호한 질문.
@@ -102,3 +103,6 @@ async def query_purchase(question: str) -> list[dict[str, Any]]:
             },
         }
     ]
+=======
+    }]
+>>>>>>> Stashed changes
