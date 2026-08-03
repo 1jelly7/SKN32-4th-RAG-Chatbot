@@ -1,1 +1,65 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>RAG MCP Chatbot</title><link rel="stylesheet" href="/style.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script></head><body><main><h1>사내 지식 챗봇</h1><section id="messages"></section><form id="chat-form"><input id="question" placeholder="질문을 입력하세요" required><button>전송</button></form></main><script src="/chat.js"></script></body></html>
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <title>사내 지식 챗봇</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <main class="chat-panel" aria-label="사내 지식 챗봇">
+      <header class="app-header">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" class="svg-icon"><path d="M5 10h14v9H5zM12 4v3M9 14h.01M15 14h.01M8 19v2M16 19v2M3 12h2M19 12h2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg></span>
+          <div>
+            <h1>사내 지식 챗봇</h1>
+            <p>문서와 업무 데이터를 안전하게 검색합니다</p>
+          </div>
+        </div>
+        <button id="sources-toggle" class="icon-button sources-toggle" type="button" aria-expanded="false" aria-controls="sources-panel">
+          <svg viewBox="0 0 24 24" class="svg-icon" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/></svg>
+          <span class="sr-only">출처 패널 열기</span>
+        </button>
+      </header>
+
+      <section id="messages" class="messages" aria-live="polite" aria-label="대화 내용"></section>
+
+      <form id="chat-form" class="composer" aria-label="질문 보내기">
+        <label class="sr-only" for="question">질문</label>
+        <div class="input-wrap">
+          <span class="input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="svg-icon"><path d="m20.5 11.5-8.8 8.8a5 5 0 0 1-7.1-7.1l9.2-9.2a3.5 3.5 0 1 1 5 5l-9.2 9.2a2 2 0 1 1-2.8-2.8l8.5-8.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></span>
+          <textarea id="question" name="question" rows="1" maxlength="4000" placeholder="궁금한 내용을 입력하세요" required></textarea>
+          <button id="send-button" class="send-button" type="submit" aria-label="질문 전송">
+            <svg viewBox="0 0 24 24" class="svg-icon" aria-hidden="true"><path d="m21 3-7.5 18-3.5-7-7-3.5L21 3Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/><path d="m10 14 4-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/></svg>
+          </button>
+        </div>
+        <p class="composer-help">Enter로 전송 · Shift + Enter로 줄바꿈 · 중요한 정보는 원문 출처를 확인하세요.</p>
+      </form>
+    </main>
+
+    <aside id="sources-panel" class="sources-panel" aria-label="참고 문서 출처">
+      <header class="sources-header">
+        <div class="sources-heading">
+          <span class="sources-mark" aria-hidden="true"><svg viewBox="0 0 24 24" class="svg-icon"><path d="M6 3h8l4 4v14H6zM14 3v5h5M9 12h6M9 16h6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></span>
+          <div>
+            <h2>참고 문서 출처</h2>
+            <p id="sources-summary">문서 검색 결과가 여기에 표시됩니다</p>
+          </div>
+        </div>
+        <button id="sources-close" class="icon-button close-button" type="button" aria-label="출처 패널 닫기">×</button>
+      </header>
+      <div id="sources-list" class="sources-list">
+        <div class="source-empty">
+          <span aria-hidden="true">▤</span>
+          <p>사내 문서 검색을 실행하면 근거 문서와 관련도가 표시됩니다.</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <div id="sources-backdrop" class="sources-backdrop" hidden></div>
+  <script src="/chat.js"></script>
+</body>
+</html>

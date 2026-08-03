@@ -2,6 +2,9 @@
 
 import asyncio
 
+import pymysql
+import pytest
+
 import mcp_servers.document_tools.search as search_module
 
 
@@ -53,3 +56,31 @@ def test_document_search_resolves_database_paths_before_loading(monkeypatch) -> 
     result = asyncio.run(search_module.search_documents("업무 문서", top_k=3))
     assert result == [chunk]
     assert calls == ["path_lookup", "file_load", "rag"]
+
+
+def test_document_database_error_is_classified_as_search_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DB authentication or connection failures must not be reported as RAG internals."""
+    async def failed_lookup(_: str) -> list[dict[str, str]]:
+        raise pymysql.err.OperationalError(1045, "credential detail must not escape")
+
+    monkeypatch.setattr(search_module, "lookup_document_paths", failed_lookup)
+
+    with pytest.raises(search_module.DocumentSearchUnavailableError):
+        asyncio.run(search_module.search_documents("policy", top_k=3))
+
+
+def test_in_process_mcp_maps_document_database_error_to_query_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The host must distinguish an unavailable document backend from an internal error."""
+    from app.mcp.client import InProcessMCPPort, MCPClient, MCPQueryError
+
+    async def unavailable_search(_: str, __: int) -> list[dict[str, str]]:
+        raise search_module.DocumentSearchUnavailableError("private backend detail")
+
+    monkeypatch.setattr(search_module, "search_documents", unavailable_search)
+
+    with pytest.raises(MCPQueryError):
+        asyncio.run(MCPClient(InProcessMCPPort()).document_search("policy", top_k=3))

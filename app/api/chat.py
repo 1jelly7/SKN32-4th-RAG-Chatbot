@@ -8,6 +8,7 @@ LLM, MySQL, FAISS를 직접 호출하지 않으며 외부 Tool 예외를 비밀�
 from __future__ import annotations
 
 import hashlib
+import logging
 import uuid
 
 from fastapi import APIRouter, Request
@@ -27,6 +28,7 @@ from app.mcp.client import (
 from app.schemas.chat import ChatRequest, ChatResponse, ErrorResponse, Source, TableData
 
 router = APIRouter(tags=["chat"])
+logger = logging.getLogger(__name__)
 
 
 def _conversation_context_hash(session_id: str | None) -> str | None:
@@ -91,8 +93,14 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse | JS
     except Exception:  # noqa: BLE001 - 경계 밖 오류의 상세를 노출하지 않는다.
         return _tool_error_response(500, "INTERNAL_ERROR", "답변 생성 중 오류가 발생했습니다.")
 
-    if result_state.get("evidence_status") == "INSUFFICIENT":
-        return _tool_error_response(422, "EVIDENCE_INSUFFICIENT", "보강 조회 후에도 답변에 필요한 근거가 부족합니다.")
+    logger.info(
+        "chat_completed request_id=%s route=%s labels=%s evidence_status=%s retrieval=%s",
+        request_id,
+        result_state.get("route"),
+        result_state.get("query_labels", []),
+        result_state.get("evidence_status"),
+        result_state.get("retrieval_diagnostics", {}),
+    )
 
     write_answer_cache(result_state, cache_repository)
     return ChatResponse(

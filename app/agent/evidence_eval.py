@@ -27,6 +27,7 @@ async def evidence_eval(
     document_evidence = state.get("document_evidence") or []
     database_evidence = state.get("database_evidence") or []
     all_evidence = document_evidence + database_evidence
+    state["retrieval_diagnostics"] = _retrieval_diagnostics(all_evidence, state)
 
     if state.get("route") == "GENERAL":
         state["evidence"] = []
@@ -36,7 +37,10 @@ async def evidence_eval(
 
     active_policy = policy or state.get("evidence_policy", DEFAULT_EVIDENCE_POLICY)
     accepted_evidence = [item for item in all_evidence if _meets_policy(item, active_policy)]
-    has_rejected_evidence = len(accepted_evidence) != len(all_evidence)
+    has_rejected_non_document_evidence = any(
+        item.get("type") != "document" and not _meets_policy(item, active_policy)
+        for item in all_evidence
+    )
     has_tool_error = bool(state.get("_errors")) or any(item.get("error") for item in database_evidence)
 
     has_contradiction = _has_explicit_contradiction(all_evidence) or _has_conflicting_fact_values(all_evidence)
@@ -48,7 +52,7 @@ async def evidence_eval(
     elif not accepted_evidence:
         state["evidence_status"] = "INSUFFICIENT"
         state["evidence_reason"] = "정책 기준을 충족하는 근거가 없습니다."
-    elif has_tool_error or has_rejected_evidence:
+    elif has_tool_error or has_rejected_non_document_evidence:
         state["evidence_status"] = "PARTIALLY_SUPPORTED"
         state["evidence_reason"] = "일부 조회가 실패했거나 일부 근거가 품질 기준에서 제외됐습니다."
     else:
@@ -57,11 +61,29 @@ async def evidence_eval(
     return state
 
 
+def _retrieval_diagnostics(evidence: list[dict[str, Any]], state: GraphState) -> dict[str, object]:
+    """Expose retrieval health separately from answerability for trace logging."""
+    scores = [item.get("score") for item in evidence if isinstance(item.get("score"), (int, float))]
+    relevant = [item for item in evidence if _meets_policy(item, DEFAULT_EVIDENCE_POLICY)]
+    errors = state.get("_errors", [])
+    return {
+        "has_documents": bool(evidence),
+        "has_relevant_documents": bool(relevant),
+        "top_score": max(scores) if scores else None,
+        "reranker_score": None,
+        "retrieval_error": bool(errors),
+        "index_unavailable": any("index" in error.casefold() for error in errors),
+    }
+
+
 def _meets_policy(item: dict[str, Any], policy: EvidencePolicy) -> bool:
     """관련성·신뢰도·metadata·freshness 기준을 모두 충족하는지 판단한다."""
     relevance = item.get("relevance", item.get("score", 1.0))
     confidence = item.get("confidence", 1.0)
-    if not _is_number_at_least(relevance, policy.min_relevance):
+    minimum_relevance = (
+        policy.min_document_score if item.get("type") == "document" else policy.min_relevance
+    )
+    if not _is_number_at_least(relevance, minimum_relevance):
         return False
     if not _is_number_at_least(confidence, policy.min_confidence):
         return False

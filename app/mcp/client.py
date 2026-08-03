@@ -67,7 +67,7 @@ class InProcessMCPPort:
 
             return await execute_data_tool(tool_name, str(payload.get("question", "")))
         if tool_name == "search_documents":
-            from mcp_servers.document_tools.search import search_documents
+            from mcp_servers.document_tools.search import DocumentSearchUnavailableError, search_documents
 
             from mcp_servers.document_tools.rag import get_last_index_version
             from mcp_servers.document_tools.search import search_documents
@@ -82,6 +82,12 @@ class InProcessMCPPort:
                 }
             try:
                 chunks = await search_documents(query, top_k)
+            except DocumentSearchUnavailableError:
+                return {
+                    "status": "error", "domain": "document",
+                    "message": "문서 조회 서비스를 현재 사용할 수 없습니다.",
+                    "error_code": "QUERY_ERROR", "data": [], "sources": [], "metadata": {},
+                }
             except Exception:  # noqa: BLE001 - 내부 상세를 Host 경계 밖으로 노출하지 않는다.
                 return {
                     "status": "error", "domain": "document",

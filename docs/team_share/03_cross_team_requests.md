@@ -26,21 +26,6 @@
 
 ## P0 — 지금 당장 막혀있는 것
 
-### P0-1. `app/agent/nodes.py`의 존재하지 않는 모듈 import
-
-- **대상팀**: 통합(backend)
-- **근거**: [app/agent/nodes.py:17](../../app/agent/nodes.py)
-  ```python
-  from mcp_servers.data_tools.finance.query import query_finance
-  ```
-  `finance` 폴더는 이미 `purchase`로 이름이 바뀌어서 존재하지 않는다
-  (`2c10b07 Replace finance domain with purchase across project` 커밋 참고).
-- **영향**: **현재 브랜치에서 `app/agent/graph.py`를 import하는 순간 실패한다.**
-  `query_sales`/`query_purchase`를 아무리 잘 만들어도 LangGraph 전체가 못 돈다.
-- **요청 내용**: `finance` → `purchase`로 import 경로 수정, 관련 변수명(`query_finance`
-  등)도 함께 정리.
-- **완료 기준**: `python -c "import app.agent.graph"`가 에러 없이 통과.
-
 ### P0-2. `.env`에 읽기 전용 DB 계정 정보가 없음
 
 - **대상팀**: 통합(backend) — 계정 발급은 sales/purchase가 각자 하더라도, `.env` 항목
@@ -230,7 +215,6 @@
 
 | 코드 | 제목 | 대상팀 | 우선순위 |
 |---|---|---|---|
-| P0-1 | nodes.py의 finance import 오류 수정 | 통합 | P0 |
 | P0-2 | .env 읽기 전용 DB 계정 추가 (sales/purchase 분리 권장) | 통합 | P0 |
 | P1-1 | XSS 이스케이프 처리 | 통합 | P1 |
 | P1-2 | innerHTML += 버그 수정 | 통합 | P1 |
