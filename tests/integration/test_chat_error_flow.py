@@ -70,14 +70,14 @@ def test_graph_mcp_errors_use_http_contract(
         assert result.json()["evidence_status"] == "INSUFFICIENT"
     else:
         assert result.json()["error_code"] == expected_code
-    expected_calls = [expected_tool, expected_tool] if expected_code is None else [expected_tool]
-    assert [call.tool_name for call in port.calls] == expected_calls
+    # DOCUMENT 경로는 결정적이라 재시도하지 않으므로 어느 경우든 도구 호출은 1회다.
+    assert [call.tool_name for call in port.calls] == [expected_tool]
     assert llm.calls == []
 
 
 @pytest.mark.integration
-def test_insufficient_evidence_retries_once_then_returns_safe_response() -> None:
-    """저품질 evidence를 정상 답변으로 가장하지 않고 제한된 보강 후 종료한다."""
+def test_insufficient_evidence_returns_safe_response_without_retry() -> None:
+    """저품질 evidence를 정상 답변으로 가장하지 않고, 무의미한 재조회 없이 종료한다."""
     low_quality_document = {
         "status": "success",
         "domain": "document",
@@ -101,5 +101,5 @@ def test_insufficient_evidence_retries_once_then_returns_safe_response() -> None
     assert response.status_code == 200
     assert response.json()["evidence_status"] == "INSUFFICIENT"
     assert response.json()["sources"] == []
-    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
+    assert [call.tool_name for call in port.calls] == ["search_documents"]
     assert llm.calls == []

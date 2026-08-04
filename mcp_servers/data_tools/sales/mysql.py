@@ -8,29 +8,27 @@ import pymysql
 import pymysql.cursors
 
 from app.core.config import get_settings
+from app.core.db_pool import get_pool
 from mcp_servers.data_tools.sales.sql_guard import validate_and_normalize
 
 
 class ReadOnlyMySQLClient:
-    """SELECT 전용 sales_reader 계정을 사용하는 데이터 조회 어댑터."""
+    """SELECT 전용 sales_reader 계정을 사용하는 데이터 조회 어댑터.
+
+    연결은 app.core.db_pool의 공유 풀에서 빌려 쓴다. 매 쿼리마다 새 TCP 연결을 열고
+    끊던 이전 방식은 연결마다 핸드셰이크·인증 왕복 비용이 들어 응답 지연에 그대로
+    누적됐다.
+    """
 
     def __init__(self, host: str, user: str, password: str, database: str) -> None:
         """읽기 전용 연결 설정을 보관하고 자동 커밋을 사용하지 않는다."""
-        self._connection_kwargs = dict(
-            host=host,
-            user=user,
-            password=password,
-            database=database,
-            cursorclass=pymysql.cursors.DictCursor,
-            charset="utf8mb4",
-            autocommit=False,
-        )
+        self._pool = get_pool(host, user, password, database, autocommit=False)
 
     def query(self, sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
         """guard를 통과한 단일 SELECT를 timeout과 읽기 전용 세션으로 실행한다."""
         normalized = validate_and_normalize(sql)
 
-        connection = pymysql.connect(**self._connection_kwargs)
+        connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute("SET SESSION MAX_EXECUTION_TIME=%s", (timeout_seconds * 1000,))
@@ -38,6 +36,7 @@ class ReadOnlyMySQLClient:
                 rows = cursor.fetchall()
             return rows
         finally:
+            # 풀에서 빌린 연결이라 close()해도 TCP는 끊기지 않고 풀에 반납된다.
             connection.close()
 
 
@@ -53,15 +52,7 @@ class ExplainOnlyMySQLClient:
     """
 
     def __init__(self, host: str, user: str, password: str, database: str) -> None:
-        self._connection_kwargs = dict(
-            host=host,
-            user=user,
-            password=password,
-            database=database,
-            cursorclass=pymysql.cursors.DictCursor,
-            charset="utf8mb4",
-            autocommit=False,
-        )
+        self._pool = get_pool(host, user, password, database, autocommit=False)
 
     def explain(self, sql: str, timeout_seconds: int = 10) -> None:
         """guard를 통과한 SQL을 실제로 실행하지 않고 EXPLAIN으로만 채점한다.
@@ -71,7 +62,7 @@ class ExplainOnlyMySQLClient:
         (호출부가 그 메시지를 LLM에게 보여주고 재작성을 요청한다).
         """
         normalized = validate_and_normalize(sql)
-        connection = pymysql.connect(**self._connection_kwargs)
+        connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute("SET SESSION MAX_EXECUTION_TIME=%s", (timeout_seconds * 1000,))

@@ -6,6 +6,7 @@ import pymysql
 import pymysql.cursors
 
 from app.core.config import get_settings
+from app.core.db_pool import get_pool
 from mcp_servers.document_tools.types import DocumentPathRecord
 
 
@@ -13,17 +14,13 @@ class DocumentPathRepository:
     """내부 문서 DB에서 문서 본문이 아닌 파일 경로 메타데이터만 조회한다."""
 
     def __init__(self, host: str, user: str, password: str, database: str) -> None:
-        """문서 DB 읽기 연결 설정을 보관하며 비밀번호를 로그에 남기지 않는다."""
-        # 연결은 매 호출마다 새로 여는 방식(단순하고 커넥션 누수 위험이 적음)입니다.
-        # 이 kwargs 딕셔너리 자체를 로그로 출력하지 않도록 주의합니다.
-        self._connection_kwargs = dict(
-            host=host,
-            user=user,
-            password=password,
-            database=database,
-            cursorclass=pymysql.cursors.DictCursor,
-            charset="utf8mb4",
-        )
+        """문서 DB 읽기 연결 풀을 준비한다.
+
+        매 호출마다 새 TCP 연결을 열던 이전 방식은 문서 질문마다 핸드셰이크·인증
+        왕복 비용이 그대로 지연시간에 쌓였다. 이제는 app.core.db_pool의 공유 풀에서
+        연결을 빌려 쓰고 반납한다.
+        """
+        self._pool = get_pool(host, user, password, database, autocommit=False)
 
     async def find_paths(self, query: str) -> list[DocumentPathRecord]:
         """질문과 연관된 문서의 식별자·제목·파일 경로·갱신 시각을 반환한다.
@@ -41,7 +38,7 @@ class DocumentPathRepository:
         return await asyncio.to_thread(self._find_paths_sync, query)
 
     def _find_paths_sync(self, query: str) -> list[DocumentPathRecord]:
-        connection = pymysql.connect(**self._connection_kwargs)
+        connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
                 keywords = [w for w in query.split() if len(w) >= 2]
@@ -78,7 +75,7 @@ class DocumentPathRepository:
 
     def ensure_schema(self) -> None:
         """document_paths 테이블이 없으면 생성한다. (database/document/schema.sql과 동일 내용)"""
-        connection = pymysql.connect(**self._connection_kwargs)
+        connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -100,7 +97,7 @@ class DocumentPathRepository:
 
     def upsert_path(self, document_id: str, title: str, file_path: str, updated_at: str) -> None:
         """문서 경로 1건을 등록하거나 갱신한다. (ingestion 배치가 사용)"""
-        connection = pymysql.connect(**self._connection_kwargs)
+        connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute(

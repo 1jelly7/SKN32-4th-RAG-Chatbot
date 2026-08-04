@@ -367,8 +367,8 @@ async def test_graph_both_fans_in_document_and_partial_database_evidence(
 
 
 @pytest.mark.asyncio
-async def test_graph_retries_insufficient_evidence_exactly_once() -> None:
-    """품질 미달 근거가 무한 조회 없이 한 번만 보강되게 한다."""
+async def test_graph_does_not_retry_deterministic_document_search() -> None:
+    """DOCUMENT 검색은 결정적이라 재조회해도 결과가 같으므로 재시도하지 않는다."""
     port = FakeMCPPort(
         {
             "search_documents": _tool_success(
@@ -386,8 +386,28 @@ async def test_graph_retries_insufficient_evidence_exactly_once() -> None:
     )
 
     assert result["evidence_status"] == "INSUFFICIENT"
+    assert result.get("evidence_retry_count", 0) == 0
+    assert [call.tool_name for call in port.calls] == ["search_documents"]
+
+
+@pytest.mark.asyncio
+async def test_graph_retries_database_evidence_exactly_once() -> None:
+    """DATABASE 경로는 SQL이 다시 생성될 수 있으므로 보강 조회를 한 번만 허용한다."""
+    port = FakeMCPPort(
+        {
+            "search_documents": _tool_success("document", []),
+            "query_purchase": _tool_success("purchase", []),
+            "query_sales": _tool_success("sales", []),
+        }
+    )
+
+    result = await build_graph(MCPClient(port), FakeLLMPort("사용되지 않음")).ainvoke(
+        {"question": "고객별 매출 알려줘"}
+    )
+
+    assert result["evidence_status"] == "INSUFFICIENT"
     assert result["evidence_retry_count"] == 1
-    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
+    assert [call.tool_name for call in port.calls] == ["query_sales", "query_sales"]
 
 
 @pytest.mark.asyncio
@@ -684,4 +704,4 @@ async def test_empty_internal_search_is_not_reported_as_mcp_failure() -> None:
 
     assert result["evidence_status"] == "INSUFFICIENT"
     assert "사내 자료" in result["answer"]
-    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
+    assert [call.tool_name for call in port.calls] == ["search_documents"]

@@ -5,7 +5,7 @@ import logging
 import pymysql
 
 from mcp_servers.document_tools.document_db import lookup_document_paths
-from mcp_servers.document_tools.file_loader import load_document_files
+# from mcp_servers.document_tools.file_loader import load_document_files
 from mcp_servers.document_tools.rag import retrieve
 from mcp_servers.document_tools.types import DocumentChunk
 
@@ -37,5 +37,7 @@ async def search_documents(
             extra={"event": "document_path_lookup_failed"},
         )
         raise DocumentSearchUnavailableError("Document path lookup is unavailable.") from exc
-    documents = load_document_files(path_records)
-    return await retrieve(query, documents, top_k)
+    # documents = load_document_files(path_records)
+    # return await retrieve(query, documents, top_k)
+    # DCC-008 이후 본문은 배치로 만든 FAISS 인덱스에서 나오고, retrieve()는 조회 결과에서
+    return await retrieve(query, path_records, top_k)

@@ -15,7 +15,7 @@ from app.agent.prompts import ANSWER_PROMPT
 from app.agent.state import DataDomain, GraphState, Route
 from app.mcp.client import MCPClient, MCPClientError, MCPNoResultError
 
-SENSITIVE_FIELD_PARTS = ("api_key", "password", "secret", "token", "file_path")
+SENSITIVE_FIELD_PARTS = ("api_key", "password", "secret", "token", "path", "credential")
 
 
 def route_question(question: str) -> Route:
@@ -37,14 +37,30 @@ def route_question(question: str) -> Route:
         "매출", "현황", "집계", "실적", "기간", "판매", "구매", "지출",
         "고객", "공급업체", "재고", "vip", "발주", "미수금", "미지급",
     )
+    # "경쟁사/타사" 등 외부 회사에 대한 질문은 매출/판매 같은 단어가 들어있어도
+    # 우리 내부 DB로 답할 수 없는 범위 밖 질문이라 DATABASE로 보내면 안 됩니다.
+    external_scope_terms = ("경쟁사", "타사", "동종업계", "다른회사")
     has_document = any(term in normalized for term in document_terms)
-    has_database = any(term in normalized for term in database_terms)
+    has_database = any(term in normalized for term in database_terms) and not any(
+        term in normalized for term in external_scope_terms
+    )
     if has_document and has_database:
         return "BOTH"
     if has_document:
         return "DOCUMENT"
     if has_database:
         return "DATABASE"
+
+    # 키워드 매칭이 아무 것도 못 잡은 경우에만 임베딩 유사도로 한 번 더 확인합니다.
+    # "연차", "징계", "출장비" 같은 어휘 격차는 문자열 매칭으로는 원리적으로 못 잡기
+    # 때문에, 여기서 의미 유사도로 보강합니다. 대부분의 질문은 위 키워드 단계에서
+    # 이미 끝나므로 임베딩 호출은 애매한 소수의 질문에만 발생합니다.
+    if not any(term in normalized for term in external_scope_terms):
+        from app.agent.semantic_router import classify_by_similarity
+
+        semantic_route = classify_by_similarity(question)
+        if semantic_route in ("DOCUMENT", "DATABASE"):
+            return semantic_route  # type: ignore[return-value]
     return "GENERAL"
 
 
