@@ -14,33 +14,23 @@ from __future__ import annotations
 
 from typing import Any
 
-import pymysql
-import pymysql.cursors
-
 from app.core.config import get_settings
+from app.core.db_pool import get_pool
 from mcp_servers.data_tools.purchase.sql_guard import validate_and_normalize
 
 
 class ReadOnlyMySQLClient:
-    """SELECT 전용 purchase_reader 계정을 사용하는 데이터 조회 어댑터."""
+    """SELECT 전용 purchase_reader 계정을 공유 풀에서 연결을 빌려 사용한다."""
 
     def __init__(self, host: str, user: str, password: str, database: str) -> None:
-        """읽기 전용 연결 설정을 보관하고 자동 커밋을 사용하지 않는다."""
-        self._connection_kwargs = dict(
-            host=host,
-            user=user,
-            password=password,
-            database=database,
-            cursorclass=pymysql.cursors.DictCursor,
-            charset="utf8mb4",
-            autocommit=False,
-        )
+        """연결 풀을 준비하되 생성 시점에는 DB에 접속하지 않는다(풀도 지연 연결)."""
+        self._pool = get_pool(host, user, password, database, autocommit=False)
 
     def query(self, sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
         """guard를 통과한 단일 SELECT를 timeout과 읽기 전용 세션으로 실행한다."""
         normalized = validate_and_normalize(sql)
 
-        connection = pymysql.connect(**self._connection_kwargs)
+        connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute("SET SESSION MAX_EXECUTION_TIME=%s", (timeout_seconds * 1000,))
@@ -48,6 +38,7 @@ class ReadOnlyMySQLClient:
                 rows = cursor.fetchall()
             return rows
         finally:
+            # 풀에서 빌린 연결이라 close()해도 TCP는 끊기지 않고 풀에 반납된다.
             connection.close()
 
 
@@ -57,21 +48,13 @@ class ExplainOnlyMySQLClient:
     MySQL은 SQL SECURITY DEFINER 뷰에 대해 실제 SELECT는 뷰 생성자 권한으로
     돌려주지만, EXPLAIN은 호출 계정이 원본 테이블 권한을 직접 가져야 한다
     (그렇지 않으면 "lacking privileges for underlying table" 오류가 난다).
-    그래서 EXPLAIN만 admin 계정(mysql_write_*)으로 실행한다 — EXPLAIN은 실행
-    계획 정보만 돌려주고 실제 행 데이터는 절대 반환하지 않으므로, 실제 데이터
-    조회를 purchase_reader로만 제한하는 원칙은 그대로 유지된다.
+    그래서 EXPLAIN만 admin 계정(purchase 도메인 전용 ETL 계정)으로 실행한다 —
+    EXPLAIN은 실행 계획 정보만 돌려주고 실제 행 데이터는 절대 반환하지 않으므로,
+    실제 데이터 조회를 purchase_reader로만 제한하는 원칙은 그대로 유지된다.
     """
 
     def __init__(self, host: str, user: str, password: str, database: str) -> None:
-        self._connection_kwargs = dict(
-            host=host,
-            user=user,
-            password=password,
-            database=database,
-            cursorclass=pymysql.cursors.DictCursor,
-            charset="utf8mb4",
-            autocommit=False,
-        )
+        self._pool = get_pool(host, user, password, database, autocommit=False)
 
     def explain(self, sql: str, timeout_seconds: int = 10) -> None:
         """guard를 통과한 SQL을 실제로 실행하지 않고 EXPLAIN으로만 채점한다.
@@ -81,7 +64,7 @@ class ExplainOnlyMySQLClient:
         (호출부가 그 메시지를 LLM에게 보여주고 재작성을 요청한다).
         """
         normalized = validate_and_normalize(sql)
-        connection = pymysql.connect(**self._connection_kwargs)
+        connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute("SET SESSION MAX_EXECUTION_TIME=%s", (timeout_seconds * 1000,))

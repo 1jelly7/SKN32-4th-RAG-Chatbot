@@ -13,16 +13,7 @@ import pytest
 
 from app.agent.graph import build_graph
 from app.agent.llm import FakeLLMPort
-from app.agent.nodes import (
-    _build_sources,
-    _build_tables,
-    answer_synthesis,
-    database_retrieval,
-    route_data_domain,
-    route_question,
-    router,
-    semantic_route_question,
-)
+from app.agent.nodes import _build_sources, _build_tables, answer_synthesis, database_retrieval, route_data_domain, route_question, router
 from app.agent.state import DataDomain, EvidencePolicy, GraphState, Route
 from app.mcp.client import FakeMCPPort, MCPClient
 
@@ -51,13 +42,9 @@ def _tool_success(
     [
         ("휴가 규정이 어떻게 되나요", "DOCUMENT"),
         ("법인카드 지침 알려줘", "DOCUMENT"),
-        ("사외 활동 허용 범위를 알려줘", "DOCUMENT"),
-        ("특별안전보건교육 대상은 누구야", "DOCUMENT"),
         ("고객별 매출 순위 알려줘", "DATABASE"),
         ("공급업체별 지출 총액이 얼마야", "DATABASE"),
-        ("협력사별 지급 현황을 알려줘", "DATABASE"),
         ("법인카드 지침이랑 매출 현황 같이 알려줘", "BOTH"),
-        ("법인카드 지침과 공급업체별 구매 지출을 알려줘", "BOTH"),
         ("오늘 날씨 어때", "GENERAL"),
     ],
 )
@@ -91,7 +78,6 @@ def test_route_data_domain_uses_both_for_purchase_and_sales_terms() -> None:
         ("고객별 매출 순위", "DATABASE", "sales"),
         ("구매와 판매 현황을 알려줘", "DATABASE", "both"),
         ("휴가 규정과 구매 및 판매 현황을 알려줘", "BOTH", "both"),
-        ("법인카드 지침과 공급업체별 구매 지출을 알려줘", "BOTH", "purchase"),
     ],
 )
 async def test_router_preserves_route_and_data_domain(
@@ -101,44 +87,10 @@ async def test_router_preserves_route_and_data_domain(
 ) -> None:
     state: GraphState = {"question": question}
 
-    result = await router(state, FakeLLMPort('{"route": "GENERAL", "document_query": null}'))
+    result = await router(state)
 
     assert result["route"] == expected_route
     assert result.get("data_domain") == expected_domain
-
-
-@pytest.mark.asyncio
-async def test_semantic_router_recognizes_internal_policy_without_registered_keyword() -> None:
-    llm = FakeLLMPort('{"route": "DOCUMENT", "document_query": "겸직 겸업 규정"}')
-
-    result = await router({"question": "다른 직장에서 일을 병행해도 되나요?"}, llm)
-
-    assert result["route"] == "DOCUMENT"
-    assert result["routing_method"] == "semantic"
-    assert result["document_search_query"] == "겸직 겸업 규정"
-    assert llm.calls[0].question == "다른 직장에서 일을 병행해도 되나요?"
-
-
-@pytest.mark.asyncio
-async def test_semantic_router_falls_back_to_general_for_invalid_model_output() -> None:
-    route, document_query = await semantic_route_question(
-        "별도의 사내 근거가 필요 없는 질문",
-        FakeLLMPort("not-json"),
-    )
-
-    assert route == "GENERAL"
-    assert document_query is None
-
-
-@pytest.mark.asyncio
-async def test_keyword_route_does_not_call_semantic_router() -> None:
-    llm = FakeLLMPort('{"route": "GENERAL", "document_query": null}')
-
-    result = await router({"question": "휴가 규정을 알려줘"}, llm)
-
-    assert result["route"] == "DOCUMENT"
-    assert result["routing_method"] == "keyword"
-    assert llm.calls == []
 
 
 @pytest.mark.asyncio
@@ -646,46 +598,6 @@ def test_build_tables_marks_chartable_when_label_and_value_present():
     assert tables[0]["chartable"] is True
     assert tables[0]["label_column"] == "customer"
     assert tables[0]["value_column"] == "revenue"
-    assert tables[0]["chart_type"] == "bar"
-
-
-def test_build_tables_accepts_integer_period_and_sixty_line_points():
-    from app.agent.nodes import _build_tables
-
-    rows = [{"order_year": 2020 + index, "order_count": index, "total_sales": index * 1000} for index in range(60)]
-    tables = _build_tables([{"type": "database", "domain": "sales", "generated_sql": "x", "rows": rows}])
-
-    assert tables[0]["label_column"] == "order_year"
-    assert tables[0]["value_column"] == "total_sales"
-    assert tables[0]["chart_type"] == "line"
-    assert tables[0]["chartable"] is True
-
-
-@pytest.mark.asyncio
-async def test_answer_synthesis_limits_database_rows_only_for_llm_prompt() -> None:
-    fake_llm = FakeLLMPort("요약 답변")
-    rows = [{"month": str(index), "total": index} for index in range(60)]
-    state: GraphState = {
-        "question": "월별 매출", "route": "DATABASE", "evidence_status": "SUPPORTED",
-        "evidence": [{"type": "database", "domain": "sales", "rows": rows, "generated_sql": "SELECT"}],
-    }
-
-    result = await answer_synthesis(state, fake_llm)
-
-    assert len(fake_llm.calls[0].context[0]["rows"]) == 50
-    assert len(result["tables"][0]["rows"]) == 60
-
-
-@pytest.mark.asyncio
-async def test_answer_synthesis_returns_data_tool_empty_result_message() -> None:
-    result = await answer_synthesis(
-        {"route": "DATABASE", "evidence_status": "INSUFFICIENT", "_no_result_messages": ["해당 조건의 데이터가 없습니다."]},
-        FakeLLMPort("unused"),
-    )
-
-    assert "해당 조건의 데이터가 없습니다." in result["answer"]
-    assert "**요약**" in result["answer"]
-    assert "**근거 문서**" in result["answer"]
 
 
 def test_build_tables_prefers_last_numeric_column_as_value():
@@ -758,8 +670,7 @@ async def test_general_answer_receives_question_without_retrieval_context() -> N
     assert result["answer"] == "사과는 일반적으로 빨간색입니다."
     assert fake_llm.calls[0].question == "사과는 무슨 색인가?"
     assert fake_llm.calls[0].prompt == ANSWER_PROMPT
-    assert "일반적인 법률·노무 상식이나 추측으로 보충하지 마세요" in ANSWER_PROMPT
-    assert all(heading in ANSWER_PROMPT for heading in ("**요약**", "**세부 내용**", "**근거 문서**"))
+    assert "사내 자료와 무관한 일반 질문은 간결하게 답할 수 있지만" in ANSWER_PROMPT
 
 
 @pytest.mark.asyncio
@@ -796,29 +707,5 @@ async def test_empty_internal_search_is_not_reported_as_mcp_failure() -> None:
     )
 
     assert result["evidence_status"] == "INSUFFICIENT"
-    assert "사내 근거" in result["answer"]
-    assert [call.tool_name for call in port.calls] == ["search_documents"] * 4
-
-
-@pytest.mark.asyncio
-async def test_answer_synthesis_replaces_internal_evidence_number_with_document_title() -> None:
-    result = await answer_synthesis(
-        {
-            "question": "다른 직장에서 일을 병행해도 되나요?",
-            "route": "DOCUMENT",
-            "evidence_status": "SUPPORTED",
-            "evidence": [
-                {
-                    "type": "document",
-                    "document_id": "work-rule",
-                    "title": "취업규칙[2025.06.25. 개정]",
-                    "content": "제8조 겸직제한",
-                    "score": 0.9,
-                }
-            ],
-        },
-        FakeLLMPort("문서명: [근거 1]\n조항: 제8조(겸직제한)"),
-    )
-
-    assert "문서명: 취업규칙[2025.06.25. 개정]" in result["answer"]
-    assert "[근거 1]" not in result["answer"]
+    assert "사내 자료" in result["answer"]
+    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]

@@ -52,7 +52,6 @@ def after_evidence(state: GraphState) -> str:
         return "retry"
     return "answer"
 
-
 async def prepare_evidence_retry(state: GraphState) -> GraphState:
     """재시도 횟수를 증가시키고 이전 조회 결과·오류를 비운다."""
     state["evidence_retry_count"] = state.get("evidence_retry_count", 0) + 1
@@ -85,7 +84,7 @@ def build_graph(
     """
     graph = StateGraph(GraphState)
 
-    graph.add_node("router", partial(router, llm=llm))
+    graph.add_node("router", router)
     graph.add_node("document", partial(document_retrieval, mcp_client=mcp_client))
     graph.add_node("database", partial(database_retrieval, mcp_client=mcp_client))
     graph.add_node("evidence", evidence_eval)

@@ -9,6 +9,7 @@ import pymysql
 import pymysql.cursors
 
 from app.auth.models import Account
+from app.core.db_pool import get_pool
 
 
 class AccountRepository(Protocol):
@@ -19,14 +20,13 @@ class AccountRepository(Protocol):
 
 
 class MySQLAccountRepository:
-    """account_db에 지연 연결하여 파라미터화된 로그인 조회만 수행한다."""
+    """account_db 연결 풀에서 연결을 빌려 파라미터화된 로그인 조회만 수행한다."""
 
     def __init__(self, host: str, port: int, user: str, password: str, database: str) -> None:
-        self._kwargs = {"host": host, "port": port, "user": user, "password": password, "database": database,
-                        "charset": "utf8mb4", "autocommit": True, "cursorclass": pymysql.cursors.DictCursor}
+        self._pool = get_pool(host, user, password, database, port=port, autocommit=True)
 
     def find_by_username(self, username: str) -> Account | None:
-        connection = pymysql.connect(**self._kwargs)
+        connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -39,7 +39,7 @@ class MySQLAccountRepository:
         return _account_from_row(row) if row else None
 
     def record_login(self, account_id: int) -> None:
-        connection = pymysql.connect(**self._kwargs)
+        connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute("UPDATE accounts SET last_login_at = CURRENT_TIMESTAMP WHERE id = %s", (account_id,))

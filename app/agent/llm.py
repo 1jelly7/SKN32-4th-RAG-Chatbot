@@ -6,6 +6,7 @@ provider 호출 전에 내부 경로와 자격증명 후보를 재귀적으로 �
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -15,7 +16,34 @@ from app.core.openai_client import get_async_openai_client
 from app.logging.performance import log_llm_completion, start_timer
 
 DEMO_NOTICE = "[로컬 데모 응답] OPENAI_API_KEY가 없어 실제 GPT 응답 대신 근거 요약만 표시합니다.\n\n"
-SENSITIVE_KEY_PARTS = ("api_key", "password", "secret", "token", "file_path")
+# "file_path"만 걸러내면 "filepath", "absolute_path" 같은 변형 키는 그대로 통과해
+# 내부 경로가 LLM 컨텍스트로 새어나간다. "path" 하나로 넓혀서 이런 변형까지 잡는다.
+SENSITIVE_KEY_PARTS = ("api_key", "password", "secret", "token", "path", "credential")
+
+# 문서 본문(content) 안에 숨어 들어올 수 있는 프롬프트 인젝션 시도를 걸러내는 패턴.
+# "###시스템:...###" 같은 구분자 블록이나 "이전 지시를 무시" 류의 지시문을 중립화한다.
+# 정상적인 문서 문장을 과도하게 지우지 않도록, 명확히 지시문/구분자로 보이는 패턴만 잡는다.
+_INJECTION_PATTERNS = (
+    re.compile(r"#{2,}\s*(?:system|시스템)\s*[:：].*?#{2,}", re.IGNORECASE | re.DOTALL),
+    re.compile(r"(?:system|시스템)\s*[:：]\s*.+"),
+    re.compile(r"(?:이전|기존)\s*(?:지시|명령|프롬프트)[를을]?\s*(?:무시|잊)[^.\n]*"),
+    re.compile(r"ignore\s+(?:all\s+)?previous\s+instructions[^.\n]*", re.IGNORECASE),
+    re.compile(r"(?:너는|당신은)\s*이제\s*[^.\n]*"),
+)
+_INJECTION_REDACTION = "[문서 원문 중 지시문으로 해석될 수 있는 구간을 제거했습니다]"
+
+
+def _strip_injection_markers(text: str) -> str:
+    """문서 content 문자열에서 프롬프트 인젝션으로 보이는 구간을 중립 문구로 치환한다.
+
+    검색된 문서는 신뢰할 수 없는 데이터로 취급해야 한다 — 그 안에 "이전 지시를 무시하라" 같은
+    문장이 있어도 실제 지시가 아니라 문서에 적힌 텍스트일 뿐이다. 답변 프롬프트에서도 이를
+    데이터로만 다루라고 명시하지만, 여기서는 방어 심층화 차원에서 명백한 패턴을 한 번 더 지운다.
+    """
+    cleaned = text
+    for pattern in _INJECTION_PATTERNS:
+        cleaned = pattern.sub(_INJECTION_REDACTION, cleaned)
+    return cleaned
 
 
 class AsyncLLMPort(Protocol):
@@ -102,15 +130,17 @@ def sanitize_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [_sanitize_value(item) for item in evidence]
 
 
-def _sanitize_value(value: Any) -> Any:
+def _sanitize_value(value: Any, key: str | None = None) -> Any:
     if isinstance(value, dict):
         return {
-            key: _sanitize_value(item)
-            for key, item in value.items()
-            if not _is_sensitive_key(key)
+            k: _sanitize_value(item, key=k)
+            for k, item in value.items()
+            if not _is_sensitive_key(k)
         }
     if isinstance(value, list):
-        return [_sanitize_value(item) for item in value]
+        return [_sanitize_value(item, key=key) for item in value]
+    if isinstance(value, str) and key == "content":
+        return _strip_injection_markers(value)
     return value
 
 
