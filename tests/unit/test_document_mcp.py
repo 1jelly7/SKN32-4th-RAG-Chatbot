@@ -63,6 +63,52 @@ def test_document_path_lookup_does_not_exclude_semantically_related_titles(
     assert "LIKE" not in executed_sql[0]
 
 
+def test_document_download_lookup_uses_active_document_pool_mapping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """다운로드 ID 조회도 검색과 동일한 연결 풀을 사용해야 한다."""
+    executed: list[tuple[str, tuple[str, ...]]] = []
+
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def execute(self, sql: str, params: tuple[str, ...]) -> None:
+            executed.append((sql, params))
+
+        def fetchone(self) -> dict[str, object] | None:
+            return {
+                "document_id": "policy-welfare",
+                "title": "복지후생규정 시행세칙",
+                "file_path": "documents/welfare.pdf",
+                "updated_at": "2026-08-01",
+            }
+
+    class FakeConnection:
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def close(self) -> None:
+            return None
+
+    class FakePool:
+        def connection(self) -> FakeConnection:
+            return FakeConnection()
+
+    monkeypatch.setattr("mcp_servers.document_tools.document_db.get_pool", lambda *_args, **_kwargs: FakePool())
+    repository = DocumentPathRepository("host", "user", "password", "document_db")
+
+    result = repository._find_path_by_document_id_sync("policy-welfare")
+
+    assert result is not None
+    assert result["file_path"] == "documents/welfare.pdf"
+    assert executed[0][1] == ("policy-welfare",)
+    assert "is_active = TRUE" in executed[0][0]
+
+
 def test_document_search_resolves_database_paths_before_loading(monkeypatch) -> None:
     """문서 DB 경로 조회→RAG 순서와 조회 결과 범위를 회귀로 고정한다."""
     calls: list[str] = []

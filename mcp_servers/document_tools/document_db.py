@@ -56,7 +56,7 @@ class DocumentPathRepository:
             connection.close()
 
     def _find_path_by_document_id_sync(self, document_id: str) -> DocumentPathRecord | None:
-        connection = pymysql.connect(**self._connection_kwargs)
+        connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute(

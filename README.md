@@ -1,506 +1,496 @@
-# 사내 지식 RAG·Text2SQL MCP 챗봇 구현 명세서
+# 사내 지식 RAG·Text2SQL MCP 챗봇
 
-> **목적**: 이 문서는 프로젝트 구조, 책임 경계, 실행 흐름, 구현 우선순위 및 테스트 기준을 이해하고 작업을 시작할 수 있도록 작성한 구현 기준 문서다.
+> 사내 규정 문서와 구매·판매 데이터를 하나의 채팅창에서 검색하고, 검증된 근거와 함께 답변하는 업무용 AI 챗봇
 
-## 1. 프로젝트 목표
+문서 검색이 필요한 질문에는 **FAISS 기반 RAG**를, 수치·현황 질문에는 **MySQL 기반 Text2SQL**을 사용합니다. 두 종류의 근거가 모두 필요하면 LangGraph가 문서와 데이터 조회를 이어서 실행하고, Evidence Eval이 채택한 근거만 최종 답변에 사용합니다.
 
-사용자가 웹 채팅 화면에서 질문하면 시스템은 질문의 성격을 판별한다. 사내 문서 근거가 필요하면 FAISS 기반 RAG를, 정형 업무 데이터가 필요하면 MySQL 기반 Text2SQL을 사용한다. 두 근거가 모두 필요할 때만 병렬 또는 순차적으로 두 경로를 수행한다.
+## 팀과 개발 과정
 
-사내 문서와 MySQL은 애플리케이션이 직접 접근하지 않는다. `Document MCP Server`는
-내부 문서 DB에서 관련 파일 경로를 먼저 조회한 뒤 해당 파일을 읽고, `Data MCP Server`는
-업무 DB를 조회한다. 같은 조건의 질문에 대한 답변은 Answer Cache에서 먼저 찾고, 캐시가
-적중하면 OpenAI, LangGraph, MCP, FAISS, MySQL 호출을 모두 생략한다.
+<table>
+  <tr>
+    <td align="center" width="220"><img src="docs/assets/team/문동원.png" width="100" height="100" style="object-fit: cover;" alt="문동원"/></td>
+    <td align="center" width="220"><img src="docs/assets/team/박회종.png" width="100" height="100" style="object-fit: cover;" alt="박회종"/></td>
+    <td align="center" width="220"><img src="docs/assets/team/이태혁.png" width="100" height="100" style="object-fit: cover;" alt="이태혁"/></td>
+    <td align="center" width="220"><img src="docs/assets/team/이호원.png" width="100" height="100" style="object-fit: cover;" alt="이호원"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>문동원</b></td>
+    <td align="center"><b>박회종</b></td>
+    <td align="center"><b>이태혁</b></td>
+    <td align="center"><b>이호원</b></td>
+  </tr>
+  <tr>
+    <td align="center">PM · RAG Sales</td>
+    <td align="center">Backend</td>
+    <td align="center">RAG PDF</td>
+    <td align="center">RAG Purchasing</td>
+  </tr>
+</table>
 
-### 필수 기술
+| 단계 | 주요 작업 |
+|---|---|
+| 기획 | 주제 선정과 역할·책임 정의 |
+| 기반 구축 | 데이터 선정, Git 브랜치 구성, 백엔드 골격 작성 |
+| 기능 개발 | RAG, 판매·구매, API·Agent 기능 분담 구현 |
+| 통합 | 브랜치 병합, 계약 테스트, 버그 수정 |
+| 마무리 | 기능 공유, 문서와 발표 자료 정리 |
 
-| 영역 | 기술 | 사용 목적 |
-|---|---|---|
-| Backend | Python, FastAPI | 웹 UI에 HTTP API 제공 |
-| LLM | OpenAI 저비용 모델 | 라우팅 보조, Text2SQL, 최종 답변 생성 |
-| Orchestration | LangGraph | 조건부 라우팅, 상태 전달, 노드 실행 제어 |
-| External access | MCP | 문서 검색과 DB 조회를 표준 Tool 경계로 분리 |
-| RAG | FAISS + Embedding | 사내 비정형 문서 검색 |
-| DB | MySQL | 정형 업무 데이터 저장·조회 |
-| Cache | Redis (개발 단계는 In-memory 가능) | 동일 질문의 모델 호출 생략 |
-| Test | pytest | 기능별 단위·통합 테스트 |
+## WBS (작업 분해 구조)
 
-## 2. 핵심 원칙
+| 일자 | 주요 작업 |
+|---|---|
+| 수 | 주제 선정, RnR(역할과 책임) 정함 |
+| 목 | 데이터 정하기 → GitHub 브랜치 생성·배포 → 백엔드 틀 완료 |
+| 금 | 로컬 실행 시 정상 동작 확인 |
+| 토 · 일 | 각자 담당 기능(function) 개발 |
+| 일 | 각자 기능 개발 완료 |
+| 월 | 머지 완료 → 통합 테스트 및 버그 fix → 각자 개발 파트 공유·설명 |
+| 화 | 발표 자료 제작 |
 
-1. **Cache first**: 모든 `/api/chat` 요청은 코드 규칙으로 생성한 캐시 키를 사용해 먼저 Answer Cache를 조회한다.
-2. **Explicit question routing**: 질문을 `GENERAL`, `DOCUMENT`, `DATABASE`, `BOTH`로 분류하고, `GENERAL`은 검색 없이 답변하며 `DOCUMENT`는 문서만, `DATABASE`는 업무 DB만, `BOTH`는 두 경로를 모두 조회한다.
-3. **MCP-only data access**: LangGraph/FastAPI는 FAISS와 MySQL에 직접 연결하지 않는다.
-4. **Read/write separation**: Data MCP는 읽기 전용 MySQL 연결을 사용하고 ETL은 적재 전용 연결을 사용한다.
-5. **Evidence-grounded answer**: 검색 또는 조회 근거가 있을 때는 그 근거 범위 안에서만 답변한다.
-6. **Bootcamp scope**: 초기 구현은 단순하고 검증 가능해야 한다. 불필요한 마이크로서비스, Docker, Kubernetes는 포함하지 않는다.
+세부 코드 소유권과 변경 협의 대상은 [docs/ownership.md](docs/ownership.md)를 따릅니다.
 
-## 3. 시스템 흐름
+[빠른 시작](#빠른-시작) · [사용 예시](#사용-예시) · [시스템 구조](#시스템-구조) · [상세 설계](docs/architecture.md) · [MCP 계약](docs/interface.md) · [테스트 시나리오](docs/test-scenarios.md)
+
+![사내 지식 챗봇 처리 흐름](docs/assets/mermaid-diagram.svg)
+
+## 핵심 기능
+
+- **질문 자동 라우팅**: 질문을 `GENERAL`, `DOCUMENT`, `DATABASE`, `BOTH`로 분류합니다.
+- **사내 문서 RAG**: 등록된 PDF·TXT·Markdown 문서를 검색해 문서명, 페이지, 발췌 근거를 제공합니다.
+- **구매·판매 Text2SQL**: 자연어 질문을 허용된 조회 뷰의 SELECT SQL로 변환합니다.
+- **LLM 기반 데이터 증강**: Kaggle 원천의 구조와 분포를 참고해 구매·판매 합성 데이터를 추가하고, 장기간·다양한 조건의 질의를 검증합니다.
+- **표·차트 시각화**: 데이터 조회 결과와 생성 SQL을 표 및 막대·꺾은선 차트로 표시합니다.
+- **근거 품질 평가**: 근거를 `SUPPORTED`, `PARTIALLY_SUPPORTED`, `INSUFFICIENT`, `CONTRADICTED`로 구분합니다.
+- **출처 확인**: 문서 발췌와 참조 페이지를 표시하고, 권한을 검증한 사용자에게 원문 다운로드를 제공합니다.
+- **캐시 우선 처리**: 같은 조건의 검증된 답변을 재사용해 LLM·MCP·DB 호출을 줄입니다.
+- **로그인과 RBAC**: `admin`, `hr`, `finance` 역할별로 접근 가능한 DB 범위를 서버에서 제한합니다.
+
+## 목차
+
+- [프로젝트 소개](#프로젝트-소개)
+- [사용 예시](#사용-예시)
+- [시스템 구조](#시스템-구조)
+- [질문 유형별 처리](#질문-유형별-처리)
+- [기술 스택](#기술-스택)
+- [빠른 시작](#빠른-시작)
+- [데이터 준비](#데이터-준비)
+- [API](#api)
+- [보안과 안전장치](#보안과-안전장치)
+- [프로젝트 구조](#프로젝트-구조)
+- [테스트](#테스트)
+- [현재 구현 상태와 제한](#현재-구현-상태와-제한)
+- [팀과 개발 과정](#팀과-개발-과정)
+- [기여 방법](#기여-방법)
+- [관련 문서](#관련-문서)
+- [라이선스](#라이선스)
+
+## 프로젝트 소개
+
+사내 정보는 크게 두 곳에 나뉘어 있습니다. 규정·정책·매뉴얼은 문서에 있고, 매출·구매액·미수금 같은 실적은 데이터베이스에 있습니다. 기존 방식에서는 사용자가 문서의 위치나 SQL을 알아야 원하는 답을 찾을 수 있었습니다.
+
+이 프로젝트는 두 정보원을 하나의 질문 창으로 통합합니다.
+
+1. 질문이 문서, 데이터 또는 복합 질문인지 판단합니다.
+2. 필요한 정보원만 MCP Tool 경계로 조회합니다.
+3. 수집된 근거의 관련성·충분성·충돌 여부를 검사합니다.
+4. 검증된 근거만 LLM에 전달해 답변을 생성합니다.
+5. 답변과 함께 문서 출처, 표, 차트, 캐시 여부를 반환합니다.
+
+FastAPI와 LangGraph는 원문 파일, FAISS, 업무 MySQL에 직접 접근하지 않습니다. 현재 기본 실행에서는 MCP Tool과 같은 비동기 계약을 **동일 Python 프로세스 안에서** 호출하며, 원격 MCP URL transport는 아직 연결되지 않았습니다.
+
+### 데이터 구성과 LLM 기반 증강
+
+구매·판매 데이터는 Kaggle의 AdventureWorks2022 Excel 데이터를 출발점으로 삼았습니다. 원천 데이터만으로는 기간과 업무 시나리오가 제한적이어서, 팀은 LLM을 활용해 기존 스키마·컬럼 의미·업무 관계를 분석하고 구매·판매 합성 레코드와 확장 시나리오를 설계했습니다. 이렇게 만든 증강 데이터는 기간별 실적, 고객·공급업체별 집계, 추이 분석과 Text2SQL 질의를 다양하게 검증하는 데 사용했습니다.
+
+증강 데이터는 실제 기업의 거래나 실적을 나타내지 않는 **교육·테스트용 합성 데이터**입니다. LLM이 제안한 값과 규칙을 그대로 신뢰하지 않고, PK·참조 관계, 필수 컬럼, 데이터 타입, 금액 계산과 중복 여부를 코드와 ETL 검증 단계에서 확인했습니다. 판매 데이터의 최종 확장은 `scripts/generate_sales_synthetic_data.py`가 원본 행을 보존하면서 고정 난수 seed와 명시적 계산 규칙으로 재현하며, 이 스크립트 자체가 실행 중 LLM API를 호출하는 것은 아닙니다.
+
+## 사용 예시
+
+웹 UI에 로그인한 뒤 자연어로 질문합니다.
+
+| 질문 예시 | 분류 | 실행 경로 | 결과 |
+|---|---|---|---|
+| “RAG가 무엇인가요?” | `GENERAL` | LLM | 일반 설명 |
+| “법인카드 사용 제한을 알려줘” | `DOCUMENT` | Document MCP → FAISS | 답변, 문서 발췌, 페이지, 원문 다운로드 |
+| “2025년 공급업체별 구매액을 알려줘” | `DATABASE` | Purchase Data MCP → MySQL | 답변, SQL, 표, 차트 |
+| “2025년 고객별 매출을 알려줘” | `DATABASE` | Sales Data MCP → MySQL | 답변, SQL, 표, 차트 |
+| “구매 규정과 올해 공급업체별 구매액을 비교해줘” | `BOTH` | Document MCP → Data MCP | 문서·데이터 통합 답변 |
+
+화면은 다음 정보를 구분해 보여 줍니다.
+
+- 질문 경로: 일반 지식 / 사내 문서 / 업무 데이터 / 문서 + 데이터
+- 캐시 사용 여부
+- 근거 평가 상태
+- 문서명, 참조 페이지와 발췌 내용
+- DB 조회 결과, 생성된 SQL과 차트
+
+## 시스템 구조
 
 ```text
 사용자
   -> Static Web UI
+  -> 로그인 세션 및 역할 확인
   -> FastAPI POST /api/chat
-  -> Answer Cache 조회
-       -> Hit: 캐시 답변 즉시 반환
-       -> Miss: LangGraph 실행
+  -> Answer Cache
+       -> Hit: 저장된 답변 즉시 반환
+       -> Miss: LangGraph
             -> Query Router
-               -> GENERAL: 최종 답변 생성
-               -> DOCUMENT: Document MCP -> 문서 DB 경로 조회 -> 파일 로드 -> FAISS RAG
+               -> GENERAL: LLM 답변
+               -> DOCUMENT: Document MCP -> 문서 DB -> 파일 -> FAISS
                -> DATABASE: Data MCP -> Text2SQL -> MySQL SELECT
-               -> BOTH: Document MCP + Data MCP
+               -> BOTH: Document 경로 -> Database 경로
             -> Evidence Eval
-            -> OpenAI 최종 답변 생성
+            -> Answer Synthesis
             -> Answer Cache 저장
-  -> Web UI에 답변·출처·캐시 여부 표시
+  -> 답변·출처·표·차트 반환
 ```
 
-## 권한 관리 (RBAC)
+### 문서 검색 흐름
 
-| Role | 권한 |
-|---|---|
-| Admin | 사내 문서 검색, Text2SQL 조회를 포함한 모든 기능 사용 |
-| HR | 사내 문서 검색만 가능 |
-| Finance | 사내 문서 검색 및 Text2SQL 조회 가능 |
+```text
+문서 DB의 활성 문서 경로 조회
+  -> 등록 경로의 PDF/TXT/Markdown 로드
+  -> 질문 임베딩
+  -> 영구 FAISS 인덱스의 벡터 검색 + 단어 일치 검색
+  -> 관련 문서 조각 병합
+  -> 내부 file_path를 제거한 출처 반환
+```
 
-> 서버 API에서도 역할별 권한을 검증합니다. UI에서 기능을 숨기는 것만으로
-> 접근을 제어하지 않으며, 권한이 없는 문서·데이터베이스 요청은 서버에서 거부합니다.
+문서 DB는 현재 질문 제목으로 후보를 미리 좁히지 않고 모든 활성 문서를 허용 목록으로 반환합니다. 실제 관련성 판정은 FAISS 검색이 담당합니다.
 
-### 질문 라우팅 규칙
+### 데이터 조회 흐름
 
-| route | 선택 기준 | 실행 경로 |
+```text
+자연어 질문
+  -> 구매/판매 스키마와 지표 정의 제공
+  -> LLM이 SQL 생성
+  -> SELECT·허용 뷰·LIMIT 정적 검사
+  -> EXPLAIN 사전검증
+  -> 실패 시 최대 1회 SQL 재작성
+  -> 읽기 전용 MySQL 계정으로 실행
+  -> 행·SQL·실행 metadata 반환
+```
+
+## 질문 유형별 처리
+
+| 유형 | 판단 기준 | 사용하는 Tool | 답변 근거 |
+|---|---|---|---|
+| `GENERAL` | 사내 자료가 필요 없는 일반 질문 | 없음 | 일반 LLM 답변 |
+| `DOCUMENT` | 규정, 정책, 가이드, 매뉴얼 | `search_documents` | 문서 조각과 출처 |
+| `DATABASE` | 매출, 구매, 고객, 공급업체, 집계 | `query_purchase` 또는 `query_sales` | SQL과 조회 행 |
+| `BOTH` | 규정과 실제 수치를 함께 요구 | 관련 Tool 모두 | 문서·DB 근거 |
+
+라우터는 명시적 업무 키워드를 먼저 사용합니다. 규칙에서 `GENERAL`로 분류된 질문은 LLM 의미 분류를 한 번 더 거치며, 모델 오류나 형식 위반이 있으면 안전하게 `GENERAL`로 돌아갑니다.
+
+`INSUFFICIENT`인 검색은 같은 경로로 한 번 더 조회합니다. 최종적으로도 근거가 없으면 추측하지 않고 부족 안내를 반환하며, 명시적 사실 충돌이 있으면 LLM을 호출하지 않고 충돌 상태를 알립니다.
+
+## 기술 스택
+
+| 영역 | 기술 | 역할 |
 |---|---|---|
-| `GENERAL` | 사내 근거가 필요 없는 일반 개념 질문 | LLM 답변만 생성 |
-| `DOCUMENT` | 정책, 규정, 가이드, 매뉴얼, 설계 문서 질문 | Document MCP 호출 |
-| `DATABASE` | 수치, 현황, 집계, 기간별 실적, 고객/매출 질문 | Data MCP 호출 |
-| `BOTH` | 문서 정책과 실제 수치·현황이 함께 필요한 질문 | 두 MCP 호출 후 근거 통합 |
+| Runtime | Python | API, Agent, MCP, ETL 실행 |
+| Backend | FastAPI, Pydantic | HTTP API와 요청·응답 검증 |
+| LLM | OpenAI SDK | 의미 라우팅, Text2SQL, 답변 생성 |
+| Orchestration | LangGraph | 조건 분기와 상태 전달 |
+| Tool boundary | MCP | 문서·구매·판매 기능 분리 |
+| RAG | FAISS, sentence-transformers | 문서 검색 |
+| Database | MySQL | 계정, 문서 경로, 구매·판매 데이터 |
+| Cache | In-memory | 검증 답변 재사용 |
+| ETL | pandas, openpyxl, PyMySQL | Excel/CSV 정제·검증·UPSERT |
+| Frontend | HTML, CSS, JavaScript, Chart.js | 채팅, 출처, 표·차트 UI |
+| Test | pytest, pytest-asyncio, httpx | 단위·통합 계약 검증 |
 
-현재 라우터는 명시적인 문서·데이터 키워드를 빠른 규칙 경로로 처리한다. 규칙으로
-`GENERAL`이 된 질문은 저비용 LLM이 의미를 다시 분류하고, 사내 규정 의도이면 문서
-검색어를 업무 용어로 재작성해 `DOCUMENT` 또는 `BOTH` 경로로 보낸다. 의미 분류가
-실패하거나 계약된 JSON을 반환하지 않으면 안전하게 `GENERAL`로 복귀한다. 데이터
-도메인이 모호하면 purchase와 sales를 모두 조회하며, `BOTH`는 document 다음 database
-순서로 두 결과를 수집한다.
+## 빠른 시작
 
-## 4. Evidence Eval 기준
+### 사전 요구사항
 
-`Evidence Eval`은 “검색 결과가 질문의 답변 근거로 쓸 수 있는가”를 판단하는 LangGraph 노드다. 사실을 새로 생성하는 노드가 아니다.
+- Python과 `venv`
+- Windows에 기본 경로로 설치된 MySQL 8.0과 root 계정
+- 문서 검색을 사용할 경우 `data/raw/documents/`에 넣을 원천 문서
+- 데이터 조회를 사용할 경우 `data/raw/source_data/`에 넣을 구매·판매 workbook
+- 실제 LLM·Text2SQL을 사용할 경우 OpenAI API 설정
 
-### 코드/규칙으로 판정할 항목
+Python 버전은 `3.11.9`를 기준으로 개발했습니다. 기존 `.venv`가 다른 로컬 경로에 종속돼 실행되지 않으면 삭제하기보다 새 가상환경을 만들어 사용합니다.
 
-- 문서 DB 조회 결과에 파일 경로와 문서 식별자가 있는지
-- 조회한 파일 경로와 실제 로드한 문서가 일치하는지
-- 문서 수정일·인덱스 버전·DB 조회 시각의 최신성
-- 중복 문서 청크 또는 중복 DB 행 제거
-- 질문의 기간, 조직, 단위, 필수 필터 누락 여부
+### 1. 환경 준비
 
-### LLM을 제한적으로 사용할 항목
+Windows PowerShell에서 프로젝트 루트 기준으로 실행합니다.
 
-- 질문과 문서 청크의 의미적 정합성
-- 문서 정책과 DB 집계 조건의 정의/기간/단위 충돌
-- 최종 답변 문장과 출처의 연결 여부
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
 
-판정 결과는 `SUPPORTED`, `PARTIALLY_SUPPORTED`, `INSUFFICIENT`, `CONTRADICTED`로
-구조화한다. `INSUFFICIENT`이면 같은 retrieval 경로를 한 번만 보강 조회하고, 이후에도
-부족하면 HTTP 422와 `EVIDENCE_INSUFFICIENT`를 반환한다. `CONTRADICTED`는 재시도하지
-않고 성공 응답의 `evidence_status`와 경고 답변으로 구별한다.
+### 2. 환경변수 설정
 
-## 5. 디렉토리 구조와 책임
+`.env`에 팀이 제공한 값을 채우고 `AUTH_SECRET_KEY`의 예시 문자열도 충분히 긴 임의 값으로 교체합니다. `scripts/setup_all.py`는 기존 `.env`가 있으면 덮어쓰지 않습니다. 주요 설정 그룹은 다음과 같습니다.
+
+- `OPENAI_*`: 모델 호출
+- `DOCUMENT_DB_*`: 문서 경로 DB
+- `PURCHASE_DB_*`, `PURCHASE_READ_*`: 구매 ETL·조회
+- `SALES_DB_*`, `SALES_READ_*`: 판매 ETL·조회
+- `ACCOUNT_DB_*`, `AUTH_*`: 로그인과 세션
+- `FAISS_PATH`, 임베딩 설정: 문서 인덱스
+
+비밀번호, API 키와 내부 URL은 `.env.example`, README, 로그에 기록하지 않습니다.
+
+### 3. 통합 초기화 실행
+
+원천 문서와 workbook을 지정된 경로에 준비한 뒤 통합 스크립트를 실행합니다.
+
+```powershell
+python scripts/setup_all.py
+```
+
+스크립트는 MySQL root 비밀번호를 대화형으로 입력받고 다음 작업을 순서대로 처리합니다.
+
+- `mysql-connector-python` 설치
+- `.env`가 없을 때 로컬 초기 템플릿과 임의 인증 secret 생성
+- 계정 DB 테이블과 뷰 생성
+- 문서 DB 생성, 문서 경로 등록과 FAISS 인덱싱
+- 판매 DB·테이블 생성, 원천 파일이 있으면 ETL 실행, 뷰·조회 계정 생성
+- 구매 DB 생성, 구매 ETL 실행, 뷰·조회 계정 생성
+
+이 스크립트는 Windows용 로컬 편의 도구입니다. 현재 MySQL 실행 파일의 기본 설치 경로와 일부 로컬 계정 설정을 전제로 하므로 실행 전에 `scripts/setup_all.py`, DB 생성 SQL과 `.env`의 DB명·계정명이 일치하는지 확인해야 합니다. `.env`가 없는 상태에서 스크립트가 만든 파일도 애플리케이션의 전체 필수 설정과 실제 비밀번호에 맞게 다시 검토하십시오.
+
+로그인용 초기 계정 시딩은 통합 스크립트에 포함되지 않으므로 별도로 실행합니다.
+
+```powershell
+python scripts/seed_accounts.py
+```
+
+### 4. 서버 실행
+
+```powershell
+python -m uvicorn app.main:app --reload
+```
+
+브라우저에서 `http://127.0.0.1:8000`을 엽니다. `GET /api/health`는 FastAPI 프로세스의 생존 여부만 확인하며 MySQL·FAISS·OpenAI 준비 상태를 보장하지는 않습니다.
+
+## 데이터 준비
+
+`scripts/setup_all.py`를 사용하면 아래 준비 과정의 대부분을 한 번에 실행할 수 있습니다. 이 절은 특정 단계만 다시 실행하거나 통합 초기화가 실패했을 때 사용하는 수동 절차입니다.
+
+### 로그인 계정
+
+계정 DB SQL은 파일 번호 순서로 적용합니다.
 
 ```text
-skn32_3rd_pj_rag_mcp_chatbot/
-│
-├── README.md                         # 프로젝트 소개·설치·실행 방법
-├── requirements.txt                  # Python 의존성
-├── pytest.ini                        # pytest 경로·marker 설정
-├── .env.example                      # 환경변수 템플릿
-├── .gitignore                        # 비밀값·데이터·FAISS 산출물 제외
-│
-├── docs/
-│   ├── architecture.md               # 시스템 흐름과 코드 경계
-│   ├── interface.md                  # MCP Tool 인터페이스 계약
-│   ├── ownership.md                  # 코드 소유권과 변경 규칙
-│   └── test-scenarios.md             # 테스트 시나리오와 완료 기준
-│
-├── app/                              # FastAPI Host 및 LangGraph 애플리케이션
-│   ├── main.py                       # FastAPI 생성, router/static UI 등록
-│   ├── api/
-│   │   ├── chat.py                   # POST /api/chat: graph 호출 및 응답 반환
-│   │   └── system.py                 # GET /api/health, 최소 관리자 API
-│   ├── core/
-│   │   └── config.py                 # .env 기반 설정 객체
-│   ├── logging/
-│   │   ├── logger.py                 # 공통 로그 기록 인터페이스
-│   │   └── formatter.py              # 한 줄 1이벤트 로그 포맷
-│   ├── schemas/
-│   │   └── chat.py                   # ChatRequest/ChatResponse/Source Pydantic 모델
-│   ├── agent/
-│   │   ├── graph.py                  # LangGraph StateGraph, 조건부 edge
-│   │   ├── state.py                  # 그래프 공유 상태 타입
-│   │   ├── nodes.py                  # cache/router/retrieve/answer/write 노드
-│   │   ├── evidence_eval.py          # 공통 근거 판정 경계
-│   │   ├── prompts.py                # router/eval/answer 프롬프트
-│   │   └── llm.py                    # OpenAI 호출 어댑터
-│   ├── cache/
-│   │   ├── key.py                    # 안전한 답변 캐시 키 생성
-│   │   ├── repository.py             # Redis 또는 개발용 in-memory adapter
-│   │   ├── policy.py                 # 질문 종류별 TTL·무효화 정책
-│   │   └── service.py                # Graph 실행 전 조회·실행 후 저장 경계
-│   ├── mcp/
-│   │   └── client.py                 # Document/Data MCP Tool 호출 어댑터
-│   └── web/
-│       ├── index.html                # 최소 단일 채팅 화면
-│       ├── chat.js                   # API 호출 및 비신뢰 응답 escape 후 출처·표 렌더링
-│       └── style.css                 # 최소 UI 스타일
-│
-├── mcp_servers/                      # 사내 지식 접근 MCP Server들
-│   ├── document_tools/               # RAG 담당
-│   │   ├── server.py                 # search_documents Tool 등록·서버 시작
-│   │   ├── document_db.py            # 내부 문서 DB에서 파일 경로 조회
-│   │   ├── file_loader.py            # 조회된 경로의 문서 파일 로드
-│   │   ├── search.py                 # 경로 조회 -> 파일 로드 -> RAG 검색
-│   │   ├── rag.py                    # query embedding, top-k, rerank
-│   │   ├── faiss_store.py            # FAISS index/metadata load·search
-│   │   └── types.py                  # 문서 경로·청크·인덱스 타입
-│   └── data_tools/
-│       ├── server.py                 # 도메인 Tool 등록·공통 실행
-│       ├── purchase/                 # 구매 담당: query_purchase, Text2SQL, read-only MySQL
-│       └── sales/                    # 판매 담당: query_sales, Text2SQL, read-only MySQL
-│
-├── ingestion/                        # 문서 -> FAISS 배치 인덱싱
-│   ├── loaders.py                    # PDF/TXT/Markdown 원문 로드
-│   ├── chunking.py                   # 문맥 보존 청킹
-│   ├── metadata.py                   # source, title, file_path, update 메타데이터
-│   ├── embedding.py                  # 청크 embedding 생성
-│   └── index.py                      # FAISS 및 metadata 저장·버전 갱신
-│
-├── etl/                              # 원천 정형 데이터 -> MySQL 적재 배치
-│   ├── purchase/                     # 구매 담당: ETL, UPSERT, 실행 이력
-│   └── sales/                        # 판매 담당: ETL, UPSERT, 실행 이력
-│
-├── database/
-│   ├── purchase/                     # 구매 테이블·View DDL, 용어집
-│   └── sales/                        # 판매 테이블·View DDL, 용어집
-│
-├── data/                             # Git 미추적 실제/산출 데이터
-│   ├── raw/
-│   │   ├── documents/                # 문서 DB 경로가 가리키는 파일 저장소(직접 순회 금지)
-│   │   └── source_data/              # ETL 입력 CSV/Excel/JSON
-│   └── faiss/                        # FAISS index, metadata, version 파일
-│
-├── scripts/
-│   ├── ingest_documents.py           # 문서 증분 인덱싱 CLI
-│   ├── rebuild_faiss_index.py        # 전체 인덱스 재구축 CLI
-│   └── load_mysql_data.py            # ETL 파이프라인 CLI
-│
-├── logs/                             # 임시 텍스트 로그 저장소(현재 Git 미추적)
-│   ├── app.log.txt                   # 통합 흐름
-│   ├── rag.log.txt                   # RAG 실행
-│   ├── etl_purchase.log.txt          # 구매 ETL
-│   └── etl_sales.log.txt             # 판매 ETL
-│
-└── tests/                            # pytest 단일 테스트 루트
-    ├── conftest.py                   # mock LLM/MCP/Redis 및 test DB fixture
-    ├── fixtures/
-    │   ├── documents/                # 비식별 소형 RAG fixture
-    │   ├── source_data/              # 소형 ETL fixture
-    │   └── cases/                    # routing/rag/text2sql/etl golden cases
-    ├── unit/
-    │   ├── test_api.py               # API 형식·입력 검증
-    │   ├── test_agent.py             # router/evidence/state 노드
-    │   ├── test_cache.py             # cache key/TTL/hit/miss
-    │   ├── test_document_mcp.py      # 문서 DB 경로 조회·파일 로드·RAG 순서
-    │   ├── test_data_mcp.py          # 구매·판매 Tool dispatch
-    │   ├── test_ingestion.py         # loader/chunk/embedding/index
-    │   └── test_etl.py               # extract/transform/validate/load
-    └── integration/
-        ├── test_chat_document_flow.py # API -> Graph -> Document MCP 흐름
-        ├── test_chat_data_flow.py     # API -> Graph -> Data MCP 흐름
-        ├── test_cache_flow.py         # cache hit 시 외부 호출 없음
-        └── test_etl_mysql_flow.py     # ETL -> test MySQL insert/upsert 흐름
+database/account/001_create_account_db.sql
+database/account/002_create_accounts_table.sql
+database/account/003_create_account_views.sql
+database/account/004_seed_initial_accounts.sql
 ```
 
-## 6. 모듈별 구현 지시
+환경변수에 개발용 초기 비밀번호를 준비한 뒤 scrypt 해시 계정을 생성할 수 있습니다.
 
-### `app/api/chat.py`
-
-- 입력: `question`, 선택적 `session_id`.
-- `graph.ainvoke()`에 초기 상태를 전달한다.
-- 출력: `answer`, `sources`, `tables`, `cached`, `route`, `evidence_status`, `request_id`.
-- 스트리밍은 MVP 완료 후 Server-Sent Events로 추가한다.
-
-### `app/agent/graph.py`, `nodes.py`, `evidence_eval.py`
-
-캐시 miss 상태에 대해 다음 노드를 명시적으로 구성한다.
-
-1. `query_router`: `GENERAL`, `DOCUMENT`, `DATABASE`, `BOTH`를 결정한다.
-2. `document_retrieval`: Document MCP Tool을 호출한다.
-3. `database_retrieval`: Data MCP Tool을 호출한다.
-4. `evidence_eval`: 규칙 기반 검증 후 필요한 경우 LLM 의미 검증을 수행한다.
-5. `answer_synthesis`: 검증된 evidence만 컨텍스트에 넣어 답변·출처를 만든다.
-
-`BOTH`는 두 retrieval 결과를 동일 state의 `document_evidence`, `database_evidence` 또는 통합 `evidence`에 축적한 뒤 `evidence_eval`로 보낸다. 구현상 한쪽 결과를 덮어쓰지 않게 주의한다.
-근거 판정 로직의 소유 경계는 `app/agent/evidence_eval.py`이며, 그래프 노드 조립 시 이
-모듈을 사용한다.
-
-### `app/cache/`
-
-`app/cache/service.py`가 FastAPI와 LangGraph 사이의 단일 캐시 진입점이다. API 계층은
-그래프 실행 전에 `lookup_cached_answer`, 실행 완료 후 `write_answer_cache`를 호출한다.
-LangGraph 노드는 캐시를 직접 읽거나 쓰지 않는다.
-
-캐시 키는 최소 아래 요소를 해시해야 한다.
-
-```text
-normalized_question + conversation context hash
-+ document_index_version + database freshness bucket + prompt_version + model_id
+```powershell
+python scripts/seed_accounts.py
 ```
 
-개발 단계에는 in-memory cache adapter를 사용해도 되지만, 배포 환경에서는 Redis adapter로 교체한다. DB 질문 TTL은 짧게(예: 1~5분), 문서 질문은 문서 갱신 정책에 맞춰 길게(예: 1시간) 설정한다.
+### 문서 RAG
 
-### `mcp_servers/document_tools/`
+지원 문서를 `data/raw/documents/`에 준비한 후 실행합니다.
 
-`search_documents(query, top_k)` Tool은 다음 순서를 지킨다.
-
-```text
-내부 문서 DB에서 관련 파일 경로 조회 -> 해당 파일 로드
--> query embedding -> FAISS 검색 -> optional rerank
--> chunk text + metadata + source 반환
-```
-
-문서 DB에서는 문서 본문을 바로 가져오지 않고 `document_id`, `title`, `file_path`,
-`updated_at`만 조회한다. 반환값은 최소 `chunk_id`, `document_id`, `title`, `content`,
-`score`, `updated_at`을 포함하며 내부 `file_path`는 출처 구성에 사용하되 사용자 응답에는
-노출하지 않는다.
-
-### `mcp_servers/data_tools/`
-
-`query_purchase(question)`와 `query_sales(question)`는 각 도메인 소유 모듈에서 구현한다.
-공통 서버는 두 도메인의 Tool 등록과 요청 전달만 담당한다.
-
-```text
-mcp_servers/data_tools/
-├── server.py                 # 통합: Tool 등록·도메인 전달
-├── purchase/                 # 구매: query_purchase, schema, text2sql, mysql
-└── sales/                    # 판매: query_sales, schema, text2sql, mysql
-```
-
-```text
-스키마/용어집 제공 -> SQL 생성 -> read-only MySQL 실행
--> 결과 행 수 제한 -> 결과와 실행 메타데이터 반환
-```
-
-### `ingestion/`
-
-문서 인덱싱은 API 요청 경로에서 실행하지 않는다. `scripts/ingest_documents.py`를 통해 배치 실행한다.
-
-```text
-내부 문서 DB -> file_path 조회 -> 파일 로드 -> clean/chunk -> metadata
--> embedding -> FAISS index + metadata -> data/faiss
-```
-
-문서 변경 시 인덱스 버전을 증가시키고 cache key에서 이 버전을 사용한다. 문서 DB의 경로
-또는 실제 파일이 변경되면 이전 버전 키가 재사용되지 않게 한다.
-
-### `etl/purchase/`, `etl/sales/`
-
-ETL은 챗봇 조회와 분리된 배치 작업이다.
-
-```text
-data/raw/source_data -> extract -> transform -> validate -> MySQL load
-```
-
-- 각 도메인은 `extract.py`, `transform.py`, `validate.py`, `load.py`, `pipeline.py`를 자체
-  디렉터리에 둔다. 다른 도메인의 테이블·적재 규칙을 직접 수정하지 않는다.
-- `load.py`: 단일 transaction으로 INSERT/UPSERT한다. ETL 전용 MySQL 계정을 사용한다.
-- `pipeline.py`: 처리 입력/성공/실패 행 수와 오류를 해당 도메인 로그에 남긴다.
-
-`scripts/load_mysql_data.py`는 도메인별 파이프라인 선택과 입력 검증을 완료한 뒤에만 각
-디렉터리의 `pipeline.py`를 호출해야 한다. 챗봇 API나 `app/agent/`에서 ETL을 호출하지 않는다.
-
-## 7. 환경변수와 연결 계정
-
-`.env`에는 비밀값을 보관하고 Git에 절대 커밋하지 않는다.
-
-```env
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4o-mini
-REDIS_URL=redis://localhost:6379/0
-MYSQL_READ_HOST=localhost
-MYSQL_READ_USER=chatbot_reader
-MYSQL_READ_PASSWORD=
-MYSQL_WRITE_HOST=localhost
-MYSQL_WRITE_USER=etl_writer
-MYSQL_WRITE_PASSWORD=
-MYSQL_DATABASE=chatbot
-DOCUMENT_MCP_URL=http://localhost:8001
-DATA_MCP_URL=http://localhost:8002
-FAISS_PATH=data/faiss
-DOCUMENT_DB_HOST=localhost
-DOCUMENT_DB_USER=document_reader
-DOCUMENT_DB_PASSWORD=
-DOCUMENT_DB_DATABASE=documents
-```
-
-| 계정 | 접근 방식 | 사용하는 코드 |
-|---|---|---|
-| `document_reader` | 문서 식별자·파일 경로 읽기 | `mcp_servers/document_tools/document_db.py` |
-| `chatbot_reader` | 업무 데이터 읽기 | `mcp_servers/data_tools/{purchase,sales}/mysql.py` |
-| `etl_writer` | 업무 데이터 적재 | `etl/{purchase,sales}/load.py` |
-| Redis 계정 | 지정 namespace의 get/set/delete | `app/cache/repository.py` |
-
-## 8. 테스트 기준
-
-테스트는 `tests/` 한 곳에 둔다. 단위 테스트는 OpenAI, Redis, MCP, MySQL을 fake/mock으로
-대체한다. 현재 chat integration 테스트도 외부 서비스를 사용하지 않는 in-process fake
-기반 계약 테스트다. 실제 MySQL 검증은 `RUN_LOCAL_MYSQL_TESTS=1`일 때 same-process
-Data MCP를 주입하는 opt-in 테스트만 실행하며, ETL의 실제 MySQL 통합 테스트는 아직
-placeholder다.
-
-성능 재현 명령, 5초 예산, cache miss/hit 및 브라우저 E2E 결과, 안전한 운영 관측 필드는
-[`docs/performance.md`](docs/performance.md)에 기록한다. 성능 벤치마크도 반드시
-`conda run -n skn_3rd python -m scripts.benchmark_chat_performance --scenario all --iterations 5`
-형식으로 실행한다.
-
-### 필수 단위 테스트
-
-- 동일 질문·동일 문맥·동일 버전이면 cache key가 동일하다.
-- 대화 문맥 또는 문서 버전이 달라지면 cache key가 달라진다.
-- `DOCUMENT`, `DATABASE`, `GENERAL`, `BOTH` 라우팅이 기대대로 동작한다.
-- 문서 검색이 문서 DB 경로 조회 → 파일 로드 → RAG 순서로 수행된다.
-- ETL이 중복 제거·필수값 검증·타입 변환을 수행한다.
-- Evidence Eval이 근거 부족 및 충돌 상태를 올바르게 반환한다.
-
-### 필수 통합 테스트
-
-- 문서 질문이 API → Graph → Document MCP 흐름으로 처리된다.
-- 데이터 질문이 API → Graph → Data MCP 흐름으로 처리된다.
-- cache hit 시 LLM/MCP 호출 mock이 호출되지 않는다.
-- ETL이 테스트 MySQL에 insert/upsert하고 기대 데이터를 저장한다.
-
-```bash
-pytest                         # 전체 테스트
-pytest tests/unit              # 빠른 단위 테스트
-pytest tests/integration       # 통합 테스트
-pytest tests/unit/test_etl.py  # ETL 기능만
-```
-## 사내규정 챗봇(RAG) 실행 방법
-
-### 1. 사전 준비
-`.env`에 아래 값을 채운다.
-
-```
-DOCUMENT_DB_HOST=127.0.0.1
-DOCUMENT_DB_USER=
-DOCUMENT_DB_PASSWORD=
-DOCUMENT_DB_DATABASE=erp_system
-FAISS_PATH=data/faiss
-EMBEDDING_BACKEND=sbert
-```
-
-### 2. DB 생성 (최초 1회)
-
-```
-mysql -u root -p < database/document/schema.sql
-```
-
-### 3. 원천 문서 배치
-사내규정 PDF(취업규칙, 법인카드 관리지침 등)를 `data/raw/documents/`에 둔다.
-
-### 4. 문서 경로 등록
-
-```
+```powershell
 python scripts/register_documents.py
-```
-
-### 5. 인덱싱
-
-```
 python scripts/ingest_documents.py
 ```
 
-문서를 추가·교체하거나 `EMBEDDING_BACKEND`를 바꾸면 다시 실행한다.
+문서를 추가·교체하거나 임베딩 방식을 바꿨다면 검증된 새 인덱스로 교체합니다.
 
-### 6. 실행 확인
-
-```
-uvicorn app.main:app --reload
-```
-
-`http://127.0.0.1:8000`에서 확인한다.
-
-
-## 판매(Sales) 도메인 ETL 실행 방법
-
-### 0. Windows PowerShell 체크리스트
-
-- PowerShell(`PS C:\...>`)에서 프로젝트 루트로 이동 후 실행: `cd C:\프로젝트_경로\...`
-- `mysql --version` 안 되면 PATH 미등록 → `mysql` 대신
-  `& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"`로 실행 (경로는 설치 버전에
-  따라 다를 수 있음)
-- `<` 리다이렉션은 PowerShell에서 안 됨 → `mysql ... < 파일.sql`이 아니라
-  `Get-Content 파일.sql | mysql ...`로 실행 (아래 각 단계에 PowerShell용 명령 포함)
-- 프롬프트가 `mysql>`이면 이미 MySQL 셸 안에 있는 것 → PowerShell 명령을 치기 전에
-  `exit`로 먼저 나올 것
-- `-u` 계정을 꼭 명시할 것 (생략하면 Windows 로그인 계정으로 접속 시도해 거부됨)
-
-### 1. 사전 준비
-
-`.env`에 판매 도메인 전용 블록을 채운다 (공용 `MYSQL_WRITE_*`/`MYSQL_DATABASE` 아님,
-SPEC.md 5절 참고).
-```env
-SALES_DB_HOST=127.0.0.1
-SALES_DB_USER=JangGGo
-SALES_DB_PASSWORD=
-SALES_DB_DATABASE=sales
-
-# 챗봇 조회 전용 계정 (query_sales가 사용, ETL과 무관)
-SALES_READ_USER=sales_reader
-SALES_READ_PASSWORD=<원하는 비밀번호>
-```
-
-### 2. DB 생성 (최초 1회, root 계정으로 실행)
-```bash
-mysql -u root -p < database/sales/create_sales_db.sql
-```
 ```powershell
-Get-Content database/sales/create_sales_db.sql | mysql -u root -p
+python scripts/rebuild_faiss_index.py
 ```
-`sales` DB와 ETL 쓰기 계정(`JangGGo`)을 함께 만든다. `.env`의 `SALES_DB_USER`/
-`SALES_DB_PASSWORD`와 스크립트 안 계정 정보를 동일하게 맞춘다.
 
-### 3. 테이블 생성 (JangGGo 계정으로)
-```bash
-mysql -u JangGGo -p sales < database/sales/ddl.sql
-```
+### 구매·판매 ETL
+
+도메인별 원천 및 LLM 활용 증강 workbook을 준비한 후 실행합니다. 합성 데이터는 실제 업무 실적으로 해석하거나 운영 의사결정에 사용하면 안 됩니다.
+
 ```powershell
-Get-Content database/sales/ddl.sql | mysql -u JangGGo -p sales
+python -m etl.purchase.run_all data/raw/source_data/<구매_원천_파일.xlsx>
+python -m etl.sales.run_all data/raw/source_data/<판매_원천_파일.xlsx>
 ```
 
-### 4. 원천 데이터 배치
-`ERP_Sales_Data_Full_5y.xlsx`(5년치, 800건)를 `data/raw/source_data/`에 둔다.
-(`_5y` 없는 옛 파일은 더 이상 안 씀)
+ETL은 extract → transform → validate → UPSERT 순서로 동작하고, 검증 실패 시 적재하지 않습니다. 통합 진입점인 `scripts/load_mysql_data.py`는 아직 구현 중이므로 현재는 도메인별 `run_all`을 사용합니다.
 
-### 5. ETL 실행
-```bash
-python -m etl.sales.run_all data/raw/source_data/ERP_Sales_Data_Full_5y.xlsx
-```
-로그: `logs/etl_sales.log.txt`. 재실행해도 UPSERT라 중복 안 됨(멱등성).
+판매 합성 데이터는 필요할 때 다음 스크립트로 원본을 보존한 5년 범위 workbook으로 재생성할 수 있습니다.
 
-### 6. 시맨틱 뷰 생성 (최초 1회, ETL 적재 이후 · JangGGo 계정)
-```bash
-mysql -u JangGGo -p sales < database/sales/views.sql
-```
 ```powershell
-Get-Content database/sales/views.sql | mysql -u JangGGo -p sales
+python scripts/generate_sales_synthetic_data.py
 ```
-`query_sales`가 원본 테이블 대신 이 뷰 5개만 참조한다(SPEC.md 4절).
 
-### 7. 챗봇 조회 전용 계정 생성 (최초 1회, root 계정)
-```bash
-mysql -u root -p sales < database/sales/grants_reader.sql
-```
+구매·판매 증강 결과는 원천과 구분해 관리하고, 생성 후에는 도메인 ETL의 transform·validate 단계를 통과한 데이터만 MySQL에 적재합니다.
+
+`scripts/setup_all.py`는 판매 원천 파일이 없으면 해당 ETL을 건너뜁니다. 구매 ETL은 `etl.purchase.main`을 통해 기본 원천 경로를 사용하므로, 통합 실행 전에 구매 workbook도 준비해야 합니다.
+
+MySQL SQL 파일을 PowerShell에서 실행할 때는 `<` 대신 다음 형식을 사용합니다.
+
 ```powershell
-Get-Content database/sales/grants_reader.sql | mysql -u root -p sales
+Get-Content database/sales/ddl.sql | mysql -u <쓰기_계정> -p sales
 ```
-`sales_reader` 계정을 만들고 6번 뷰에만 `SELECT` 권한을 준다. `CREATE USER`는
-`JangGGo`로 안 되고 `root`가 필요하다. 비밀번호는 `.env`의 `SALES_READ_PASSWORD`와
-동일하게.
+
+실행 전에 DB명·계정명과 `.env` 설정이 일치하는지 확인하십시오.
+
+## API
+
+| Method | Endpoint | 설명 | 인증 |
+|---|---|---|---|
+| `POST` | `/api/auth/login` | 로그인과 세션 쿠키 발급 | 불필요 |
+| `POST` | `/api/auth/logout` | 활성 세션 폐기 | 필요 |
+| `GET` | `/api/auth/me` | 현재 사용자·역할 조회 | 필요 |
+| `POST` | `/api/chat` | 질문 처리 | 필요 |
+| `GET` | `/api/documents/download?doc_id=...` | 등록 문서 원문 다운로드 | 필요 |
+| `GET` | `/api/health` | 프로세스 생존 확인 | 불필요 |
+
+채팅 요청 예시는 다음과 같습니다.
+
+```json
+{
+  "question": "2025년 고객별 매출을 알려줘"
+}
+```
+
+주요 응답 필드는 `answer`, `sources`, `tables`, `cached`, `route`, `evidence_status`, `request_id`입니다. 내부 evidence와 파일 경로는 공개 응답 모델에 포함하지 않습니다.
+
+## 보안과 안전장치
+
+- 비밀번호는 salt를 포함한 scrypt 해시로 저장합니다.
+- 로그인 세션은 HMAC 서명, 만료 시각과 서버 측 활성 세션 확인을 사용합니다.
+- 세션 쿠키는 `HttpOnly`, `SameSite=Lax`로 설정합니다.
+- RBAC는 UI가 아니라 API와 MCP/DB 경계에서 다시 검사합니다.
+- 문서 다운로드는 임의 경로 대신 등록된 `document_id`만 받습니다.
+- Data MCP는 허용된 조회 뷰와 단일 SELECT/CTE만 실행합니다.
+- SQL 주석, 쓰기 명령, 다중 문장과 200건 초과 LIMIT을 차단합니다.
+- 챗봇 조회 계정과 ETL 쓰기 계정을 분리합니다.
+- LLM과 사용자 응답에서 `file_path`, API 키, 비밀번호, secret, token 후보를 제거합니다.
+- `.env`, 실제 원천 데이터, FAISS 산출물과 런타임 로그는 Git 추적에서 제외합니다.
+
+역할별 서버 정책은 다음과 같습니다.
+
+| 역할 | 허용 데이터 영역 |
+|---|---|
+| `admin` | 문서, 계정, 구매, 판매 |
+| `hr` | 문서, 계정 |
+| `finance` | 문서, 구매, 판매 |
+
+## 프로젝트 구조
+
+```text
+app/                 FastAPI, LangGraph, 인증, 캐시, UI
+  api/               로그인·채팅·문서 다운로드·상태 API
+  agent/             라우팅, retrieval, evidence 평가, 답변 합성
+  cache/             캐시 키, TTL, 저장소 경계
+  mcp/               MCP Tool 호출과 응답 정규화
+  web/               vanilla HTML/CSS/JavaScript UI
+mcp_servers/
+  document_tools/    문서 DB, 파일 로드, FAISS 검색, 다운로드 해석
+  data_tools/        구매·판매 Text2SQL과 읽기 전용 조회
+ingestion/           문서 로드, 청킹, 임베딩, FAISS 인덱싱
+etl/
+  purchase/          구매 ETL
+  sales/             판매 ETL
+database/            계정·문서·구매·판매 DDL과 조회 뷰
+scripts/             계정, 문서, 인덱스, 데이터 배치 진입점
+tests/               단위 테스트와 fake 기반 통합 테스트
+docs/                아키텍처, 인터페이스, 소유권, 테스트 문서
+```
+
+## 테스트
+
+```powershell
+python -m pytest
+python -m pytest tests/unit
+python -m pytest tests/integration
+python -m pytest tests/unit/test_etl.py
+```
+
+주요 검증 범위는 다음과 같습니다.
+
+- 네 가지 질문 라우팅과 의미 기반 보완 분류
+- 캐시 hit에서 Graph·LLM·MCP 호출 생략
+- 문서 경로 조회 → 파일 로드 → RAG 순서
+- 구매·판매 MCP dispatch와 공통 envelope
+- 위험 SQL 거부, LIMIT, EXPLAIN과 1회 재작성
+- 문서 로드·청킹·임베딩·FAISS 버전
+- ETL 중복 제거, 필수값 검증과 UPSERT
+- 근거 부족·부분 성공·충돌 평가
+- 로그인·로그아웃, 역할 권한과 사용자별 캐시 격리
+- UI 출력 escaping, 표·차트와 출처 렌더링
+
+채팅 통합 테스트는 실제 OpenAI·Redis·원격 MCP 대신 fake를 사용하는 계약 테스트입니다. 실제 로컬 MySQL 검증은 `RUN_LOCAL_MYSQL_TESTS=1`과 필요한 DB가 준비된 경우에만 일부 실행되며, `tests/integration/test_etl_mysql_flow.py`는 현재 실제 ETL 통합 성공을 증명하지 않는 자리표시자입니다.
+
+## 현재 구현 상태와 제한
+
+### 구현됨
+
+- [x] FastAPI 웹 UI와 로그인 세션
+- [x] `GENERAL` / `DOCUMENT` / `DATABASE` / `BOTH` 라우팅
+- [x] Document MCP의 문서 DB → 파일 → FAISS 검색
+- [x] 구매·판매 Text2SQL과 SQL 안전 검사
+- [x] Evidence Eval과 1회 보강 조회
+- [x] 표·차트·출처·문서 발췌 렌더링
+- [x] 등록 문서 ID 기반 원문 다운로드 경계
+- [x] 프로세스 내 TTL 답변 캐시
+- [x] fake 기반 API·Agent·MCP 통합 테스트
+
+### 운영 전 보완 필요
+
+- [ ] `RedisCache` 실제 구현과 다중 인스턴스 공유
+- [ ] 원격 `DOCUMENT_MCP_URL` / `DATA_MCP_URL` transport
+- [ ] 원격 MCP의 인증·RBAC 전달 계약
+- [ ] ETL 완료 시 DB freshness와 캐시 무효화 연결
+- [ ] `scripts/load_mysql_data.py` 통합 CLI
+- [ ] 실제 MySQL ETL 통합 테스트
+- [ ] 외부 OpenAI·MySQL·FAISS·MCP 전체 수용 테스트
+- [ ] 다중 워커에서 공유되는 세션 저장소
+
+설계 문서와 코드가 다른 부분도 있습니다. 특히 근거 부족의 최종 HTTP 상태, 임베딩 환경변수 이름, 일부 아키텍처 문서의 FAISS 구현 상태는 변경 전에 계약을 다시 확인해야 합니다.
+
+## 관련 문서
+
+| 문서 | 내용 |
+|---|---|
+| [README.md](README.md) | 구현 명세와 도메인별 상세 실행 절차 |
+| [docs/architecture.md](docs/architecture.md) | 시스템 흐름과 코드 경계 |
+| [docs/interface.md](docs/interface.md) | MCP Tool과 HTTP 응답 계약 |
+| [docs/ownership.md](docs/ownership.md) | 역할·디렉터리 소유권과 변경 규칙 |
+| [docs/test-scenarios.md](docs/test-scenarios.md) | 테스트 시나리오와 완료 기준 |
+| [docs/performance.md](docs/performance.md) | 성능 예산과 측정 방법 |
+
+## 라이선스
+
+### 구매·판매 데이터
+
+구매·판매 기능은 Kaggle의 [AdventureWorks2022 - Excel Format (.xlsx)](https://www.kaggle.com/datasets/tituspr/adventureworks2022-excel-format/data) 데이터셋을 원천으로 사용했습니다.
+이 데이터는 실제 회사 정보가 아닌 Microsoft Adventure Works라는 가상 기업의 교육·테스트용 샘플 데이터를 Excel 형식으로 제공한 것입니다.
+
+프로젝트에서는 이 원천을 그대로 사용하는 데 그치지 않고, LLM을 활용해 구매·판매 데이터의 추가 기간, 거래와 분석 시나리오를 설계하고 합성 레코드를 증강했습니다. 증강 데이터는 팀이 만든 교육·기능 검증용 파생 데이터이며 실제 회사·고객·공급업체의 실적이 아닙니다. LLM 생성 결과에는 부정확하거나 비현실적인 값이 포함될 수 있으므로 코드 기반 계산·관계 검증과 ETL 검증을 통과한 데이터만 사용합니다.
+
+Kaggle 데이터 카드의 라이선스 표시는 **`Other (specified in description)`**이며, 표준 오픈 데이터 라이선스가 명시돼 있지 않습니다.
+데이터 설명에 교육과 테스트 목적이 안내돼 있더라도 그것만으로 무제한 재배포 권한이 부여된다고 볼 수 없으므로, 데이터를 내려받거나 복제·변형·배포할 때는 Kaggle 데이터 카드와 원저작자의 최신 이용 조건을 직접 확인해야 합니다.
+LLM으로 변형하거나 합성 레코드를 추가했다는 사실도 원천 데이터의 이용 조건을 없애거나 별도의 재배포 권리를 자동으로 만들지는 않습니다. 원천과 증강 workbook은 `data/raw/`에 보관하고 Git 저장소에는 포함하지 않습니다.
+
+### 사내 문서 데이터
+
+문서 RAG 기능에는 LH E&S의 [규정 및 지침 게시판](https://www.lhes.co.kr/bbs/board.php?bo_table=comm05)에 게시된 문서를 사용했습니다.
+그러나 게시판의 [사규 이용 관련 유의 사항 안내](https://www.lhes.co.kr/bbs/board.php?bo_table=comm05&wr_id=17)는 해당 사규를 임직원에게만 공개되는 자료로 설명하며, 외부인이 정보를 요구할 경우 직접 제공하지 말고 회사 담당 부서로 안내하도록 명시합니다.
+
+따라서 해당 문서를 일반적인 공개 데이터나 오픈 라이선스 자료로 간주해서는 안 됩니다.
+이 프로젝트는 LH E&S 문서에 대한 복제·가공·재배포 권한을 부여하지 않으며, 외부 시연·공개 저장소 배포·제3자 공유에 사용하려면 권리자에게 이용 가능 범위를 확인하고 필요한 허가를 받아야 합니다.
+원문에서 생성한 청크, 임베딩과 FAISS 인덱스도 문서 내용을 파생한 산출물이므로 동일하게 취급합니다.
+
+## 회고
+
+<!-- 각자 아래 항목에 자유롭게 작성해주세요 -->
+
+### 문동원
+
+### 박회종
+
+### 이태혁
+
+### 이호원

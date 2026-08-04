@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-INDEX_PATH = Path("data/faiss/index.faiss")
+INDEX_PATH = Path("../data/faiss/index.faiss")
 TOP_K = 10
 MIN_SCORE = 0.38  # app/agent/state.py의 min_document_score와 반드시 일치시킬 것
 
