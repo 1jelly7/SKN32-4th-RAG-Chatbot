@@ -42,3 +42,12 @@ def test_chart_ui_uses_local_bundle_and_stable_sizing() -> None:
     assert "toLocaleString()" in script
     assert "isCurrencyColumn" in script
     assert ".chart-wrap { height: 320px;" in stylesheet
+
+
+def test_document_download_uses_server_filename_before_title_fallback() -> None:
+    """Blob URL 다운로드도 Content-Disposition의 확장자를 보존해야 한다."""
+    script = WEB_SCRIPT.read_text(encoding="utf-8")
+
+    assert "function downloadFileName(response, fallbackFileName)" in script
+    assert "filename\\*\\s*=\\s*UTF-8''" in script
+    assert "link.download = downloadFileName(response, fileName);" in script

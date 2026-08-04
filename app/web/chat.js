@@ -84,6 +84,67 @@ function formatScore(score) {
   return '참고 근거';
 }
 
+function formatPages(pages) {
+  if (!pages?.length) return '참조 페이지 정보 없음';
+  return `${pages.join(', ')}페이지 참조`;
+}
+
+function showDownloadError(message) {
+  let toast = document.querySelector('#download-toast');
+  if (!toast) {
+    toast = document.createElement('p');
+    toast.id = 'download-toast';
+    toast.className = 'download-toast';
+    toast.setAttribute('role', 'alert');
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.hidden = false;
+  window.setTimeout(() => { toast.hidden = true; }, 4000);
+}
+
+function downloadFileName(response, fallbackFileName) {
+  const disposition = response.headers.get('content-disposition') || '';
+  const utf8Match = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  const legacyMatch = disposition.match(/filename\s*=\s*(?:"([^"]+)"|([^;\s]+))/i);
+  const encodedName = utf8Match?.[1] || legacyMatch?.[1] || legacyMatch?.[2];
+  if (!encodedName) return fallbackFileName;
+  try {
+    return decodeURIComponent(encodedName.replace(/^"|"$/g, '')).split(/[\\/]/).pop() || fallbackFileName;
+  } catch (_) {
+    return fallbackFileName;
+  }
+}
+
+async function handleDownload(button) {
+  const downloadUrl = button.dataset.downloadUrl;
+  const fileName = button.dataset.fileName || 'document';
+  if (!downloadUrl) return;
+
+  button.disabled = true;
+  button.classList.add('is-loading');
+  button.setAttribute('aria-label', '다운로드 중');
+  try {
+    const response = await fetch(downloadUrl);
+    if (!response.ok) throw new Error(response.status === 404 ? '문서를 찾을 수 없습니다.' : '문서를 다운로드하지 못했습니다.');
+    const blob = await response.blob();
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = downloadFileName(response, fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(objectUrl);
+  } catch (error) {
+    showDownloadError(userFriendlyError(error));
+  } finally {
+    button.disabled = false;
+    button.classList.remove('is-loading');
+    button.setAttribute('aria-label', `${fileName} 다운로드`);
+  }
+}
+
 function renderSources(sources, route) {
   const documentSources = (sources || []).filter(source => source.source_type === 'document');
   const label = documentSources.length ? `문서 근거 ${documentSources.length}건` : route === 'DOCUMENT' ? '관련 문서를 찾지 못했습니다' : '문서 검색 결과가 여기에 표시됩니다';
@@ -94,18 +155,27 @@ function renderSources(sources, route) {
     return;
   }
 
-  sourcesList.innerHTML = documentSources.map(source => `
+  sourcesList.innerHTML = documentSources.map(source => {
+    const excerpts = (source.chunks || []).map(chunk => `
+      <details class="source-excerpt">
+        <summary>${chunk.page ? `${chunk.page}페이지 발췌` : '발췌 내용'}</summary>
+        <p>${escapeHtml(chunk.text)}</p>
+      </details>`).join('');
+    const fileName = source.file_name || source.title || '문서';
+    const downloadButton = source.download_url ? `<button class="source-download" type="button" data-download-url="${escapeHtml(source.download_url)}" data-file-name="${escapeHtml(fileName)}" aria-label="${escapeHtml(fileName)} 다운로드">다운로드</button>` : '';
+    return `
     <article class="source-card">
       <div class="source-card-main">
         <div class="source-title-row">
           <span class="source-icon" aria-hidden="true">${documentIcon}</span>
-          <h3 class="source-title">${escapeHtml(source.title || '제목 없는 문서')}</h3>
-          <span class="source-score">${formatScore(source.score)}</span>
+          <h3 class="source-title">${escapeHtml(fileName)}</h3>
+          ${downloadButton}
         </div>
-        <p class="source-meta">${source.updated_at ? `갱신 ${escapeHtml(source.updated_at)}` : '사내 지식베이스 문서'}${source.page ? ` · ${source.page}쪽` : ''}</p>
-        <p class="source-kind">답변 생성에 사용된 사내 문서 근거입니다.</p>
+        <p class="source-meta">${formatPages(source.pages)}${source.updated_at ? ` · 갱신 ${escapeHtml(source.updated_at)}` : ''}</p>
+        <div class="source-excerpts">${excerpts}</div>
       </div>
-    </article>`).join('');
+    </article>`;
+  }).join('');
 }
 
 function renderTable(table) {
@@ -156,6 +226,10 @@ function autoResize() {
 sourcesToggle.addEventListener('click', () => setSourcesOpen(!sourcesPanel.classList.contains('is-open')));
 sourcesClose.addEventListener('click', () => setSourcesOpen(false));
 sourcesBackdrop.addEventListener('click', () => setSourcesOpen(false));
+sourcesList.addEventListener('click', event => {
+  const button = event.target.closest('.source-download');
+  if (button) handleDownload(button);
+});
 input.addEventListener('input', autoResize);
 input.addEventListener('keydown', event => {
   if (event.key === 'Enter' && !event.shiftKey) {

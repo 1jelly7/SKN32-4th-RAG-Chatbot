@@ -11,6 +11,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+class SourceChunk(BaseModel):
+    """문서 카드 안에서 페이지별로 보여 줄 검색 발췌문이다."""
+
+    page: int | None = None
+    text: str
+
+
 class Source(BaseModel):
     """문서 또는 DB 근거를 공개 식별자와 freshness 정보로 표현한다."""
 
@@ -18,8 +25,12 @@ class Source(BaseModel):
     title: str
     source_type: str
     document_id: str | None = None
+    file_name: str | None = None
     score: float | None = None
     page: int | None = None
+    pages: list[int] = Field(default_factory=list)
+    chunks: list[SourceChunk] = Field(default_factory=list)
+    download_url: str | None = None
     updated_at: str | None = None
     table_name: str | None = None
     query_id: str | None = None

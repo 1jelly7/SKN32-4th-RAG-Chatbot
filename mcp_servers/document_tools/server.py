@@ -72,7 +72,13 @@ def create_server() -> Any:
             "message": None,
             "data": [{"content": c["content"], "score": c["score"]} for c in chunks],
             "sources": [
-                {"document_id": c["document_id"], "title": c["title"], "page": c.get("page")} for c in chunks
+                {
+                    "document_id": c["document_id"],
+                    "title": c["title"],
+                    "page": c.get("page"),
+                    **({"file_name": c["file_name"]} if c.get("file_name") else {}),
+                }
+                for c in chunks
             ],
             "metadata": {"result_count": len(chunks), "index_version": get_last_index_version()},
         }

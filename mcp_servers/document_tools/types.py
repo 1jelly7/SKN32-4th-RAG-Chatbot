@@ -20,6 +20,7 @@ class DocumentChunk(TypedDict):
     chunk_id: str
     document_id: str
     title: str
+    file_name: str | None
     content: str
     score: float
     updated_at: str

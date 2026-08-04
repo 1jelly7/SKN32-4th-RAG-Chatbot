@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from pydantic import ValidationError
@@ -111,10 +112,36 @@ class InProcessMCPPort:
                 "status": "success", "domain": "document", "message": None,
                 "data": [{"content": item["content"], "score": item["score"]} for item in chunks],
                 "sources": [
-                    {"document_id": item["document_id"], "title": item["title"], "page": item.get("page")}
+                    {
+                        "document_id": item["document_id"],
+                        "title": item["title"],
+                        "page": item.get("page"),
+                        **({"file_name": item["file_name"]} if item.get("file_name") else {}),
+                    }
                     for item in chunks
                 ],
                 "metadata": {"result_count": len(chunks), "index_version": get_last_index_version()},
+            }
+        if tool_name == "resolve_document_download":
+            from app.auth.policy import require_database_access
+            from mcp_servers.document_tools.download import resolve_document_download
+
+            document_id = str(payload.get("document_id", ""))
+            try:
+                require_database_access(payload.get("user_context"), "document_db")
+            except PermissionError:
+                return {
+                    "status": "error", "domain": "document", "message": "문서 다운로드 권한이 없습니다.",
+                    "error_code": "FORBIDDEN", "data": [], "sources": [], "metadata": {},
+                }
+            path = await resolve_document_download(document_id)
+            return {
+                "status": "success",
+                "domain": "document",
+                "message": None,
+                "data": [] if path is None else [{"file_path": str(path), "file_name": path.name}],
+                "sources": [],
+                "metadata": {},
             }
         raise ValueError(f"지원하지 않는 MCP Tool입니다: {tool_name}")
 
@@ -202,6 +229,7 @@ class MCPClient:
                     "type": "document",
                     "document_id": source.document_id,
                     "title": source.title,
+                    **({"file_name": source.file_name} if source.file_name else {}),
                     "content": chunk.content,
                     "score": chunk.score,
                     "page": source.page,
@@ -209,6 +237,30 @@ class MCPClient:
                 }
             )
         return evidence
+
+    async def resolve_document_download(
+        self,
+        document_id: str,
+        user_context: dict[str, Any],
+    ) -> Path:
+        """등록된 문서 ID를 다운로드용 원본 경로로 해석한다.
+
+        출처 카드의 서버 발급 ID에만 사용하며, 임의 경로나 문서 검색 결과가
+        아닌 ID를 파일 접근 수단으로 사용하지 않는다. 반환 경로는 HTTP 파일 응답에만 쓴다.
+        """
+        envelope = await self._call_success(
+            "resolve_document_download",
+            {"document_id": document_id, "user_context": user_context},
+            "document",
+        )
+        item = envelope.data[0]
+        file_path = item.get("file_path")
+        if not isinstance(file_path, str):
+            raise MCPMalformedPayloadError("resolve_document_download", "다운로드 문서 형식이 올바르지 않습니다.")
+        path = Path(file_path)
+        if not path.is_file():
+            raise MCPNoResultError("resolve_document_download", "문서를 찾을 수 없습니다.")
+        return path
 
     async def purchase_query(self, question: str, user_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """`query_purchase` 성공 envelope를 구매 database evidence로 정규화한다."""

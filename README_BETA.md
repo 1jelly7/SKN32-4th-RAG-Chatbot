@@ -10,10 +10,10 @@
 
 <table>
   <tr>
-    <td align="center" width="220"><img src="docs/assets/team/문동원.png" width="200"/></td>
-    <td align="center" width="220"><img src="docs/assets/team/박회종.png" width="200"/></td>
-    <td align="center" width="220"><img src="docs/assets/team/이태혁.png" width="200"/></td>
-    <td align="center" width="220"><img src="docs/assets/team/이호원.png" width="200"/></td>
+    <td align="center" width="220"><img src="docs/assets/team/문동원.png" width="100" height="100" style="object-fit: cover;"/></td>
+    <td align="center" width="220"><img src="docs/assets/team/박회종.png" width="100" height="100" style="object-fit: cover;"/></td>
+    <td align="center" width="220"><img src="docs/assets/team/이태혁.png" width="100" height="100" style="object-fit: cover;"/></td>
+    <td align="center" width="220"><img src="docs/assets/team/이호원.png" width="100" height="100" style="object-fit: cover;"/></td>
   </tr>
   <tr>
     <td align="center"><b>문동원</b></td>
@@ -58,6 +58,8 @@
 - **로그인·권한(RBAC)**: 역할(admin/hr/finance)별로 접근 가능한 데이터 범위를 구분
 
 ## 시스템 아키텍처
+
+
 
 ```text
 사용자

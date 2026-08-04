@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.chat import router as chat_router
+from app.api.documents import router as documents_router
 from app.api.auth import router as auth_router
 from app.api.system import router as system_router
 from app.agent.graph import build_graph
@@ -106,6 +107,7 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
     application.state.graph = build_graph(app_dependencies.mcp, app_dependencies.llm)
     application.state.cache_key_context = dict(CACHE_KEY_CONTEXT)
     application.include_router(chat_router, prefix="/api")
+    application.include_router(documents_router, prefix="/api")
     application.include_router(auth_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
 

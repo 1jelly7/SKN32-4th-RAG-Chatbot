@@ -93,7 +93,7 @@ SALES_READ_PASSWORD=reader123!
 PURCHASE_DB_HOST=127.0.0.1
 PURCHASE_DB_USER=purchase
 PURCHASE_DB_PASSWORD=1234
-PURCHASE_DB_DATABASE=purchase_db
+PURCHASE_DB_DATABASE=purchase
 PURCHASE_READ_USER=purchase_reader
 PURCHASE_READ_PASSWORD=purchase_read_1234
 """
@@ -144,12 +144,15 @@ PURCHASE_READ_PASSWORD=purchase_read_1234
 
     purchase_etl_path = "etl/purchase/main.py"
     if Path(purchase_etl_path).exists():
-        run_cmd(f"{sys.executable} {purchase_etl_path}")
+        # 스크립트 경로로 직접 실행하면 프로젝트 루트가 sys.path에 잡히지 않아
+        # main.py의 `from etl.purchase...` 절대 임포트가 'No module named etl'로
+        # 실패한다. sales ETL과 동일하게 -m 모듈 실행으로 맞춘다.
+        run_cmd(f"{sys.executable} -m etl.purchase.main")
     else:
         print(f"[건너뜀] 구매 ETL 파일이 없습니다: {purchase_etl_path}")
 
-    run_mysql_file("JangGGo", "1234", "purchase_db", "database/purchase/views.sql", ignore_duplicate_error=True)
-    run_mysql_file("JangGGo", "1234", "purchase_db", "database/purchase/grants_reader.sql", ignore_duplicate_error=True)
+    run_mysql_file("JangGGo", "1234", "purchase", "database/purchase/views.sql", ignore_duplicate_error=True)
+    run_mysql_file("JangGGo", "1234", "purchase", "database/purchase/grants_reader.sql", ignore_duplicate_error=True)
 
     print("\n✨ 모든 사전작업 및 초기화 코드가 성공적으로 실행되었습니다!")
 

@@ -12,6 +12,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+from urllib.parse import quote
 
 from app.agent.llm import AsyncLLMPort, complete
 from app.agent.prompts import ANSWER_PROMPT, ROUTER_PROMPT
@@ -498,22 +499,38 @@ def _build_tables(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _build_sources(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """채택된 evidence를 내부 경로 없는 공개 출처 목록으로 변환한다."""
+    """채택된 evidence를 문서별 카드와 DB 출처로 안전하게 직렬화한다."""
     sources: list[dict[str, Any]] = []
+    document_sources: dict[str, dict[str, Any]] = {}
     for item in evidence:
         if item.get("type") == "document":
-            sources.append(
-                {
-                    "id": item["document_id"],
+            document_id = item["document_id"]
+            source = document_sources.get(document_id)
+            if source is None:
+                source = {
+                    "id": document_id,
                     "title": item["title"],
+                    "file_name": item.get("file_name") or item["title"],
                     "source_type": "document",
-                    "document_id": item["document_id"],
+                    "document_id": document_id,
                     "score": item.get("score"),
-                    "page": item.get("page"),
+                    "pages": [],
+                    "chunks": [],
+                    "download_url": f"/api/documents/download?doc_id={quote(document_id, safe='')}",
                     "updated_at": _metadata_value(item, "updated_at"),
                     "source_version": _metadata_value(item, "source_version", "index_version"),
                 }
-            )
+                document_sources[document_id] = source
+                sources.append(source)
+            elif isinstance(item.get("score"), (int, float)) and (
+                source["score"] is None or item["score"] > source["score"]
+            ):
+                source["score"] = item["score"]
+
+            page = item.get("page")
+            if isinstance(page, int):
+                source["pages"].append(page)
+            source["chunks"].append({"page": page, "text": item.get("content", "")})
         elif item.get("type") == "database":
             sources.append(
                 {
@@ -528,7 +545,24 @@ def _build_sources(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "source_version": _metadata_value(item, "source_version"),
                 }
             )
+    for source in document_sources.values():
+        source["pages"] = sorted(set(source["pages"]))
+        source["chunks"] = _sort_unique_source_chunks(source["chunks"])
     return sources
+
+
+def _sort_unique_source_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """질의 확장으로 중복된 같은 페이지 발췌문은 한 번만 카드에 남긴다."""
+    unique_chunks: dict[tuple[int | None, str], dict[str, Any]] = {}
+    for chunk in chunks:
+        page = chunk.get("page")
+        normalized_page = page if isinstance(page, int) else None
+        text = str(chunk.get("text", ""))
+        unique_chunks.setdefault((normalized_page, text), {"page": normalized_page, "text": text})
+    return sorted(
+        unique_chunks.values(),
+        key=lambda chunk: (chunk["page"] is None, chunk["page"] or 0, chunk["text"]),
+    )
 
 
 def _metadata_value(item: dict[str, Any], *keys: str) -> Any:

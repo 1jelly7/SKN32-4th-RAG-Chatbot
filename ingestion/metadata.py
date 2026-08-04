@@ -29,6 +29,7 @@ def build_metadata(document: RawDocument) -> dict[str, Any]:
     return {
         "document_id": document["document_id"],
         "title": title,
+        "file_name": path.name,
         "updated_at": _resolve_updated_at(path),
     }
 

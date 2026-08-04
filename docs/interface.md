@@ -124,6 +124,18 @@ provider의 `INTERNAL_ERROR`와 별도로 Host 검증 실패로 처리하되 공
 검색 결과가 없으면 `error_code="NO_RESULT"`, 경로 조회·파일 로드·인덱스 처리에 실패하면
 `error_code="INTERNAL_ERROR"`를 반환한다.
 
+## 문서 원본 다운로드 HTTP API
+
+- Endpoint: `GET /api/documents/download?doc_id=<document_id>`
+- 인증: 유효한 로그인 세션과 `document_db` 접근 권한이 필요하다.
+- `doc_id`는 Chat API가 문서 출처 카드에 발급한 `document_id`만 사용한다. 클라이언트가 파일 경로를 전달할 수 없으며, 서버는 `document_paths`의 활성 레코드로만 경로를 해석한다.
+- 성공 시 원본 파일을 `application/octet-stream`으로 반환하고, 한글 파일명을 포함해 `Content-Disposition: filename*=UTF-8''...` 헤더를 사용한다.
+- 등록되지 않았거나 비활성인 ID, 또는 원본이 없는 경우 `404`를 반환한다. 서버 내부 파일 경로는 어떤 응답에도 포함하지 않는다.
+
+## Chat API 문서 출처 카드
+
+`POST /api/chat`의 `sources` 중 `source_type="document"` 항목은 검색 청크 단위가 아니라 문서 단위다. 같은 `document_id`의 청크는 하나로 합치며, `pages`는 오름차순 중복 제거 목록이고 `chunks`는 페이지별 발췌문이다. `download_url`은 해당 문서 ID의 다운로드 API URL이다. DB 출처 항목의 계약은 변경하지 않는다.
+
 ## Tool 2: 구매 데이터 조회
 
 - Tool 이름: `query_purchase`

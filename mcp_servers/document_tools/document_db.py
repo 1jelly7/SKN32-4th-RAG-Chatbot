@@ -40,6 +40,12 @@ class DocumentPathRepository:
 
         return await asyncio.to_thread(self._find_paths_sync, query)
 
+    async def find_path_by_document_id(self, document_id: str) -> DocumentPathRecord | None:
+        """활성 문서 ID만으로 다운로드용 화이트리스트 레코드를 찾는다."""
+        import asyncio
+
+        return await asyncio.to_thread(self._find_path_by_document_id_sync, document_id)
+
     def _find_paths_sync(self, query: str) -> list[DocumentPathRecord]:
         connection = pymysql.connect(**self._connection_kwargs)
         try:
@@ -49,6 +55,20 @@ class DocumentPathRepository:
                     "FROM document_paths WHERE is_active = TRUE"
                 )
                 return [self._to_record(row) for row in cursor.fetchall()]
+        finally:
+            connection.close()
+
+    def _find_path_by_document_id_sync(self, document_id: str) -> DocumentPathRecord | None:
+        connection = pymysql.connect(**self._connection_kwargs)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT document_id, title, file_path, updated_at "
+                    "FROM document_paths WHERE document_id = %s AND is_active = TRUE",
+                    (document_id,),
+                )
+                row = cursor.fetchone()
+                return self._to_record(row) if row is not None else None
         finally:
             connection.close()
 
@@ -124,3 +144,8 @@ def _get_default_repository() -> DocumentPathRepository:
 async def lookup_document_paths(query: str) -> list[DocumentPathRecord]:
     """설정된 DocumentPathRepository를 이용해 내부 문서 파일 경로를 조회한다."""
     return await _get_default_repository().find_paths(query)
+
+
+async def lookup_document_path_by_id(document_id: str) -> DocumentPathRecord | None:
+    """사용자 경로 입력 없이 활성 문서 ID의 등록 경로만 반환한다."""
+    return await _get_default_repository().find_path_by_document_id(document_id)

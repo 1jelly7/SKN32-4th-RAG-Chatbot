@@ -506,7 +506,8 @@ def test_source_and_table_serialization_preserves_safe_metadata_only() -> None:
     sources = _build_sources(evidence)
     tables = _build_tables(evidence)
 
-    assert sources[0]["page"] == 3
+    assert sources[0]["pages"] == [3]
+    assert sources[0]["chunks"] == [{"page": 3, "text": "내용"}]
     assert sources[0]["updated_at"] == "2026-08-01"
     assert sources[0]["source_version"] == "v3"
     assert sources[1]["table_name"] == "sales_summary"
@@ -516,6 +517,29 @@ def test_source_and_table_serialization_preserves_safe_metadata_only() -> None:
     assert tables[0]["table_name"] == "sales_summary"
     assert tables[0]["freshness_seconds"] == 30
     assert tables[0]["columns"] == ["customer", "revenue"]
+
+
+def test_document_sources_merge_pages_and_chunks_by_document_id() -> None:
+    sources = _build_sources([
+        {
+            "type": "document", "document_id": "policy-card", "title": "법인카드 규정.pdf",
+            "content": "3쪽 발췌", "score": 0.7, "page": 3, "metadata": {"index_version": "v1"},
+        },
+        {
+            "type": "document", "document_id": "policy-card", "title": "법인카드 규정.pdf",
+            "content": "12쪽 발췌", "score": 0.9, "page": 12, "metadata": {"index_version": "v1"},
+        },
+        {
+            "type": "document", "document_id": "policy-card", "title": "법인카드 규정.pdf",
+            "content": "3쪽 발췌", "score": 0.8, "page": 3, "metadata": {"index_version": "v1"},
+        },
+    ])
+
+    assert len(sources) == 1
+    assert sources[0]["pages"] == [3, 12]
+    assert sources[0]["chunks"] == [{"page": 3, "text": "3쪽 발췌"}, {"page": 12, "text": "12쪽 발췌"}]
+    assert sources[0]["download_url"] == "/api/documents/download?doc_id=policy-card"
+    assert sources[0]["score"] == 0.9
 
 
 # ------------------------------------------------------------------

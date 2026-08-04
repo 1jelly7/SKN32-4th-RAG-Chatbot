@@ -1,6 +1,6 @@
 # Project Progress
 
-> Last updated: 2026-08-03 (purchase 세션) KST
+> Last updated: 2026-08-04 (reference-card merge session) KST
 > Source logs: `docs/progress/<role>/YYYY-MM-DD.md`
 
 ## Current Verified State
@@ -12,6 +12,7 @@
 - 상세 근거와 변경 범위는 `docs/progress/integration/2026-08-02.md` Session 3에 기록했다.
 - 로그인·세션 기반 RBAC가 Chat API와 MCP 데이터 도구 경계에 적용됐으며, 관리자 실제 브라우저 로그인·새로고침 세션 복원·로그아웃 UI 전환을 확인했다.
 - `skn_3rd` 환경 전체 테스트는 134 passed, 2 skipped이며 `git diff --check`를 통과했다. 상세 기록은 `docs/progress/integration/2026-08-03.md` Session 2에 있다.
+- 문서 Chat 출처는 청크 대신 원본 문서 단위 카드로 병합되며, 정렬·중복 제거된 페이지와 발췌문, 보호된 다운로드 URL을 반환한다. 상세 기록은 `docs/progress/integration/2026-08-04.md` Session 1에 있다.
 - Sales `query_sales`는 뷰 5개, 조회 전용 계정, SQL 가드와 EXPLAIN 사전검증으로 강화됐고 실제 OpenAI·MySQL opt-in 테스트를 포함한 33개 검증을 통과했다.
 - Purchase `query_purchase`는 DB·계정이 아예 없던 상태에서 시작해 ETL 재작성·실적재(25/50/123/32/32건, 멱등성 확인)·뷰 5개·조회 전용 계정·스키마 리소스·프롬프트를 sales와 동등하게 완성했고, 실제 OpenAI·MySQL opt-in 테스트 33건과 브라우저 수동 확인(finance 정상 응답, hr FORBIDDEN)을 통과했다. 이전에 "DB 계정 권한 문제"로 알려졌던 P0-3의 근본 원인이 실은 DB 부재였음이 밝혀졌다.
 

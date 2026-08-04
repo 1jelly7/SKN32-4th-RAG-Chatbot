@@ -89,6 +89,18 @@ class ErrorGraph:
         raise self.error
 
 
+class DownloadMCPClient:
+    """문서 다운로드 API가 내부 MCP 해석 결과만 사용하게 하는 fake다."""
+
+    def __init__(self, document_path: Path | None) -> None:
+        self.document_path = document_path
+
+    async def resolve_document_download(self, document_id: str, user_context: dict[str, object]) -> Path:
+        if self.document_path is None or document_id != "policy-card":
+            raise MCPNoResultError("resolve_document_download", "missing")
+        return self.document_path
+
+
 def _application(cache: MemoryCache, graph: object):
     dependencies = AppDependencies(
         llm=FakeLLMClient(),
@@ -147,6 +159,25 @@ def test_ui_entry_and_assets_disable_browser_cache() -> None:
             response = client.get(path)
             assert response.status_code == 200
             assert response.headers["cache-control"] == "no-store"
+
+
+def test_document_download_uses_document_id_mapping_and_returns_404_for_unknown_id(tmp_path: Path) -> None:
+    document_path = tmp_path / "법인카드_규정.pdf"
+    document_path.write_bytes(b"sample-pdf")
+    application = _application(MemoryCache(), CountingGraph())
+    application.state.dependencies.mcp = DownloadMCPClient(document_path)
+
+    with TestClient(application) as client:
+        login(client)
+        success = client.get("/api/documents/download", params={"doc_id": "policy-card"})
+        missing = client.get("/api/documents/download", params={"doc_id": "unknown"})
+
+    assert success.status_code == 200
+    assert success.content == b"sample-pdf"
+    assert "filename*=UTF-8''" in success.headers["content-disposition"]
+    assert success.headers["content-disposition"].endswith(".pdf")
+    assert "file_path" not in success.text
+    assert missing.status_code == 404
 
 
 def test_cache_hit_skips_graph_llm_and_mcp_calls() -> None:
