@@ -65,14 +65,14 @@ Host는 현재 같은 프로세스의 Tool service를 비동기 MCP port로 호�
   "status": "error",
   "domain": "document | purchase | sales | both",
   "message": "사용자에게 표시 가능한 오류 설명",
-  "error_code": "INVALID_INPUT | NO_RESULT | QUERY_ERROR | EVIDENCE_INSUFFICIENT | TIMEOUT | INTERNAL_ERROR",
+  "error_code": "INVALID_INPUT | NO_RESULT | FORBIDDEN | QUERY_ERROR | EVIDENCE_INSUFFICIENT | TIMEOUT | INTERNAL_ERROR",
   "data": [],
   "sources": [],
   "metadata": {}
 }
 ```
 
-Host의 공개 HTTP 매핑은 `INVALID_INPUT=400`, `NO_RESULT=404`,
+Host의 공개 HTTP 매핑은 `INVALID_INPUT=400`, `FORBIDDEN=403`, `NO_RESULT=404`,
 `EVIDENCE_INSUFFICIENT=422`, `QUERY_ERROR=502`, `INTERNAL_ERROR=502`,
 `TIMEOUT=504`다. MCP timeout은 `QUERY_ERROR`로 축약하지 않는다. malformed envelope는
 provider의 `INTERNAL_ERROR`와 별도로 Host 검증 실패로 처리하되 공개 코드는
@@ -160,6 +160,34 @@ provider의 `INTERNAL_ERROR`와 별도로 Host 검증 실패로 처리하되 공
 ```text
 판매 스키마·용어집 제공 -> SELECT SQL 생성 -> read-only MySQL 실행
 -> 결과와 실행 metadata 반환
+```
+
+### 성공 응답 metadata
+
+판매 Tool은 공통 `generated_sql`, `row_count`, `elapsed_ms`와 함께 도메인 metadata를
+그대로 반환한다. `views_used`, `data_coverage`, `retry_count`, `currency`, `truncated`,
+`chart_hint`를 포함하며, `chart_hint`는 `bar` 또는 `line`이다. 빈 결과는
+`NO_RESULT`와 원인·재질문 방법이 포함된 `message`를 반환한다.
+
+```json
+{
+  "status": "success",
+  "domain": "sales",
+  "message": null,
+  "data": [{"order_month": "2026-01", "total_sales": 1234.5}],
+  "sources": [],
+  "metadata": {
+    "generated_sql": "SELECT ...",
+    "row_count": 1,
+    "elapsed_ms": 12.3,
+    "views_used": ["v_sales_order"],
+    "data_coverage": {"min_order_date": "...", "max_order_date": "..."},
+    "retry_count": 0,
+    "currency": "JOD",
+    "truncated": false,
+    "chart_hint": "line"
+  }
+}
 ```
 
 ## 라우팅 규칙과 BOTH 병합

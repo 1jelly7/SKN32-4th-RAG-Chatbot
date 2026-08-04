@@ -31,3 +31,4 @@ class AppDependencies:
     auth_cookie_secure: bool | None = None
     session_store: SessionStore = field(default_factory=SessionStore)
     configure_logging: Callable[[], None] = configure_logging
+    warmup_providers: bool = False

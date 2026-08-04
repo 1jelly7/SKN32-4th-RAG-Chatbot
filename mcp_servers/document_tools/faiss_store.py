@@ -11,6 +11,17 @@ import numpy as np
 from mcp_servers.document_tools.types import DocumentChunk, IndexMetadata
 
 METADATA_FILENAME = "metadata.json"
+GENERIC_SEARCH_TERMS = {
+    "관련",
+    "규정",
+    "내용",
+    "대상",
+    "방법",
+    "사항",
+    "절차",
+    "정책",
+    "지침",
+}
 
 
 class FaissStore:
@@ -106,3 +117,58 @@ class FaissStore:
                 }
             )
         return results
+
+    def search_text(self, query: str, top_k: int) -> list[DocumentChunk]:
+        """의미 벡터가 놓친 명시적 업무 용어를 정확 일치 후보로 보완한다.
+
+        로컬 n-gram 임베딩은 짧은 한국어 업무 용어에서 해시 충돌이 생길 수 있다.
+        제목과 본문의 판별력 있는 검색어가 정확히 일치하는 청크를 함께 반환해, 의미
+        라우터가 만든 '겸직·취업규칙' 같은 용어를 벡터 후보 밖에서도 찾을 수 있게 한다.
+        """
+        if self._index is None:
+            raise RuntimeError("FaissStore.load()를 먼저 호출해야 합니다.")
+        if top_k <= 0:
+            raise ValueError("top_k는 1 이상이어야 합니다.")
+
+        terms = list(
+            dict.fromkeys(
+                normalized
+                for token in query.casefold().split()
+                if len(normalized := _normalize_text(token)) >= 2
+                and normalized not in GENERIC_SEARCH_TERMS
+            )
+        )
+        if not terms:
+            return []
+
+        ranked: list[tuple[int, float, DocumentChunk]] = []
+        for chunk in self._chunks:
+            metadata = chunk.get("metadata", {})
+            searchable = _normalize_text(f"{metadata.get('title', '')} {chunk.get('content', '')}")
+            matched_count = sum(term in searchable for term in terms)
+            if matched_count == 0:
+                continue
+            coverage = matched_count / len(terms)
+            score = min(0.95, 0.55 + min(matched_count, 3) * 0.1 + coverage * 0.2)
+            ranked.append(
+                (
+                    matched_count,
+                    coverage,
+                    {
+                        "chunk_id": chunk["chunk_id"],
+                        "document_id": chunk["document_id"],
+                        "title": metadata.get("title", ""),
+                        "content": chunk["content"],
+                        "score": score,
+                        "updated_at": metadata.get("updated_at", ""),
+                        "page": metadata.get("page"),
+                    },
+                )
+            )
+        ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return [item[2] for item in ranked[:top_k]]
+
+
+def _normalize_text(value: str) -> str:
+    """검색 비교에서 띄어쓰기와 문장부호 차이를 제거한다."""
+    return "".join(character for character in value.casefold() if character.isalnum())

@@ -59,9 +59,21 @@ class Settings(BaseSettings):
     sales_read_password: str = ""
 
     # 구매 도메인 전용 조회 계정입니다. purchase_reader를 쓰기 위한 필드로,
-    # sales_read_*와 같은 패턴입니다. 비어 있으면 mysql_read_*로 폴백합니다.
+    # sales_read_*와 같은 패턴입니다. host/database가 비어 있으면 mysql_read_host/
+    # purchase_db_database로 폴백합니다(mcp_servers/data_tools/purchase/mysql.py).
+    purchase_read_host: str = ""
     purchase_read_user: str = ""
     purchase_read_password: str = ""
+    purchase_read_database: str = ""
+
+    # 구매 도메인 전용 ETL/admin 계정입니다(etl/purchase/config.py가 쓰는 것과 같은
+    # PURCHASE_DB_* 값). sales는 admin 계정이 공용 JangGGo(mysql_write_*)라 EXPLAIN
+    # 전용 클라이언트가 mysql_write_*를 그대로 쓰지만, purchase는 도메인 전용 별도
+    # 계정(purchase)을 쓰므로 EXPLAIN도 이 계정으로 실행해야 한다 — JangGGo에는
+    # purchase.*에 대한 권한이 없다(mcp_servers/data_tools/purchase/mysql.py 참고).
+    purchase_db_host: str = ""
+    purchase_db_user: str = ""
+    purchase_db_password: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

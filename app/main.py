@@ -5,11 +5,14 @@
 조회는 그래프에 주입된 MCP client가 담당한다.
 """
 
+import logging
+import uuid
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -19,6 +22,8 @@ from app.api.system import router as system_router
 from app.agent.graph import build_graph
 from app.agent.prompts import PROMPT_VERSION
 from app.core.dependencies import AppDependencies
+from app.logging.context import reset_request_id, set_request_id
+from app.logging.performance import elapsed_ms, server_timing_header, start_timer
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 UI_CACHE_HEADERS = {"Cache-Control": "no-store"}
@@ -28,6 +33,7 @@ CACHE_KEY_CONTEXT = {
     "prompt_version": PROMPT_VERSION,
     "model_id": "configured-model",
 }
+logger = logging.getLogger(__name__)
 
 
 def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
@@ -44,14 +50,54 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
         app_dependencies.auth_secret = settings.auth_secret_key
         app_dependencies.auth_expire_minutes = settings.auth_access_token_expire_minutes
         app_dependencies.auth_cookie_secure = settings.auth_cookie_secure
+        app_dependencies.warmup_providers = True
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        """앱 시작 시 주입된 logging만 구성하고 provider 수명주기는 변경하지 않는다."""
+        """logging을 구성하고 선택된 운영 provider의 읽기 전용 캐시를 예열한다."""
         app_dependencies.configure_logging()
+        if app_dependencies.warmup_providers and app_dependencies.mcp is not None:
+            try:
+                await app_dependencies.mcp.warmup()
+            except Exception as exc:  # noqa: BLE001 - 한 provider 예열 실패로 API 전체 시작을 막지 않는다.
+                logger.warning(
+                    "provider_warmup_failed error_type=%s",
+                    type(exc).__name__,
+                    extra={"event": "provider_warmup_failed"},
+                )
         yield
 
     application = FastAPI(title="RAG MCP Chatbot", lifespan=lifespan)
+
+    @application.middleware("http")
+    async def measure_http_request(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """모든 HTTP 요청의 상태·총 시간을 기록하고 안전한 timing header를 추가한다."""
+        started_ns = start_timer()
+        request.state.request_id = str(uuid.uuid4())
+        request.state.stage_timings = {}
+        request_id_token = set_request_id(request.state.request_id)
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            total_ms = elapsed_ms(started_ns)
+            request.state.stage_timings["app_total"] = total_ms
+            response.headers["X-Request-ID"] = request.state.request_id
+            response.headers["Server-Timing"] = server_timing_header(request.state.stage_timings)
+            return response
+        finally:
+            logger.info(
+                "request_id=%s method=%s path=%s status=%s elapsed_ms=%.3f",
+                request.state.request_id,
+                request.method,
+                request.url.path,
+                status_code,
+                elapsed_ms(started_ns),
+                extra={"event": "http_request_completed"},
+            )
+            reset_request_id(request_id_token)
     application.state.dependencies = app_dependencies
     application.state.auth_service = app_dependencies.auth_service
     application.state.auth_secret = app_dependencies.auth_secret

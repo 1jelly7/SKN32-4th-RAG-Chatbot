@@ -46,7 +46,9 @@ async def main() -> None:
     print("=" * 70)
     positive_scores = []
     for case in TEST_CASES:
-        results = await client.document_search(case["question"], top_k=10)
+        results = await client.document_search(
+            case["question"], top_k=10, user_context={"role": "admin"}
+        )
         if not results:
             print(f"[결과 없음] {case['question']!r}")
             continue
@@ -68,7 +70,9 @@ async def main() -> None:
     print("=" * 70)
     negative_scores = []
     for question in NEGATIVE_CASES:
-        results = await client.document_search(question, top_k=3)
+        results = await client.document_search(
+            question, top_k=3, user_context={"role": "admin"}
+        )
         if results:
             top_score = results[0]["score"]
             negative_scores.append(top_score)

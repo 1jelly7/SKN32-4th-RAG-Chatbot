@@ -67,6 +67,19 @@ def test_role_database_policy() -> None:
     assert allowed_databases("finance") == ["document_db", "purchase_db", "sales_db"]
 
 
+def test_hr_database_question_is_rejected_before_query_execution() -> None:
+    """HR 사용자는 Data MCP가 DB에 연결하기 전에 HTTP 403을 받는다."""
+    with _client() as client:
+        assert client.post(
+            "/api/auth/login",
+            json={"username": "hr", "password": "hr-password"},
+        ).status_code == 200
+        response = client.post("/api/chat", json={"question": "공급업체별 구매 지출"})
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "FORBIDDEN"
+
+
 def test_answer_cache_is_not_shared_between_authenticated_users() -> None:
     """동일 역할·질문이라도 다른 사용자의 private answer cache를 재사용하지 않는다."""
     repository = MemoryAccountRepository([

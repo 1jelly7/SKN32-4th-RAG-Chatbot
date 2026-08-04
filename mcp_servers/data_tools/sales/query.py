@@ -9,6 +9,7 @@ docs/team_share/03_cross_team_requests.md 참고).
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -21,8 +22,10 @@ MAX_QUESTION_LENGTH = 500
 ROW_LIMIT = 200
 
 
-def _empty_evidence(generated_sql: str, elapsed_ms: float, retry_count: int) -> list[dict[str, Any]]:
-    """rows=[]로 반환해 server.py가 NO_RESULT 오류로 처리하게 한다."""
+def _empty_evidence(
+    generated_sql: str, elapsed_ms: float, retry_count: int, message: str
+) -> list[dict[str, Any]]:
+    """빈 결과의 원인과 대안을 공통 envelope까지 전달할 evidence를 만든다."""
     schema = get_schema_resource()
     return [
         {
@@ -32,6 +35,7 @@ def _empty_evidence(generated_sql: str, elapsed_ms: float, retry_count: int) -> 
             "row_count": 0,
             "rows": [],
             "elapsed_ms": elapsed_ms,
+            "message": message,
             "metadata": {
                 "views_used": [],
                 "data_coverage": schema["data_coverage"],
@@ -68,7 +72,10 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
     question = question.strip()
 
     if not question or len(question) > MAX_QUESTION_LENGTH:
-        return _empty_evidence("", round((time.monotonic() - started_at) * 1000, 1), retry_count=0)
+        return _empty_evidence(
+            "", round((time.monotonic() - started_at) * 1000, 1), retry_count=0,
+            message="질문 형식이 올바르지 않습니다. 판매 데이터 범위에서 다시 질문해 주세요.",
+        )
 
     schema = get_schema_resource()
 
@@ -76,28 +83,40 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
     if not sql:
         # LLM이 뷰·지표로 답할 수 없다고 판단했다(NO_SQL) — 범위 밖/모호한 질문.
         elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
-        return _empty_evidence("", elapsed_ms, retry_count=0)
+        return _empty_evidence(
+            "", elapsed_ms, retry_count=0,
+            message="요청한 지표는 판매 데이터로 계산할 수 없습니다. 매출·미수금·주문 기준으로 질문해 주세요.",
+        )
 
     retry_count = 0
     try:
         normalized = validate_and_normalize(sql)
-        explain_readonly(normalized)
+        await asyncio.to_thread(explain_readonly, normalized)
     except Exception as exc:  # noqa: BLE001 - 가드/EXPLAIN 실패는 재작성 신호일 뿐이다.
         retry_count = 1
         retried_sql = await generate_sql_with_error(question, schema, sql, str(exc))
         if not retried_sql:
             elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
-            return _empty_evidence(sql, elapsed_ms, retry_count=retry_count)
+            return _empty_evidence(
+                sql, elapsed_ms, retry_count=retry_count,
+                message="요청 조건을 판매 데이터 조회로 해석할 수 없습니다. 기간·고객·매출 기준을 구체적으로 알려 주세요.",
+            )
         # 재시도 결과도 검증한다. 여기서 또 실패하면 예외를 그대로 올려
         # server.py가 QUERY_ERROR로 변환하게 한다(재시도는 최대 1회로 제한).
         sql = retried_sql
         normalized = validate_and_normalize(sql)
-        explain_readonly(normalized)
+        await asyncio.to_thread(explain_readonly, normalized)
 
-    rows = query_readonly(normalized)
+    rows = await asyncio.to_thread(query_readonly, normalized)
     elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
 
     views_used = sorted(referenced_tables(normalized) & ALLOWED_VIEWS)
+
+    if not rows:
+        return _empty_evidence(
+            normalized, elapsed_ms, retry_count=retry_count,
+            message="해당 조건의 판매 데이터가 없습니다. 보유 기간과 조건을 확인해 다시 질문해 주세요.",
+        )
 
     return [
         {

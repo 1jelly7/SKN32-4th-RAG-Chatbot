@@ -34,6 +34,7 @@ def test_both_success_is_cached_without_additional_port_or_llm_calls() -> None:
     assert second.json()["cached"] is True
     assert port.calls == calls_after_miss
     assert llm.calls == llm_calls_after_miss
+    assert application.state.cache_key_context["document_index_version"] == "fixture-index-v1"
 
 
 @pytest.mark.integration

@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from app.core.config import get_settings
+from app.core.openai_client import get_async_openai_client
+from app.logging.performance import log_llm_completion, start_timer
 
 DEMO_NOTICE = "[로컬 데모 응답] OPENAI_API_KEY가 없어 실제 GPT 응답 대신 근거 요약만 표시합니다.\n\n"
 # "file_path"만 걸러내면 "filepath", "absolute_path" 같은 변형 키는 그대로 통과해
@@ -82,9 +84,7 @@ class LLMClient:
         self._model = model
         self._client = None
         if api_key:
-            from openai import AsyncOpenAI
-
-            self._client = AsyncOpenAI(api_key=api_key)
+            self._client = get_async_openai_client(api_key)
 
     @property
     def is_demo_mode(self) -> bool:
@@ -100,6 +100,7 @@ class LLMClient:
             f"[근거 {index + 1} | {item.get('type', 'unknown')}] {_stringify_evidence(item)}"
             for index, item in enumerate(context)
         )
+        started_ns = start_timer()
         try:
             response = await self._client.chat.completions.create(
                 model=self._model,
@@ -111,12 +112,14 @@ class LLMClient:
                     },
                 ],
                 temperature=0.2,
+                max_completion_tokens=600,
                 timeout=30,
             )
         except Exception as exc:  # noqa: BLE001 - 외부 SDK 오류 세부값을 사용자·로그에 노출하지 않음
             raise RuntimeError("LLM 호출에 실패했습니다.") from exc
 
         content = response.choices[0].message.content
+        log_llm_completion("answer", self._model, started_ns, response)
         if not content or not content.strip():
             raise RuntimeError("LLM이 빈 응답을 반환했습니다.")
         return content.strip()

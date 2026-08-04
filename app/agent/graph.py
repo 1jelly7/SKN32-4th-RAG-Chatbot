@@ -46,19 +46,11 @@ def after_document(state: GraphState) -> str:
     return "evidence"
 
 
-# def after_evidence(state: GraphState) -> str:
-#     """근거 부족일 때만 한 번의 보강 조회를 허용한다."""
-#     if state.get("evidence_status") == "INSUFFICIENT" and state.get("evidence_retry_count", 0) < 1:
-#         return "retry"
-#      return "answer"
-
 def after_evidence(state: GraphState) -> str:
-
-     if state.get("route") == "DOCUMENT":
-         return "answer"
-     if state.get("evidence_status") == "INSUFFICIENT" and state.get("evidence_retry_count", 0) < 1:
-         return "retry"
-     return "answer"
+    """근거 부족일 때만 한 번의 보강 조회를 허용한다."""
+    if state.get("evidence_status") == "INSUFFICIENT" and state.get("evidence_retry_count", 0) < 1:
+        return "retry"
+    return "answer"
 
 async def prepare_evidence_retry(state: GraphState) -> GraphState:
     """재시도 횟수를 증가시키고 이전 조회 결과·오류를 비운다."""

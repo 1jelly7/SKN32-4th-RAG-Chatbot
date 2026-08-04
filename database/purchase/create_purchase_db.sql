@@ -9,13 +9,20 @@
 -- DROP DATABASE IF EXISTS purchase;
 
 -- 데이터베이스 생성
-CREATE DATABASE IF NOT EXISTS purchase_db
+-- 주의: DB 이름은 purchase_db가 아니라 purchase다. etl/purchase/config.py의
+-- DB_CONFIG['database']와 app/core/config.py의 purchase_db_database 기본값이
+-- 전부 'purchase'를 쓰고 있어서, 여기서도 이름을 맞춘다.
+CREATE DATABASE IF NOT EXISTS purchase
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 
-CREATE USER IF NOT EXISTS 'JangGGo'@'%' IDENTIFIED BY '1234';
-GRANT SELECT, INSERT, UPDATE, DELETE
-ON `purchase_db`.*
-TO 'JangGGo'@'%';
+-- ETL 쓰기 계정. etl/purchase/config.py의 DB_CONFIG(user='purchase')와 동일하게
+-- 맞춘다. host는 'localhost'가 아니라 '%'를 쓴다 — Windows에서 pymysql이 TCP로
+-- 접속하면 'localhost' 전용 계정과 매칭되지 않는 경우가 있다(sales 쪽에서도 같은
+-- 문제를 겪어 '%'로 통일했다).
+CREATE USER IF NOT EXISTS 'purchase'@'%' IDENTIFIED BY '1234';
+GRANT ALL PRIVILEGES
+ON `purchase`.*
+TO 'purchase'@'%';
 
 FLUSH PRIVILEGES;

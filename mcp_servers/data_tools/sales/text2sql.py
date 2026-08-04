@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import date
 
 from app.core.config import get_settings
+from app.core.openai_client import get_async_openai_client
+from app.logging.performance import log_llm_completion, start_timer
 from mcp_servers.data_tools.sales.schema import SchemaResource
 
 SYSTEM_PROMPT = (
@@ -74,9 +76,8 @@ async def _call_llm(user_content: str) -> str:
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY가 설정되지 않아 SQL을 생성할 수 없습니다.")
 
-    from openai import AsyncOpenAI
-
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    client = get_async_openai_client(settings.openai_api_key)
+    started_ns = start_timer()
     response = await client.chat.completions.create(
         model=settings.openai_model,
         messages=[
@@ -84,7 +85,10 @@ async def _call_llm(user_content: str) -> str:
             {"role": "user", "content": user_content},
         ],
         temperature=0,
+        max_completion_tokens=400,
+        timeout=10,
     )
+    log_llm_completion("sales_text2sql", settings.openai_model, started_ns, response)
     text = response.choices[0].message.content or ""
     return text.strip().strip("`").removeprefix("sql\n").strip()
 

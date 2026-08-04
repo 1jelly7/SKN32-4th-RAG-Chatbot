@@ -53,6 +53,17 @@
   -> Web UI에 답변·출처·캐시 여부 표시
 ```
 
+## 권한 관리 (RBAC)
+
+| Role | 권한 |
+|---|---|
+| Admin | 사내 문서 검색, Text2SQL 조회를 포함한 모든 기능 사용 |
+| HR | 사내 문서 검색만 가능 |
+| Finance | 사내 문서 검색 및 Text2SQL 조회 가능 |
+
+> 서버 API에서도 역할별 권한을 검증합니다. UI에서 기능을 숨기는 것만으로
+> 접근을 제어하지 않으며, 권한이 없는 문서·데이터베이스 요청은 서버에서 거부합니다.
+
 ### 질문 라우팅 규칙
 
 | route | 선택 기준 | 실행 경로 |
@@ -62,10 +73,12 @@
 | `DATABASE` | 수치, 현황, 집계, 기간별 실적, 고객/매출 질문 | Data MCP 호출 |
 | `BOTH` | 문서 정책과 실제 수치·현황이 함께 필요한 질문 | 두 MCP 호출 후 근거 통합 |
 
-현재 라우터는 키워드·규칙 기반으로만 동작한다. 문서·데이터 키워드가 모두 없으면
-`GENERAL`, 데이터 도메인이 모호하면 purchase와 sales를 모두 조회한다. 저비용 LLM
-라우터는 아직 구현하지 않았으며 도입 전 fallback·비용·오류 계약을 먼저 확정해야 한다.
-`BOTH`는 document 다음 database 순서로 두 결과를 수집한다.
+현재 라우터는 명시적인 문서·데이터 키워드를 빠른 규칙 경로로 처리한다. 규칙으로
+`GENERAL`이 된 질문은 저비용 LLM이 의미를 다시 분류하고, 사내 규정 의도이면 문서
+검색어를 업무 용어로 재작성해 `DOCUMENT` 또는 `BOTH` 경로로 보낸다. 의미 분류가
+실패하거나 계약된 JSON을 반환하지 않으면 안전하게 `GENERAL`로 복귀한다. 데이터
+도메인이 모호하면 purchase와 sales를 모두 조회하며, `BOTH`는 document 다음 database
+순서로 두 결과를 수집한다.
 
 ## 4. Evidence Eval 기준
 
@@ -341,6 +354,11 @@ DOCUMENT_DB_DATABASE=documents
 기반 계약 테스트다. 실제 MySQL 검증은 `RUN_LOCAL_MYSQL_TESTS=1`일 때 same-process
 Data MCP를 주입하는 opt-in 테스트만 실행하며, ETL의 실제 MySQL 통합 테스트는 아직
 placeholder다.
+
+성능 재현 명령, 5초 예산, cache miss/hit 및 브라우저 E2E 결과, 안전한 운영 관측 필드는
+[`docs/performance.md`](docs/performance.md)에 기록한다. 성능 벤치마크도 반드시
+`conda run -n skn_3rd python -m scripts.benchmark_chat_performance --scenario all --iterations 5`
+형식으로 실행한다.
 
 ### 필수 단위 테스트
 

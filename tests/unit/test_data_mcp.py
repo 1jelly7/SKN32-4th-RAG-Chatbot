@@ -20,6 +20,7 @@ from app.mcp.client import (
 )
 from mcp_servers.data_tools.purchase.mysql import ReadOnlyMySQLClient as PurchaseMySQLClient
 from mcp_servers.data_tools.sales.mysql import ReadOnlyMySQLClient as SalesMySQLClient
+from mcp_servers.data_tools.server import _execute_query
 from tests.auth_helpers import TEST_ADMIN_CONTEXT
 
 
@@ -119,6 +120,36 @@ def test_fake_mcp_returns_defensive_response_copy() -> None:
     evidence[0]["rows"][0]["amount"] = 999
 
     assert response["data"][0]["amount"] == 100
+
+
+def test_data_tool_preserves_domain_metadata() -> None:
+    async def query(_: str) -> list[dict[str, Any]]:
+        return [{
+            "domain": "sales",
+            "rows": [{"order_month": "2026-01", "total_sales": 1200}],
+            "generated_sql": "SELECT total_sales",
+            "elapsed_ms": 1.2,
+            "metadata": {"chart_hint": "line", "currency": "JOD", "views_used": ["v_sales_order"]},
+        }]
+
+    envelope = asyncio.run(_execute_query("sales", "월별 매출", query, TEST_ADMIN_CONTEXT))
+
+    assert envelope["metadata"]["chart_hint"] == "line"
+    assert envelope["metadata"]["currency"] == "JOD"
+    assert envelope["metadata"]["row_count"] == 1
+
+
+def test_data_tool_preserves_specific_empty_result_message() -> None:
+    async def query(_: str) -> list[dict[str, Any]]:
+        return [{
+            "domain": "sales", "rows": [], "generated_sql": "SELECT total_sales",
+            "message": "요청한 지표는 판매 데이터로 계산할 수 없습니다.", "metadata": {},
+        }]
+
+    envelope = asyncio.run(_execute_query("sales", "영업이익", query, TEST_ADMIN_CONTEXT))
+
+    assert envelope["error_code"] == "NO_RESULT"
+    assert envelope["message"] == "요청한 지표는 판매 데이터로 계산할 수 없습니다."
 
 
 @pytest.mark.parametrize(

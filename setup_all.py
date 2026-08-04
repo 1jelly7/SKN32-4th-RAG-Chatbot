@@ -93,7 +93,7 @@ SALES_READ_PASSWORD=reader123!
 PURCHASE_DB_HOST=127.0.0.1
 PURCHASE_DB_USER=purchase
 PURCHASE_DB_PASSWORD=1234
-PURCHASE_DB_DATABASE=purchase_db
+PURCHASE_DB_DATABASE=purchase
 PURCHASE_READ_USER=purchase_reader
 PURCHASE_READ_PASSWORD=purchase_read_1234
 """
@@ -151,8 +151,8 @@ PURCHASE_READ_PASSWORD=purchase_read_1234
     else:
         print(f"[건너뜀] 구매 ETL 파일이 없습니다: {purchase_etl_path}")
 
-    run_mysql_file("JangGGo", "1234", "purchase_db", "database/purchase/views.sql", ignore_duplicate_error=True)
-    run_mysql_file("JangGGo", "1234", "purchase_db", "database/purchase/grants_reader.sql", ignore_duplicate_error=True)
+    run_mysql_file("JangGGo", "1234", "purchase", "database/purchase/views.sql", ignore_duplicate_error=True)
+    run_mysql_file("JangGGo", "1234", "purchase", "database/purchase/grants_reader.sql", ignore_duplicate_error=True)
 
     print("\n✨ 모든 사전작업 및 초기화 코드가 성공적으로 실행되었습니다!")
 

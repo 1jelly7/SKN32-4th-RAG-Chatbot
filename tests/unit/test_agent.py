@@ -367,8 +367,8 @@ async def test_graph_both_fans_in_document_and_partial_database_evidence(
 
 
 @pytest.mark.asyncio
-async def test_graph_does_not_retry_deterministic_document_search() -> None:
-    """DOCUMENT 검색은 결정적이라 재조회해도 결과가 같으므로 재시도하지 않는다."""
+async def test_graph_retries_insufficient_evidence_exactly_once() -> None:
+    """품질 미달 근거가 무한 조회 없이 한 번만 보강되게 한다."""
     port = FakeMCPPort(
         {
             "search_documents": _tool_success(
@@ -386,28 +386,8 @@ async def test_graph_does_not_retry_deterministic_document_search() -> None:
     )
 
     assert result["evidence_status"] == "INSUFFICIENT"
-    assert result.get("evidence_retry_count", 0) == 0
-    assert [call.tool_name for call in port.calls] == ["search_documents"]
-
-
-@pytest.mark.asyncio
-async def test_graph_retries_database_evidence_exactly_once() -> None:
-    """DATABASE 경로는 SQL이 다시 생성될 수 있으므로 보강 조회를 한 번만 허용한다."""
-    port = FakeMCPPort(
-        {
-            "search_documents": _tool_success("document", []),
-            "query_purchase": _tool_success("purchase", []),
-            "query_sales": _tool_success("sales", []),
-        }
-    )
-
-    result = await build_graph(MCPClient(port), FakeLLMPort("사용되지 않음")).ainvoke(
-        {"question": "고객별 매출 알려줘"}
-    )
-
-    assert result["evidence_status"] == "INSUFFICIENT"
     assert result["evidence_retry_count"] == 1
-    assert [call.tool_name for call in port.calls] == ["query_sales", "query_sales"]
+    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
 
 
 @pytest.mark.asyncio
@@ -666,7 +646,7 @@ async def test_general_answer_receives_question_without_retrieval_context() -> N
     assert result["answer"] == "사과는 일반적으로 빨간색입니다."
     assert fake_llm.calls[0].question == "사과는 무슨 색인가?"
     assert fake_llm.calls[0].prompt == ANSWER_PROMPT
-    assert "not the only source of knowledge" in ANSWER_PROMPT
+    assert "사내 자료와 무관한 일반 질문은 간결하게 답할 수 있지만" in ANSWER_PROMPT
 
 
 @pytest.mark.asyncio
@@ -704,4 +684,4 @@ async def test_empty_internal_search_is_not_reported_as_mcp_failure() -> None:
 
     assert result["evidence_status"] == "INSUFFICIENT"
     assert "사내 자료" in result["answer"]
-    assert [call.tool_name for call in port.calls] == ["search_documents"]
+    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]

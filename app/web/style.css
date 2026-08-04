@@ -99,12 +99,13 @@ textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px #dbeafe; backg
 
 .table-wrap, .chart-wrap { margin-top: 14px; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .table-meta { padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
-.data-table { width: 100%; min-width: 420px; border-collapse: collapse; font-size: 12px; }
+.data-table { width: 100%; min-width: max-content; border-collapse: collapse; font-size: 12px; }
 .data-table th, .data-table td { padding: 9px 10px; border-bottom: 1px solid #eef1f5; text-align: left; white-space: nowrap; }
 .data-table th { color: #475467; background: #f8fafc; font-weight: 700; }
 .sql-detail { padding: 9px 12px; color: var(--muted); font-size: 12px; }
 .sql-detail pre { overflow-x: auto; padding: 10px; border-radius: 7px; color: #d1fadf; background: #172033; white-space: pre-wrap; }
-.chart-wrap { padding: 12px; }
+.data-table .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.chart-wrap { height: 320px; padding: 12px; overflow: hidden; }
 .chart-wrap canvas { min-height: 220px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 

@@ -70,14 +70,23 @@ def test_graph_mcp_errors_use_http_contract(
         assert result.json()["evidence_status"] == "INSUFFICIENT"
     else:
         assert result.json()["error_code"] == expected_code
-    # DOCUMENT 경로는 결정적이라 재시도하지 않으므로 어느 경우든 도구 호출은 1회다.
-    assert [call.tool_name for call in port.calls] == [expected_tool]
+    # docs/interface.md 계약: INSUFFICIENT면 원래 route의 retrieval을 정확히 한 번
+    # 재시도한다(DOCUMENT도 예외 아님). 그래서 evidence_status를 검사하는 케이스(빈
+    # 문서 검색 결과)는 도구가 2번 불리고, 그 외 명시적 오류 케이스는 evidence_eval까지
+    # 못 가고 바로 예외로 끝나므로 1번만 불린다.
+    expected_call_count = 2 if expected_code is None else 1
+    assert [call.tool_name for call in port.calls] == [expected_tool] * expected_call_count
     assert llm.calls == []
 
 
 @pytest.mark.integration
-def test_insufficient_evidence_returns_safe_response_without_retry() -> None:
-    """저품질 evidence를 정상 답변으로 가장하지 않고, 무의미한 재조회 없이 종료한다."""
+def test_insufficient_evidence_retries_once_then_returns_safe_response() -> None:
+    """저품질 evidence를 정상 답변으로 가장하지 않고, 한 번만 보강 조회한 뒤 종료한다.
+
+    docs/interface.md 계약: INSUFFICIENT면 원래 route의 retrieval을 정확히 한 번
+    재시도한다. 무한 재조회를 막기 위해 두 번째도 INSUFFICIENT면 더 이상 재시도하지
+    않고 그 상태 그대로 응답한다.
+    """
     low_quality_document = {
         "status": "success",
         "domain": "document",
@@ -101,5 +110,7 @@ def test_insufficient_evidence_returns_safe_response_without_retry() -> None:
     assert response.status_code == 200
     assert response.json()["evidence_status"] == "INSUFFICIENT"
     assert response.json()["sources"] == []
-    assert [call.tool_name for call in port.calls] == ["search_documents"]
+    # 원래 검색어가 동의어 확장 트리거에 안 걸리는 질문이라(query_expansion 없음),
+    # 재시도 1회 = document_search가 정확히 2번 불린다.
+    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
     assert llm.calls == []

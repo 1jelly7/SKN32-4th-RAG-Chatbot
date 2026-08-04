@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
@@ -14,6 +15,8 @@ from mcp_servers.data_tools.sales.query import query_sales as run_sales_query
 
 DataToolName = Literal["query_purchase", "query_sales"]
 DomainQuery = Callable[[str], Awaitable[list[dict[str, Any]]]]
+
+logger = logging.getLogger(__name__)
 
 
 def _error_envelope(domain: str, code: str, message: str) -> dict[str, Any]:
@@ -41,6 +44,7 @@ async def _execute_query(
     except PermissionError:
         return _error_envelope(domain, "FORBIDDEN", "요청한 데이터베이스에 접근할 권한이 없습니다.")
     except Exception:  # noqa: BLE001 - provider 상세를 외부 envelope에 노출하지 않는다.
+        logger.exception("data_tool_query_failed domain=%s question_length=%d", domain, len(question))
         return _error_envelope(domain, "QUERY_ERROR", "업무 데이터 조회에 실패했습니다.")
 
     if len(evidence) != 1 or evidence[0].get("domain") != domain:
@@ -51,20 +55,32 @@ async def _execute_query(
     generated_sql = result.get("generated_sql")
     if not isinstance(rows, list) or not isinstance(generated_sql, str):
         return _error_envelope(domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다.")
+    metadata = result.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
     if not rows:
-        return _error_envelope(domain, "NO_RESULT", "조회 가능한 결과가 없습니다.")
+        message = result.get("message") or metadata.get("message")
+        if not isinstance(message, str) or not message.strip():
+            message = "해당 조건의 데이터가 없습니다. 보유 기간과 조건을 확인해 다시 질문해 주세요."
+        response = _error_envelope(domain, "NO_RESULT", message)
+        response["metadata"] = metadata
+        return response
 
+    response_metadata = dict(metadata)
+    response_metadata.update(
+        {
+            "generated_sql": generated_sql,
+            "row_count": len(rows),
+            "elapsed_ms": result.get("elapsed_ms"),
+        }
+    )
     return {
         "status": "success",
         "domain": domain,
         "message": None,
         "data": rows,
         "sources": [],
-        "metadata": {
-            "generated_sql": generated_sql,
-            "row_count": len(rows),
-            "elapsed_ms": result.get("elapsed_ms"),
-        },
+        "metadata": response_metadata,
     }
 
 

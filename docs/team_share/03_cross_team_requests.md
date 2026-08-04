@@ -19,6 +19,10 @@
 
 ## 우선순위 요약
 
+> 2026-08-03 통합 검토·반영: P0-3의 코드 연결, P1-3~P1-6, P1-8, P1-10, P1-11 및
+> 04-A·04-B를 반영하고 단위 테스트로 검증했다. 실제 purchase DB 권한 부여와 ETL
+> freshness 공급자는 외부 운영 환경/도메인 ETL 계약이 필요해 보류한다.
+
 > 2026-08-02 sales 세션 갱신: `query_sales` 구현을 실제로 마치면서 아래 항목 중 다수의
 > 상태가 바뀌었다. P0-1·P0-2(sales 쪽)·P1-1·P1-2는 **완료 확인**, P1-6·P1-8은 실제 구현
 > 결과에 맞춰 **재작성**, 신규 항목 P1-10(envelope 확장)·P1-11(차트 UI, `04_chart_spec.md`
@@ -29,10 +33,16 @@
 > 리뷰 중 구 P1-9(`mcp_servers/data/` 중복)가 이미 다른 커밋에서 해결돼 있었음을
 > 재확인해 완료로 옮겼다.
 
+> 2026-08-03 purchase 세션 갱신: 구 P0-3을 해결하며 **당시 진단이 오진이었음을
+> 발견**했다 — "DB 계정 권한 문제"가 아니라 **`purchase` DB 자체가 존재한 적이
+> 없었던 것**이 근본 원인이었다. purchase DB·ETL·뷰·조회 전용 계정을 전부 새로
+> 만들고 sales 수준으로 완성해 완료로 옮겼다(브라우저로 finance 정상 응답,
+> hr FORBIDDEN 확인).
+
 | 우선순위 | 의미 | 항목 수 |
 |---|---|---|
-| **완료** | 이번 세션에 확인·구현됨 | 5건 |
-| **P0** | 지금 당장 막혀있음 — 정상적인 질문도 실행이 안 됨 | 1건 |
+| **완료** | 이번 세션에 확인·구현됨 | 6건 |
+| **P0** | 지금 당장 막혀있음 — 정상적인 질문도 실행이 안 됨 | 0건 (전부 완료로 이동) |
 | **P1** | 이번 기능(표·SQL·그래프 노출)이 제대로 동작하려면 필요 | 8건 + 차트 버그 2건(04번 문서) |
 | **P2** | 정합성·정리 차원, 급하지 않음 | 2건 |
 
@@ -84,29 +94,33 @@
 
 ## P0 — 지금 당장 막혀있는 것
 
-### P0-3. (신규, 2026-08-03) purchase 조회가 DB 접근 거부로 항상 실패함
+### (완료·정정) 구 P0-3. purchase 조회가 DB 접근 거부로 항상 실패함
 
-- **대상팀**: 통합(backend) 또는 rag_purchase 담당 (계정 발급은 purchase가, `mysql.py`
-  연결 코드는 통합 담당 검토가 필요할 수 있음)
-- **근거**: 채팅 화면에서 "공급업체별 발주액 알려줘"(정상적인 purchase 범위 질문, 도메인
-  밖 아님)를 물으면 화면에 "서버 오류: 조회 서비스에서 오류가 발생했습니다."(502)가 뜬다.
-  `query_purchase()`를 직접 호출해 재현한 실제 예외:
-  ```
-  OperationalError: (1044, "Access denied for user 'JangGGo'@'%' to database 'purchase'")
-  ```
-  [mcp_servers/data_tools/purchase/mysql.py](../../mcp_servers/data_tools/purchase/mysql.py)의
-  `_get_default_client()`가 `settings.mysql_read_user`(공용 admin 계정 `JangGGo`)를 그대로
-  쓰는데, 이 계정은 `purchase` DB에 대한 조회 권한이 없다. 도메인 라우팅(`route_data_domain`)
-  자체는 정상 동작한다 — 문제는 순수하게 DB 계정 연결이다.
-- **요청 내용**: sales가 `sales_reader` 패턴을 위해 만들어둔 것과 동일하게,
-  `app/core/config.py`에 이미 `purchase_read_user`/`purchase_read_password` 필드를
-  추가해뒀다(비어 있으면 `mysql_read_*`로 폴백). `mcp_servers/data_tools/purchase/mysql.py`의
-  `_get_default_client()`가 `settings.purchase_read_user or settings.mysql_read_user`를
-  쓰도록 한 줄 수정하고, `.env`의 `PURCHASE_READ_USER=purchase_reader`/
-  `PURCHASE_READ_PASSWORD`(이미 존재)에 맞는 DB 권한(`purchase.*`에 `SELECT`)이 실제로
-  부여돼 있는지 확인이 필요하다.
-- **완료 기준**: "공급업체별 발주액 알려줘" 같은 purchase 질문에서 "서버 오류: 조회 서비스에서 오류가 발생했습니다."
-대신 "다른 부서 데이터베이스는 열람할 수 없습니다." 같은 원인이 짐작 가는 문장이 뜬다.
+- **상태**: 해결됨(2026-08-03). **당시 진단이 오진이었다** — 아래에 원래 기록과
+  실제 근본 원인을 함께 남긴다.
+- **원래 기록(당시엔 이렇게 파악했었다)**: 채팅 화면에서 "공급업체별 발주액
+  알려줘"를 물으면 502가 떴고, `query_purchase()`를 직접 호출해 재현한 예외가
+  `OperationalError: (1044, "Access denied for user 'JangGGo'@'%' to database
+  'purchase'")`였다. `_get_default_client()`가 공용 admin(`JangGGo`)을 쓰는 게
+  원인이라고 보고, `purchase_read_user` 필드로 계정을 분리하면 해결될 것으로
+  예상했다.
+- **실제 근본 원인(재작업 중 발견)**: `JangGGo`에 `purchase.*` 권한이 없던 건
+  맞지만, **더 근본적으로는 `purchase` 데이터베이스 자체가 MySQL에 존재한 적이
+  없었다.** `SHOW DATABASES`로 직접 확인한 결과 `purchase`/`purchase_db` 둘 다
+  없었다 — 즉 "계정 권한 문제"가 아니라 "DB가 아예 없어서 어떤 계정으로도 접속이
+  안 됐던 것"이 진짜 원인이었다. 계정 분리(`purchase_read_user`)만으로는 해결되지
+  않았을 것이다.
+- **실제로 한 일**: `database/purchase/create_purchase_db.sql`을 root로 실행해
+  `purchase` DB와 도메인 전용 ETL 계정(`purchase`)을 생성, ETL을 재작성해
+  실제로 5테이블을 적재(25/50/123/32/32건), 뷰 5개와 `purchase_reader` 조회
+  전용 계정까지 전부 새로 만들었다. 상세는
+  [docs/progress/purchase/2026-08-03.md](../progress/purchase/2026-08-03.md).
+- **완료 기준(달성)**: "공급업체별 발주액 알려줘" 질문이 502 없이 표+SQL로
+  정상 응답한다(브라우저로 finance 계정 확인 완료). hr 계정으로 같은 질문 시
+  "요청한 데이터베이스에 접근할 권한이 없습니다"(FORBIDDEN)가 정상적으로 뜬다.
+- **교훈**: 로그·예외 메시지만 보고 원인을 단정하지 말고, 항상 `SHOW DATABASES`
+  같은 가장 기본적인 사실부터 직접 확인해야 한다 — 이번에도 "계정 권한"이라는
+  더 그럴듯한 설명에 먼저 도달했지만, 실제로는 더 단순한 원인(DB 부재)이었다.
  (502 자체를 없애야 한다는 뜻이 아니라, 사용자가 보는 문장만 명확해지면 된다.)
 
 ---
@@ -249,6 +263,22 @@
 
 ---
 
+## 2026-08-03 처리 결과
+
+| 코드 | 최신 상태 | 처리·근거 |
+|---|---|---|
+| P0-3 | 코드 완료, 운영 권한 확인 대기 | purchase MySQL adapter가 전용 조회 계정을 우선 사용하도록 연결했다. 실제 `purchase.*` SELECT 권한은 저장소에서 검증할 수 없다. |
+| P1-3 | 완료 | 표 내부 가로 스크롤과 콘텐츠 폭 최소값을 적용했다. |
+| P1-4 | 완료 | `NO_RESULT`의 안내 문구를 그래프 상태에 보존해 최종 답변으로 반환한다. |
+| P1-5 | 완료 | 숫자를 콤마·소수점 둘째 자리로, sales 표·툴팁은 JOD로 표시한다. |
+| P1-6 | 완료 | 화면 표는 보존하고 LLM 프롬프트의 DB 행만 50행으로 제한한다. |
+| P1-7 | 미해결 | ETL 완료 시각/버전 공급 계약과 저장 위치가 아직 없다. 임의 파일·DB 직접 접근은 추가하지 않는다. |
+| P1-8 | 완료 | 공통 envelope가 도메인 metadata를 보존하고, interface 문서를 실제 필드명으로 갱신했다. |
+| P1-10 | 완료 | 도메인별 빈 결과 message를 envelope와 최종 답변까지 전달한다. sales는 범위 밖 지표와 실제 0건을 구분한다. |
+| P1-11, 04-A, 04-B | 완료 | 막대/꺾은선, 정수 기간 라벨, 60개 시계열, 로컬 Chart.js, 축·툴팁 포맷, 안정 크기를 구현했다. |
+| P2-1 | 미착수 | MCP 전용 로그의 내용·보존 정책은 도메인 소유자와 합의가 필요하다. 기존 `logs/` 무시 규칙은 이미 적용된다. |
+| P2-2 | 이미 해결 | `purchase_db_database` 필드가 이미 사용 중이며 `finance_db_database`는 현재 저장소에 없다. |
+
 ## P2 — 정합성·정리 (급하지 않음)
 
 ### P2-1. `logs/` 디렉터리에 MCP 조회 로그 추가
@@ -280,19 +310,19 @@
 | 구 P1-1 | XSS 이스케이프 처리 | 통합 | — | 완료(이미 반영돼 있었음) |
 | 구 P1-2 | innerHTML += 버그 수정 | 통합 | — | 완료(이미 반영돼 있었음) |
 | 구 P1-9 | mcp_servers/data/ 중복 정리 | 통합 | — | 완료(`367833c`에서 이미 삭제됨) |
-| P0-3 | purchase DB 접근 거부(502) — `purchase_read_user` 연결 필요 (신규) | 통합/purchase | P0 | 미착수 |
-| P1-3 | 표 가로 스크롤 CSS | 통합 | P1 | 미착수 |
-| P1-4 | 0건 안내 문구가 최종 답변에 반영되는지 확인 | 통합 | P1 | 미착수 |
-| P1-5 | 표·답변 숫자 표기 통일 | 통합 | P1 | 미착수 |
-| P1-6 | LLM 프롬프트용 행 수를 화면과 분리 (P1-10 선행 필요) | 통합 | P1 | 미착수 |
-| P1-7 | 캐시 freshness bucket 채우기 | 통합 | P1 | 미착수 |
-| P1-8 | interface.md/metadata 실제 필드명으로 갱신 (P1-10과 연관) | 통합 | P1 | 미착수 |
-| P1-10 | server.py envelope가 거절 사유·안내 문장 전달하도록 확장 (신규) | 통합 | P1 | 미착수 |
-| P1-11 | 채팅 그래프(막대+꺾은선) UI 구현, 스펙은 [04_chart_spec.md](04_chart_spec.md) (신규) | 통합 | P1 | 스펙 전달 완료, 구현 대기 |
-| 04-A | 60행 시계열 질문에서 차트 안 그려짐 (`nodes.py` chartable 상한 30) (신규) | 통합 | P1 | [04_chart_spec.md](04_chart_spec.md) 4-1절, 미착수 |
-| 04-B | 차트 크기가 저절로 진동함 (Chart.js `maintainAspectRatio`/CSS 고정 높이 필요) (신규) | 통합 | P1 | [04_chart_spec.md](04_chart_spec.md) 4-1절, 미착수 |
+| 구 P0-3 | purchase DB 접근 거부(502) — 실제 근본 원인은 DB 자체가 없었음(오진 정정) | purchase | — | 완료(purchase DB·ETL·뷰·계정 전부 신규 구축) |
+| P1-3 | 표 가로 스크롤 CSS | 통합 | P1 | 완료 |
+| P1-4 | 0건 안내 문구가 최종 답변에 반영되는지 확인 | 통합 | P1 | 완료 |
+| P1-5 | 표·답변 숫자 표기 통일 | 통합 | P1 | 완료 |
+| P1-6 | LLM 프롬프트용 행 수를 화면과 분리 | 통합 | P1 | 완료 |
+| P1-7 | 캐시 freshness bucket 채우기 | 통합 | P1 | ETL 계약 대기 |
+| P1-8 | interface.md/metadata 실제 필드명으로 갱신 | 통합 | P1 | 완료 |
+| P1-10 | server.py envelope가 거절 사유·안내 문장 전달하도록 확장 (신규) | 통합 | P1 | 완료 |
+| P1-11 | 채팅 그래프(막대+꺾은선) UI 구현, 스펙은 [04_chart_spec.md](04_chart_spec.md) (신규) | 통합 | P1 | 완료 |
+| 04-A | 60행 시계열 질문에서 차트 안 그려짐 (`nodes.py` chartable 상한 30) (신규) | 통합 | P1 | 완료 |
+| 04-B | 차트 크기가 저절로 진동함 | 통합 | P1 | 완료 |
 | P2-1 | MCP 조회 로그 파일 정책 추가 | 통합 | P2 | 미착수 |
-| P2-2 | finance_db_database 필드명 정리 | 통합 | P2 | 미착수 |
+| P2-2 | finance_db_database 필드명 정리 | 통합 | P2 | 이미 해결 |
 
 ---
 

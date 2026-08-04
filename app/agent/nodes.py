@@ -6,12 +6,15 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
 from app.agent.llm import AsyncLLMPort, complete
 from app.agent.prompts import ANSWER_PROMPT
+from app.agent.query_expansion import expand_document_queries
 from app.agent.state import DataDomain, GraphState, Route
 from app.mcp.client import MCPClient, MCPClientError, MCPNoResultError
 
@@ -86,6 +89,23 @@ async def router(state: GraphState) -> GraphState:
     return state
 
 
+def _merge_document_evidence(
+    merged: dict[tuple[Any, Any], dict[str, Any]],
+    items: list[dict[str, Any]],
+) -> None:
+    """document_id+page를 키로 병합하며, 같은 문서가 다시 나오면 더 높은 점수만 남긴다.
+
+    같은 문서가 원본 질문과 확장 검색어 양쪽에서 걸리는 경우가 흔해서(동의어
+    확장은 recall을 넓히는 목적이지 다른 문서를 찾는 게 아니다), 병합 없이 그냥
+    이어붙이면 evidence_eval과 답변에 같은 근거가 중복 표시된다.
+    """
+    for item in items:
+        key = (item.get("document_id"), item.get("page"))
+        existing = merged.get(key)
+        if existing is None or float(item.get("score", 0.0)) > float(existing.get("score", 0.0)):
+            merged[key] = item
+
+
 async def document_retrieval(
     state: GraphState,
     mcp_client: MCPClient | None = None,
@@ -95,6 +115,12 @@ async def document_retrieval(
     Document MCP는 내부 문서 DB에서 파일 경로를 먼저 조회한 뒤 해당 파일만 읽는다.
     응답은 document_evidence에 저장하고, MCP 실패 시 임의 경로의 문서를 직접 읽는
     방식으로 대체하지 않는다.
+
+    질문을 그대로 한 번만 검색하면 "겸직 가능해?"처럼 구어체 질문이 문서의 공식
+    용어("이중취업 금지")와 어휘가 달라 못 찾는 경우가 있다. 그래서 1차 검색
+    점수가 정책 임계값보다 낮을 때만 expand_document_queries()가 만든 동의어
+    검색어로 추가 조회한다 - 1차 점수가 이미 충분하면(강한 직접 매치) 확장 없이
+    끝나 MCP 호출이 늘지 않는다.
     """
     if mcp_client is None:
         state["document_evidence"] = []
@@ -102,12 +128,47 @@ async def document_retrieval(
         return state
 
     question = state.get("question", "")
+    document_search_query = state.get("document_search_query") or question
+    search_queries = expand_document_queries(document_search_query)
+    if not search_queries:
+        search_queries = [document_search_query]
+
     try:
-        state["document_evidence"] = await mcp_client.document_search(question, top_k=10, user_context=state.get("user_context"))
+        first_result = await mcp_client.document_search(
+            search_queries[0], top_k=10, user_context=state.get("user_context")
+        )
+        merged: dict[tuple[Any, Any], dict[str, Any]] = {}
+        _merge_document_evidence(merged, first_result)
+
+        policy = state.get("evidence_policy")
+        min_document_score = float(getattr(policy, "min_document_score", 0.38))
+        direct_score = max((float(item.get("score", 0.0)) for item in merged.values()), default=0.0)
+
+        if len(search_queries) > 1 and direct_score < min_document_score:
+            expanded_results = await asyncio.gather(
+                *(
+                    mcp_client.document_search(query, top_k=10, user_context=state.get("user_context"))
+                    for query in search_queries[1:]
+                ),
+                return_exceptions=True,
+            )
+            for result in expanded_results:
+                if isinstance(result, MCPNoResultError):
+                    continue
+                if isinstance(result, MCPClientError):
+                    # 확장 검색 하나가 실패해도 1차 검색 결과는 이미 확보했으니
+                    # 전체를 실패시키지 않고 이번 확장 검색분만 건너뛴다.
+                    continue
+                if isinstance(result, BaseException):
+                    raise result
+                _merge_document_evidence(merged, result)
+
+        evidence = list(merged.values())
+        state["document_evidence"] = evidence
         # 캐시 키가 실제 문서 인덱스 버전을 참조하도록, MCP metadata에서 뽑아 state에 저장합니다.
         # (이전에는 이 필드가 항상 비어 있어 인덱스가 갱신돼도 캐시가 무효화되지 않았습니다)
-        if state["document_evidence"]:
-            index_version = state["document_evidence"][0].get("metadata", {}).get("index_version")
+        if evidence:
+            index_version = evidence[0].get("metadata", {}).get("index_version")
             if index_version:
                 state["document_index_version"] = index_version
     except MCPNoResultError:

@@ -58,3 +58,11 @@ def test_rag_case_finds_expected_document(fixture_index, case):
         f"'{case['question']}' 질문에 예상 문서({case['expected_document']}) 대신 "
         f"'{top_title}'가 최상위로 나왔습니다."
     )
+
+
+def test_lexical_search_recovers_exact_policy_term(fixture_index) -> None:
+    results = fixture_index.search_text("법인카드 사용 정산 규정", top_k=3)
+
+    assert results
+    assert results[0]["title"] == "sample_card_policy"
+    assert results[0]["score"] >= 0.38
