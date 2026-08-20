@@ -1,9 +1,12 @@
-# -*- coding: utf-8 -*-
-"""pytest가 프로젝트 루트의 app 패키지를 찾도록 경로를 설정합니다."""
+"""외부 서비스 없이 각 테스트를 격리하는 공통 pytest fixture."""
 
-import sys
-from pathlib import Path
+import pytest
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+from app.cache.repository import cache
+
+
+@pytest.fixture(autouse=True)
+def clear_cache() -> None:
+    """프로세스 전역 개발 cache가 테스트 순서에 영향을 주지 않게 초기화한다."""
+    cache._store.clear()
+    cache._expires_at.clear()

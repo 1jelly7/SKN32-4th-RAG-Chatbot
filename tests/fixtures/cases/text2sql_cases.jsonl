@@ -1,0 +1,12 @@
+{"question": "2025년 4분기 매출 알려줘", "expected_views": ["v_sales_order"]}
+{"question": "연도별 매출 추이 알려줘", "expected_views": ["v_sales_order"]}
+{"question": "매출 상위 5개 고객 알려줘", "expected_views": ["v_sales_order"]}
+{"question": "2025년 고객별 매출 알려줘", "expected_views": ["v_sales_order"]}
+{"question": "가장 많이 팔린 품목 10개", "expected_views": ["v_sales_order_line"], "forbidden_substrings": ["v_sales_order.order_amount"]}
+{"question": "품목별 판매 수량 상위 5개", "expected_views": ["v_sales_order_line"]}
+{"question": "연체된 미수금 총액 알려줘", "expected_views": ["v_invoice"]}
+{"question": "취소된 주문이 몇 건이야", "expected_views": ["v_sales_order_status"]}
+{"question": "월별 매출 추이 보여줘", "expected_views": ["v_sales_order"]}
+{"question": "이번 달 영업이익 알려줘", "expect_no_sql": true}
+{"question": "재고 얼마나 남았어", "expect_no_sql": true}
+{"question": "공급업체별 발주액 알려줘", "expect_no_sql": true}

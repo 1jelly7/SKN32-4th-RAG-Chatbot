@@ -5,7 +5,11 @@
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/docs" />
     </content>
+<<<<<<< HEAD:.idea/20260730_3rd_pj_rag_mcp_chatbot.iml
     <orderEntry type="jdk" jdkName="Python 3.13 (mcp_project) (3)" jdkType="Python SDK" />
+=======
+    <orderEntry type="jdk" jdkName="Python 3.13 (project_3) (2)" jdkType="Python SDK" />
+>>>>>>> develop:.idea/PythonProject.iml
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>
