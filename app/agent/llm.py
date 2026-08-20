@@ -149,6 +149,8 @@ def _is_sensitive_key(key: object) -> bool:
 
 
 def _stringify_evidence(item: dict[str, Any]) -> str:
+    if item.get("type") == "web":
+        return f"{item.get('title', '')} ({item.get('url', '')})\n{item.get('content', '')}"
     if item.get("type") == "database":
         rows_preview = item.get("rows", [])[:5]
         text = f"SQL: {item.get('generated_sql', '')}\n결과({item.get('row_count', 0)}건 중 일부): {rows_preview}"

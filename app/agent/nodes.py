@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import asyncio
 
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from urllib.parse import quote
 
 from app.agent.llm import AsyncLLMPort, complete
-from app.agent.prompts import ANSWER_PROMPT
+from app.agent.prompts import ANSWER_PROMPT, FRESHNESS_ESCAPE_HATCH_PROMPT, NEEDS_LIVE_SEARCH_MARKER
+from app.agent.query_classification import classify_question
 from app.agent.query_expansion import expand_document_queries
 from app.agent.state import DataDomain, GraphState, Route
 from app.mcp.client import MCPClient, MCPClientError, MCPNoResultError
@@ -82,9 +84,16 @@ def route_data_domain(question: str) -> DataDomain:
 
 
 async def router(state: GraphState) -> GraphState:
-    """question을 분류해 route 필드에 기록하고 기존 상태를 보존한다."""
+    """question을 분류해 route/query_labels 필드에 기록하고 기존 상태를 보존한다.
+
+    query_labels는 원래 query_classification.classify_question()이 계산하도록
+    만들어져 있었지만, 그래프 어디에서도 실제로 호출하는 곳이 없어 항상 빈
+    리스트로 남아있던 배선 누락이 있었다(FRESHNESS_SENSITIVE 등 라벨 기반 분기가
+    실제로는 절대 못 타는 상태였음 - 2026-08-18 웹 검색 기능 추가 중 발견).
+    """
     question = state.get("question", "")
     state["route"] = route_question(question)
+    state["query_labels"] = list(classify_question(question))
     if state["route"] in ("DATABASE", "BOTH"):
         state["data_domain"] = route_data_domain(question)
     return state
@@ -257,38 +266,112 @@ async def database_retrieval(
     return state
 
 
+WebSearchFn = Callable[[str], Awaitable[list[dict[str, Any]]]]
+
+
+async def _default_web_search(question: str) -> list[dict[str, Any]]:
+    """실제 Tavily 호출은 여기서만 import한다(테스트가 fake를 주입할 수 있도록).
+
+    앱 기동 시점에 web_tools를 건드리지 않기 위해 함수 안에서 지연 import한다
+    (mcp_servers 도메인 모듈들과 동일한 관례, app/mcp/client.py 참고).
+    """
+    from mcp_servers.web_tools.search import search_web
+
+    return await search_web(question)
+
+
 async def answer_synthesis(
     state: GraphState,
     llm: AsyncLLMPort | None = None,
+    web_search: WebSearchFn | None = None,
 ) -> GraphState:
     """검증된 evidence 범위 안에서 answer와 sources를 만든다.
 
     GENERAL은 일반 답변을 생성할 수 있지만, 검색 경로는 근거 밖의 사실을 보태지
     않는다(근거를 프롬프트에 구조적으로 전달하고, 근거만 사용하라고 명시). 근거
-    부족·충돌이면 그 사실을 답변에 명시한다. 출처는 document/db 유형과 식별자를
-    보존해 응답 모델에 맞춘다.
+    부족·충돌이면 그 사실을 답변에 명시한다. 출처는 document/db/web 유형과
+    식별자를 보존해 응답 모델에 맞춘다.
+
+    web_search는 llm과 같은 방식의 의존성 주입이다 - 테스트가 실제 네트워크를
+    타지 않고 고정된 fake 결과(또는 빈 리스트/예외)를 주입할 수 있게 하기 위함.
+    프로덕션 경로(app/agent/graph.py)에서는 partial(answer_synthesis, ...,
+    web_search=web_search)로 실제 함수를 주입한다.
     """
     route = state.get("route", "GENERAL")
     evidence = state.get("evidence", [])
     evidence_status = state.get("evidence_status", "SUPPORTED")
     query_labels = state.get("query_labels", [])
+    question = state.get("question", "")
 
-    # 실시간성이 중요한 질문(예: "오늘 기준 금리는?")인데 근거가 전혀 없으면,
-    # LLM이 오래된 학습 데이터로 추측 답변을 만들지 않도록 호출 자체를 건너뜁니다.
-    if route == "GENERAL" and "FRESHNESS_SENSITIVE" in query_labels and not evidence:
-        state["answer"] = (
-            "이 질문은 실시간성이 중요한 정보라 정확한 답변을 드리기 어렵습니다. "
-            "최신 출처를 직접 확인해 주세요."
-        )
-        state["sources"] = []
-        state["tables"] = []
-        return state
+    if route == "GENERAL" and not evidence:
+        needs_search = "FRESHNESS_SENSITIVE" in query_labels
+        trial_answer: str | None = None
+
+        # 고정 키워드(query_classification.py)로 못 잡은 GENERAL 질문은, 검색부터
+        # 하지 말고 LLM에게 "이 질문에 실시간 정보가 필요한가"를 먼저 한 번 물어본다
+        # (방법 B). 키워드 목록은 아무리 늘려도 "지금 비트코인 시세", "삼성전자
+        # 주가"처럼 표현이 다른 질문을 다 못 잡는 근본 한계가 있어서, 이게 마지막
+        # 안전망이다. 키워드로 이미 확실한 경우에는 이 시험 호출을 건너뛰고 바로
+        # 검색한다 - 모든 질문마다 분류용 LLM 호출을 추가하는 것보다 훨씬 저렴하다.
+        if not needs_search:
+            trial_answer = await complete(FRESHNESS_ESCAPE_HATCH_PROMPT, [], question, llm)
+            needs_search = NEEDS_LIVE_SEARCH_MARKER in trial_answer
+
+        if not needs_search:
+            # LLM이 스스로 "실시간 정보 없이도 답할 수 있다"고 판단한 경우.
+            # 근거 없는 일반 지식 답변이므로 시험 답변을 그대로 최종 답변으로 쓴다.
+            state["answer"] = trial_answer or ""
+            state["sources"] = []
+            state["tables"] = []
+            return state
+
+        # 실시간성이 중요한 질문(예: "오늘 기준 금리는?")인데 근거가 전혀 없으면,
+        # 웹 검색으로 근거를 보충한다. 검색 자체가 실패하거나(TAVILY_API_KEY 미설정,
+        # 네트워크 오류 등) 결과가 없으면, LLM이 오래된 학습 데이터로 추측 답변을
+        # 만들지 않도록 안전한 안내 문구로 폴백한다.
+        search_fn = web_search or _default_web_search
+        try:
+            evidence = await search_fn(question)
+        except Exception:
+            evidence = []
+        if not evidence:
+            state["answer"] = (
+                "이 질문은 실시간성이 중요한 정보라 정확한 답변을 드리기 어렵습니다. "
+                "최신 출처를 직접 확인해 주세요."
+            )
+            state["sources"] = []
+            state["tables"] = []
+            return state
 
     if route != "GENERAL" and evidence_status == "INSUFFICIENT":
-        state["answer"] = "사내 자료에서 관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
-        state["sources"] = []
-        state["tables"] = []
-        return state
+        # 내부 문서를 항상 먼저 시도하고(위에서 이미 끝남), 여기 도달했다는 건
+        # 사내 자료에서 근거를 못 찾았다는 뜻이다. DOCUMENT 질문에 한해 웹 검색을
+        # 마지막 수단으로 시도한다 - 내부정보 우선, 없을 때만 웹 순서를 지키기
+        # 위해 DOCUMENT 검색이 이미 실패로 확정된 이 시점에만 웹을 호출한다.
+        # DATABASE/BOTH는 매출·구매 같은 사내 고유 데이터라 웹 검색으로 보충할
+        # 수 있는 성격이 아니므로 대상에서 제외한다.
+        if route == "DOCUMENT":
+            search_fn = web_search or _default_web_search
+            try:
+                web_evidence = await search_fn(question)
+            except Exception:
+                web_evidence = []
+            if web_evidence:
+                evidence = web_evidence
+                # 아래로 흘러서 웹 근거로 정식 답변 생성(ANSWER_PROMPT)까지 이어진다.
+            else:
+                state["answer"] = (
+                    "사내 자료와 웹 검색 모두에서 관련된 근거를 찾지 못해 답변을 드리기 "
+                    "어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+                )
+                state["sources"] = []
+                state["tables"] = []
+                return state
+        else:
+            state["answer"] = "사내 자료에서 관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+            state["sources"] = []
+            state["tables"] = []
+            return state
 
     if route != "GENERAL" and evidence_status == "CONTRADICTED":
         state["answer"] = "서로 모순되는 근거가 확인되어 신뢰할 수 있는 단일 답변을 만들 수 없습니다. 담당자 확인이 필요합니다."
@@ -296,7 +379,6 @@ async def answer_synthesis(
         state["tables"] = []
         return state
 
-    question = state.get("question", "")
     answer = await complete(ANSWER_PROMPT, evidence, question, llm)
     if evidence_status == "PARTIALLY_SUPPORTED":
         reason = state.get("evidence_reason") or "일부 근거에 조회 오류가 있어, 확인된 부분만 반영한 답변입니다."
@@ -413,6 +495,17 @@ def _build_sources(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "query_id": _metadata_value(item, "query_id"),
                     "freshness_seconds": _metadata_value(item, "freshness_seconds"),
                     "source_version": _metadata_value(item, "source_version"),
+                }
+            )
+        elif item.get("type") == "web":
+            sources.append(
+                {
+                    "id": item.get("url", ""),
+                    "title": item.get("title", ""),
+                    "source_type": "web",
+                    "document_id": None,
+                    "url": item.get("url", ""),
+                    "score": item.get("score"),
                 }
             )
     for source in document_sources.values():

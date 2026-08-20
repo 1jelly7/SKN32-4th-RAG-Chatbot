@@ -17,7 +17,7 @@ from langgraph.graph import END, StateGraph
 
 from app.agent.evidence_eval import evidence_eval
 from app.agent.llm import AsyncLLMPort
-from app.agent.nodes import answer_synthesis, database_retrieval, document_retrieval, router
+from app.agent.nodes import WebSearchFn, answer_synthesis, database_retrieval, document_retrieval, router
 from app.agent.state import GraphState
 from app.mcp.client import MCPClient
 
@@ -121,6 +121,7 @@ def after_retry(state: GraphState) -> str | list[str]:
 def build_graph(
     mcp_client: MCPClient | None = None,
     llm: AsyncLLMPort | None = None,
+    web_search: WebSearchFn | None = None,
 ) -> object:
     """명세의 StateGraph를 조립하고 컴파일된 실행 객체를 반환한다.
 
@@ -137,7 +138,7 @@ def build_graph(
     graph.add_node("database", partial(_run_database_node, mcp_client=mcp_client))
     graph.add_node("evidence", evidence_eval)
     graph.add_node("retry", prepare_evidence_retry)
-    graph.add_node("answer", partial(answer_synthesis, llm=llm))
+    graph.add_node("answer", partial(answer_synthesis, llm=llm, web_search=web_search))
 
     graph.set_entry_point("router")
 

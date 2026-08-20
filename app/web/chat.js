@@ -147,8 +147,30 @@ async function handleDownload(button) {
 
 function renderSources(sources, route) {
   const documentSources = (sources || []).filter(source => source.source_type === 'document');
-  const label = documentSources.length ? `문서 근거 ${documentSources.length}건` : route === 'DOCUMENT' ? '관련 문서를 찾지 못했습니다' : '문서 검색 결과가 여기에 표시됩니다';
+  const webSources = (sources || []).filter(source => source.source_type === 'web');
+  const label = documentSources.length
+    ? `문서 근거 ${documentSources.length}건`
+    : webSources.length
+      ? `웹 검색 근거 ${webSources.length}건`
+      : route === 'DOCUMENT' ? '관련 문서를 찾지 못했습니다' : '문서 검색 결과가 여기에 표시됩니다';
   sourcesSummary.textContent = label;
+
+  if (webSources.length) {
+    sourcesList.innerHTML = webSources.map(source => {
+      const title = source.title || source.url || '웹 출처';
+      return `
+      <article class="source-card">
+        <div class="source-card-main">
+          <div class="source-title-row">
+            <span class="source-icon" aria-hidden="true">🌐</span>
+            <h3 class="source-title">${escapeHtml(title)}</h3>
+          </div>
+          ${source.url ? `<p class="source-meta"><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.url)}</a></p>` : ''}
+        </div>
+      </article>`;
+    }).join('');
+    return;
+  }
 
   if (!documentSources.length) {
     sourcesList.innerHTML = `<div class="source-empty"><span aria-hidden="true">▤</span><p>${route === 'DOCUMENT' ? '관련 문서를 찾지 못했습니다. 다른 표현으로 다시 질문해 주세요.' : '사내 문서 검색을 실행하면 근거 문서와 관련도가 표시됩니다.'}</p></div>`;

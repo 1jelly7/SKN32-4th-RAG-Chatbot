@@ -94,6 +94,32 @@ async def test_router_preserves_route_and_data_domain(
 
 
 @pytest.mark.asyncio
+async def test_router_populates_query_labels_for_freshness_sensitive_question() -> None:
+    """router()가 classify_question()을 실제로 호출해 query_labels를 채우는지 확인한다.
+
+    이전에는 query_classification.classify_question()이 정의만 되어 있고 그래프
+    어디에서도 호출되지 않아, state["query_labels"]가 실제 운영 경로에서는 항상
+    빈 리스트였다(answer_synthesis의 FRESHNESS_SENSITIVE 웹 검색 분기가 실제로는
+    절대 못 타는 배선 누락 - 2026-08-18 웹 검색 기능 추가 중 발견). 이 테스트는
+    그 배선이 실제로 연결돼 있는지를 회귀로 고정한다.
+    """
+    state: GraphState = {"question": "오늘 원달러 환율 얼마야?"}
+
+    result = await router(state)
+
+    assert "FRESHNESS_SENSITIVE" in result["query_labels"]
+
+
+@pytest.mark.asyncio
+async def test_router_query_labels_empty_for_ordinary_general_question() -> None:
+    state: GraphState = {"question": "사과는 무슨색이야"}
+
+    result = await router(state)
+
+    assert "FRESHNESS_SENSITIVE" not in result["query_labels"]
+
+
+@pytest.mark.asyncio
 async def test_database_retrieval_preserves_database_origin_and_domain(
 ) -> None:
     port = FakeMCPPort(
@@ -384,7 +410,7 @@ async def test_graph_retries_insufficient_evidence_exactly_once() -> None:
         }
     )
 
-    result = await build_graph(MCPClient(port), FakeLLMPort("사용되지 않음")).ainvoke(
+    result = await build_graph(MCPClient(port), FakeLLMPort("사용되지 않음"), web_search=_fake_web_search_empty).ainvoke(
         {"question": "휴가 규정 알려줘"}
     )
 
@@ -655,7 +681,7 @@ def test_query_classifier_keeps_stable_general_knowledge_answerable() -> None:
 
 @pytest.mark.asyncio
 async def test_general_answer_receives_question_without_retrieval_context() -> None:
-    from app.agent.prompts import ANSWER_PROMPT
+    from app.agent.prompts import FRESHNESS_ESCAPE_HATCH_PROMPT
 
     fake_llm = FakeLLMPort("사과는 일반적으로 빨간색입니다.")
 
@@ -670,14 +696,74 @@ async def test_general_answer_receives_question_without_retrieval_context() -> N
         fake_llm,
     )
 
+    # FRESHNESS_SENSITIVE 라벨이 없는 GENERAL 질문은 이제 방법 B(시험 답변으로
+    # 실시간 정보 필요 여부를 LLM 스스로 판단) 경로를 탄다. NEEDS_LIVE_SEARCH
+    # 마커가 없으면 그 시험 답변이 그대로 최종 답변이 된다 - ANSWER_PROMPT가
+    # 아니라 FRESHNESS_ESCAPE_HATCH_PROMPT로 딱 한 번만 호출된다.
     assert result["answer"] == "사과는 일반적으로 빨간색입니다."
+    assert len(fake_llm.calls) == 1
     assert fake_llm.calls[0].question == "사과는 무슨 색인가?"
-    assert fake_llm.calls[0].prompt == ANSWER_PROMPT
+    assert fake_llm.calls[0].prompt == FRESHNESS_ESCAPE_HATCH_PROMPT
+
+
+def test_answer_prompt_still_allows_brief_general_knowledge_answers() -> None:
+    """ANSWER_PROMPT 자체(evidence가 있어서 이 프롬프트로 실제로 흘러가는 경로)의
+    내용 계약을 별도로 고정한다 - 위 테스트가 방법 B 경로로 옮겨가면서 이 문구
+    검증이 묻힐 뻔했다."""
+    from app.agent.prompts import ANSWER_PROMPT
+
     assert "사내 자료와 무관한 일반 질문은 간결하게 답할 수 있지만" in ANSWER_PROMPT
+
+
+def test_answer_prompt_forbids_inventing_article_numbers_for_web_evidence() -> None:
+    """실제 사고 재현 회귀 테스트(2026-08-19): 웹 검색 근거(Tavily)로 답변할 때, LLM이
+    "적극행정 운영규정 제2조", "국가공무원법 제50조의2"처럼 evidence에 없는 조항
+    번호를 근거 문서 섹션에 지어내는 문제가 실제로 발생했다. ANSWER_PROMPT가
+    "근거 문서에 조항·페이지를 기재하라"는 지시만 하고 웹 근거는 조항이 없다는
+    걸 명시하지 않아서 생긴 문제라, 프롬프트 문구 자체에 그 예외가 있는지 고정한다.
+    """
+    from app.agent.prompts import ANSWER_PROMPT
+
+    assert "웹 검색 근거는 조항·페이지 번호가 없습니다" in ANSWER_PROMPT
+    assert "조항 번호를 지어내지" in ANSWER_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_web_evidence_produces_web_source_cards_not_document_cards() -> None:
+    """웹 검색으로 채워진 evidence가 _build_sources를 거쳐 source_type='web' 카드로
+    나오는지 확인한다(document 카드로 잘못 나오면 프론트엔드 renderSources()가
+    document_sources 필터에서 걸러버려 화면에 아예 안 보이게 된다 - 실제 사고 재현)."""
+    from app.agent.prompts import NEEDS_LIVE_SEARCH_MARKER
+
+    fake_llm = FakeLLMPort(NEEDS_LIVE_SEARCH_MARKER)
+
+    async def fake_web_search(question: str) -> list[dict[str, Any]]:
+        return [{"type": "web", "title": "적극행정 운영규정 개정", "url": "https://korea.kr/news/1", "content": "..."}]
+
+    result = await answer_synthesis(
+        {
+            "question": "적극행정 개정사항에 대해 알려줘",
+            "route": "GENERAL",
+            "query_labels": [],
+            "evidence": [],
+            "evidence_status": "SUPPORTED",
+        },
+        fake_llm,
+        web_search=fake_web_search,
+    )
+
+    assert result["sources"][0]["source_type"] == "web"
+    assert result["sources"][0]["url"] == "https://korea.kr/news/1"
+
+
+async def _fake_web_search_empty(question: str) -> list[dict[str, Any]]:
+    """웹 검색이 결과 없이 끝난 상황을 흉내낸다(TAVILY_API_KEY 미설정 등)."""
+    return []
 
 
 @pytest.mark.asyncio
 async def test_freshness_question_without_source_uses_specific_safe_fallback() -> None:
+    """웹 검색이 빈 결과를 주면, 기존과 동일하게 안전한 안내 문구로 폴백한다."""
     fake_llm = FakeLLMPort("should not be called")
 
     result = await answer_synthesis(
@@ -689,10 +775,210 @@ async def test_freshness_question_without_source_uses_specific_safe_fallback() -
             "evidence_status": "SUPPORTED",
         },
         fake_llm,
+        web_search=_fake_web_search_empty,
     )
 
     assert "최신 출처" in result["answer"]
     assert fake_llm.calls == []
+
+
+@pytest.mark.asyncio
+async def test_freshness_question_with_web_results_generates_grounded_answer() -> None:
+    """웹 검색이 결과를 주면, 그 결과를 근거로 LLM이 실제로 호출되고 web 출처가 만들어진다."""
+    fake_llm = FakeLLMPort("2026년 8월 기준 기준금리는 ...")
+
+    async def fake_web_search(question: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "web",
+                "title": "미국 기준금리 현황",
+                "url": "https://example.com/rate",
+                "content": "2026년 8월 기준 미국 기준금리는 4.25~4.50%다.",
+                "score": 0.9,
+            }
+        ]
+
+    result = await answer_synthesis(
+        {
+            "question": "오늘 기준 미국 기준금리는?",
+            "route": "GENERAL",
+            "query_labels": ["FRESHNESS_SENSITIVE"],
+            "evidence": [],
+            "evidence_status": "SUPPORTED",
+        },
+        fake_llm,
+        web_search=fake_web_search,
+    )
+
+    assert len(fake_llm.calls) == 1
+    assert result["sources"] == [
+        {
+            "id": "https://example.com/rate",
+            "title": "미국 기준금리 현황",
+            "source_type": "web",
+            "document_id": None,
+            "url": "https://example.com/rate",
+            "score": 0.9,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_freshness_question_web_search_exception_falls_back_safely() -> None:
+    """웹 검색 자체가 예외를 던져도(네트워크 오류 등) 안전한 안내 문구로 폴백한다."""
+    fake_llm = FakeLLMPort("should not be called")
+
+    async def failing_web_search(question: str) -> list[dict[str, Any]]:
+        raise RuntimeError("TAVILY_API_KEY가 설정되지 않아 웹 검색을 쓸 수 없습니다.")
+
+    result = await answer_synthesis(
+        {
+            "question": "오늘 기준 미국 기준금리는?",
+            "route": "GENERAL",
+            "query_labels": ["FRESHNESS_SENSITIVE"],
+            "evidence": [],
+            "evidence_status": "SUPPORTED",
+        },
+        fake_llm,
+        web_search=failing_web_search,
+    )
+
+    assert "최신 출처" in result["answer"]
+    assert fake_llm.calls == []
+
+
+
+@pytest.mark.asyncio
+async def test_document_route_falls_back_to_web_search_when_internal_insufficient() -> None:
+    """"내부정보 우선, 없으면 웹검색" 요구사항: DOCUMENT 질문이 사내 자료에서
+    근거를 못 찾으면(INSUFFICIENT), 그때서야 웹 검색으로 보충한다."""
+    fake_llm = FakeLLMPort("웹 검색 결과 기반 답변")
+
+    async def fake_web_search(question: str) -> list[dict[str, Any]]:
+        return [{"type": "web", "title": "적극행정 운영규정", "url": "https://law.go.kr/x", "content": "..."}]
+
+    result = await answer_synthesis(
+        {
+            "question": "적극행정 개정사항 알려줘",
+            "route": "DOCUMENT",
+            "evidence": [],
+            "evidence_status": "INSUFFICIENT",
+        },
+        fake_llm,
+        web_search=fake_web_search,
+    )
+
+    assert result["sources"][0]["source_type"] == "web"
+    assert result["answer"] == "웹 검색 결과 기반 답변"
+
+
+@pytest.mark.asyncio
+async def test_document_route_reports_not_found_when_web_search_also_empty() -> None:
+    """내부 자료도 없고 웹 검색도 결과가 없으면, 둘 다 확인했다는 걸 명확히 안내한다."""
+    fake_llm = FakeLLMPort("should not be called")
+
+    async def empty_web_search(question: str) -> list[dict[str, Any]]:
+        return []
+
+    result = await answer_synthesis(
+        {
+            "question": "아무도 모르는 질문",
+            "route": "DOCUMENT",
+            "evidence": [],
+            "evidence_status": "INSUFFICIENT",
+        },
+        fake_llm,
+        web_search=empty_web_search,
+    )
+
+    assert "사내 자료와 웹 검색 모두에서" in result["answer"]
+    assert fake_llm.calls == []
+
+
+@pytest.mark.asyncio
+async def test_database_route_does_not_fall_back_to_web_search_when_insufficient() -> None:
+    """DATABASE/BOTH는 매출·구매 같은 사내 고유 데이터라 웹 검색 대상이 아니다 -
+    내부정보 우선 정책이 DOCUMENT에만 적용되는지 고정한다."""
+    fake_llm = FakeLLMPort("should not be called")
+    search_calls: list[str] = []
+
+    async def spy_web_search(question: str) -> list[dict[str, Any]]:
+        search_calls.append(question)
+        return []
+
+    result = await answer_synthesis(
+        {
+            "question": "고객별 매출 순위",
+            "route": "DATABASE",
+            "evidence": [],
+            "evidence_status": "INSUFFICIENT",
+        },
+        fake_llm,
+        web_search=spy_web_search,
+    )
+
+    assert search_calls == []
+    assert "사내 자료에서 관련된 근거를 찾지 못해" in result["answer"]
+
+@pytest.mark.asyncio
+async def test_escape_hatch_general_answer_without_marker_skips_search() -> None:
+    """방법 B: 키워드로 안 잡힌 GENERAL 질문 - LLM이 스스로 답할 수 있다고 판단하면
+    검색을 아예 안 하고, 시험 답변 호출 한 번으로 끝난다."""
+    from app.agent.prompts import FRESHNESS_ESCAPE_HATCH_PROMPT
+
+    fake_llm = FakeLLMPort("파이썬 리스트는 append()로 원소를 추가합니다.")
+    search_calls: list[str] = []
+
+    async def spy_web_search(question: str) -> list[dict[str, Any]]:
+        search_calls.append(question)
+        return []
+
+    result = await answer_synthesis(
+        {
+            "question": "파이썬 리스트에 원소 추가하는 법",
+            "route": "GENERAL",
+            "query_labels": [],  # FRESHNESS_SENSITIVE 없음 - 키워드로는 안 잡힌 케이스
+            "evidence": [],
+            "evidence_status": "SUPPORTED",
+        },
+        fake_llm,
+        web_search=spy_web_search,
+    )
+
+    assert search_calls == []  # 검색이 아예 호출되지 않아야 함
+    assert len(fake_llm.calls) == 1
+    assert fake_llm.calls[0].prompt == FRESHNESS_ESCAPE_HATCH_PROMPT
+    assert result["answer"] == "파이썬 리스트는 append()로 원소를 추가합니다."
+
+
+@pytest.mark.asyncio
+async def test_escape_hatch_marker_triggers_search_and_final_generation() -> None:
+    """방법 B: 키워드로 안 잡힌 질문이라도, LLM이 스스로 실시간 정보가 필요하다고
+    판단하면(NEEDS_LIVE_SEARCH 마커) 검색을 트리거하고, 검색 결과로 최종 답변을
+    다시 생성한다 - 시험 호출 1회 + 최종 생성 1회, 총 2회 호출된다."""
+    from app.agent.prompts import ANSWER_PROMPT, FRESHNESS_ESCAPE_HATCH_PROMPT, NEEDS_LIVE_SEARCH_MARKER
+
+    fake_llm = FakeLLMPort(NEEDS_LIVE_SEARCH_MARKER)
+
+    async def fake_web_search(question: str) -> list[dict[str, Any]]:
+        return [{"type": "web", "title": "삼성전자 주가", "url": "https://example.com", "content": "..."}]
+
+    result = await answer_synthesis(
+        {
+            "question": "삼성전자 주가 얼마야?",
+            "route": "GENERAL",
+            "query_labels": [],  # FRESHNESS_SENSITIVE 없음 - "주가"는 키워드 목록 밖
+            "evidence": [],
+            "evidence_status": "SUPPORTED",
+        },
+        fake_llm,
+        web_search=fake_web_search,
+    )
+
+    assert len(fake_llm.calls) == 2
+    assert fake_llm.calls[0].prompt == FRESHNESS_ESCAPE_HATCH_PROMPT
+    assert fake_llm.calls[1].prompt == ANSWER_PROMPT
+    assert result["sources"][0]["source_type"] == "web"
 
 
 @pytest.mark.asyncio
@@ -705,7 +991,7 @@ async def test_empty_internal_search_is_not_reported_as_mcp_failure() -> None:
         }
     )
 
-    result = await build_graph(MCPClient(port), FakeLLMPort("should not be called")).ainvoke(
+    result = await build_graph(MCPClient(port), FakeLLMPort("should not be called"), web_search=_fake_web_search_empty).ainvoke(
         {"question": "우리 회사 복리후생 규정은?"}
     )
 
