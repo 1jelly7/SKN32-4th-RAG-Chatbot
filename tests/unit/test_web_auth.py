@@ -3,8 +3,10 @@
 from pathlib import Path
 
 
-WEB_SCRIPT = Path("app/web/chat.js")
-WEB_STYLE = Path("app/web/style.css")
+WEB_ROOT = Path("django_app/web")
+WEB_SCRIPT = WEB_ROOT / "static/web/chat.js"
+WEB_STYLE = WEB_ROOT / "static/web/style.css"
+WEB_TEMPLATE = WEB_ROOT / "templates/web/index.html"
 
 
 def test_login_invalidates_stale_session_restore_result() -> None:
@@ -30,12 +32,20 @@ def test_logout_clears_messages_and_aborts_pending_chat() -> None:
     assert "signal: activeRequestController.signal" in script
 
 
+def test_login_and_logout_send_django_csrf_token() -> None:
+    """세션 쿠키 기반 쓰기 요청은 Django CSRF 검증을 우회하지 않아야 한다."""
+    script = WEB_SCRIPT.read_text(encoding="utf-8")
+    assert "fetch('/api/auth/csrf')" in script
+    assert "'X-CSRFToken': csrfTokenValue" in script
+    assert "headers: await csrfHeaders()" in script
+
+
 def test_chart_ui_uses_local_bundle_and_stable_sizing() -> None:
-    index = Path("app/web/index.html").read_text(encoding="utf-8")
+    index = WEB_TEMPLATE.read_text(encoding="utf-8")
     script = WEB_SCRIPT.read_text(encoding="utf-8")
     stylesheet = WEB_STYLE.read_text(encoding="utf-8")
 
-    assert "/static/vendor/chart.umd.min.js" in index
+    assert "{% static 'vendor/chart.umd.min.js' %}" in index
     assert "cdnjs.cloudflare.com" not in index
     assert "const chartType = table.chart_type || 'bar';" in script
     assert "maintainAspectRatio: false" in script

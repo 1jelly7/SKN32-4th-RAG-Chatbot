@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="ko">
 <head>
@@ -5,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#1d4ed8">
   <title>사내 지식 챗봇</title>
-  <link rel="stylesheet" href="/style.css">
-  <script src="/static/vendor/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="{% static 'web/style.css' %}">
+  <script src="{% static 'vendor/chart.umd.min.js' %}"></script>
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title" hidden>
@@ -69,6 +70,6 @@
     </aside>
   </div>
   <div id="sources-backdrop" class="sources-backdrop" hidden></div>
-  <script src="/chat.js"></script>
+  <script src="{% static 'web/chat.js' %}"></script>
 </body>
 </html>

@@ -2,21 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
-Role = Literal["admin", "hr", "finance"]
-
-SERVICE_DATABASES = frozenset({"document_db", "account_db", "sales_db", "purchase_db"})
-ROLE_DATABASES: dict[Role, frozenset[str]] = {
-    "admin": SERVICE_DATABASES,
-    "hr": frozenset({"document_db", "account_db"}),
-    "finance": frozenset({"document_db", "sales_db", "purchase_db"}),
-}
-
-
-def allowed_databases(role: Role) -> list[str]:
-    """검증된 역할의 허용 DB를 안정적인 순서로 반환한다."""
-    return sorted(ROLE_DATABASES[role])
+from shared.auth_policy import ROLE_DATABASES, Role, allowed_databases
 
 
 def can_access_database(role: Role, database: str) -> bool:

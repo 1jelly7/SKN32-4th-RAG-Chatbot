@@ -128,13 +128,13 @@
 ## P1 — 표·SQL·그래프 노출 기능이 제대로 동작하려면 필요한 것
 
 이번에 `query_sales`가 SQL과 결과 표를 화면에 노출하기로 하면서(D-14), 기존
-[app/web/chat.js](../../app/web/chat.js) 등의 코드가 실제로 그 역할을 감당할 수 있는지
+[django_app/web/static/web/chat.js](../../django_app/web/static/web/chat.js) 등의 코드가 실제로 그 역할을 감당할 수 있는지
 확인했다. (구 P1-1·P1-2는 이미 해결돼 있었음을 확인해 위 "완료" 절로 옮겼다.)
 
 ### P1-3. 표가 옆으로 넘칠 때 스크롤이 안 됨
 
 - **대상팀**: 통합(backend)
-- **근거**: [app/web/style.css:24](../../app/web/style.css)의 `.table-wrap`에
+- **근거**: [django_app/web/static/web/style.css](../../django_app/web/static/web/style.css)의 `.table-wrap`에
   `overflow-x` 설정이 없고, `body`는 `max-width: 820px`로 좁다. 우리 `v_sales_order`
   뷰는 19칼럼이라, 나열형 질문("2025년 1~6월 주문 내역")에서 표가 화면 밖으로 넘친다.
 - **요청 내용**:
@@ -333,4 +333,4 @@
 - purchase 가이드: [02_rag_purchase_text2sql.md](02_rag_purchase_text2sql.md)
 - 차트 구현 스펙: [04_chart_spec.md](04_chart_spec.md)
 - sales 진행 이력: [docs/progress/sales/2026-08-02.md](../progress/sales/2026-08-02.md)
-- 프로젝트 공통 규칙: [RULE.md](../../RULE.md)
+- 프로젝트 공통 규칙: [AGENTS.md](../../AGENTS.md)

@@ -150,15 +150,14 @@ def test_health_uses_injected_dependencies_without_file_logging(tmp_path: Path) 
     assert log_path.exists() is False
 
 
-def test_ui_entry_and_assets_disable_browser_cache() -> None:
-    """개발 중 UI 변경이 이전 HTML·CSS·JS 캐시에 가려지지 않게 한다."""
+def test_fastapi_does_not_serve_django_owned_ui() -> None:
+    """UI 이전 뒤 FastAPI는 사용자 HTML·CSS·JavaScript를 제공하지 않는다."""
     application = _application(MemoryCache(), CountingGraph())
 
     with TestClient(application) as client:
         for path in ("/", "/style.css", "/chat.js"):
             response = client.get(path)
-            assert response.status_code == 200
-            assert response.headers["cache-control"] == "no-store"
+            assert response.status_code == 404
 
 
 def test_document_download_uses_document_id_mapping_and_returns_404_for_unknown_id(tmp_path: Path) -> None:

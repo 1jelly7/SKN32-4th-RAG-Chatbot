@@ -25,7 +25,7 @@
 ## 1. 지금 상태 (실제 코드 확인)
 
 - `chat.js`의 `renderChartPlaceholder`/`drawChart`가 **막대(bar)만** 그린다
-  ([app/web/chat.js:41-70](../../app/web/chat.js)).
+  ([Django UI chat.js](../../django_app/web/static/web/chat.js)).
 - `TableData`([app/schemas/chat.py](../../app/schemas/chat.py))에 `chartable`/`label_column`/
   `value_column`은 있지만 `chart_type` 필드가 없다.
 - `_build_tables`([app/agent/nodes.py:191-232](../../app/agent/nodes.py))가 라벨·값 컬럼을
@@ -132,8 +132,8 @@ sales가 직접 고칠 수 없는 파일(`nodes.py`, `chat.js`, `style.css`)이�
 
 ### (B) 차트 크기가 저절로 커졌다 작아졌다 반복됨
 
-- **근거**: [chat.js:79-84](../../app/web/chat.js:79)의 Chart.js 옵션이 `responsive: true`
-  인데 `maintainAspectRatio`를 지정하지 않았고, [style.css:32](../../app/web/style.css:32)의
+- **근거**: [Django UI chat.js](../../django_app/web/static/web/chat.js)의 Chart.js 옵션이 `responsive: true`
+  인데 `maintainAspectRatio`를 지정하지 않았고, [Django UI style.css](../../django_app/web/static/web/style.css)의
   `.chart-wrap`에도 고정 높이가 없다. 캔버스 높이가 부모(`.chart-wrap`) 높이를 따라가려
   하는데 부모 높이가 캔버스 크기로 결정되는 순환 구조라, 리사이즈가 무한히 진동한다
   (Chart.js에서 흔히 보고되는 문제).

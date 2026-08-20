@@ -1,5 +1,9 @@
 # [팀 공유 자료 2] rag_purchase — MCP Purchase SQL Tool 개발 방법 및 스펙 가이드
 
+> 현재 상태 메모(2026-08-20): 이 문서는 구현 전 가이드와 당시 실측 기록을 보존한다.
+> 현재 스키마·ETL 정본은 `etl/purchase/schema.py`, `database/purchase/ddl.sql`,
+> `database/purchase/views.sql`이며 원천에 존재하는 5개 테이블만 정의한다.
+
 - **작성자**: rag_sales 담당 (PM 겸임)
 - **읽는 대상**: rag_purchase 담당 (+ 참고용으로 팀 전체)
 - **성격**: 이 문서는 **완성된 스펙이 아니라 가이드 + 템플릿**이다. sales와 purchase는
@@ -117,12 +121,12 @@ LLM에게 골라도 된다고 알려주는 셈**이라, 같은 질문에 다른 
 | Invoices | 32 | `vendor_invoices` | 청구서 |
 | Goods Receipts | 32 | `goods_receipts` | 입고 |
 
-### 3.2 🔴 가장 중요한 발견 — 선언된 테이블 13개 중 5개만 실제 데이터가 있음
+### 3.2 가장 중요한 발견과 현재 반영 상태
 
-[purchase/schema.py](../../mcp_servers/data_tools/purchase/schema.py)와
-[database/purchase/schema.sql](../../database/purchase/schema.sql) +
-[schema_v2_vendor_extras.sql](../../database/purchase/schema_v2_vendor_extras.sql)에는
-**13개 테이블**이 선언돼 있는데, 지금 받은 원본 엑셀에는 **시트가 5개뿐**이다.
+구현 전 초안에는 13개 테이블이 있었지만 원본 엑셀에는 시트가 5개뿐이었다. 현재
+[purchase schema](../../etl/purchase/schema.py)와
+[purchase DDL](../../database/purchase/ddl.sql)은 이 검토 결과를 반영해 원천이 있는
+5개 테이블만 정의한다.
 
 ```
 데이터가 있는 5개(위 표)
@@ -143,13 +147,12 @@ LLM에게 골라도 된다고 알려주는 셈**이라, 같은 질문에 다른 
 실행하면 항상 0건이 나오거나, 최악의 경우 다른 파일이 나중에 이 테이블들을 채우게
 되면 그때는 맞는데 그 전까지는 계속 틀린 "없다"는 답만 나온다.
 
-**착수 전 확인 리스트:**
-- [ ] 원본 데이터에 이 8개 테이블에 대응하는 별도 파일이 더 있는지 확인 (다른 시트가
-      있는 엑셀 파일, 또는 별도 CSV 등)
-- [ ] 없다면, 스키마 리소스(6절)에서 이 8개 테이블을 아예 빼거나, "아직 데이터 없음"으로
-      명시하고 관련 질문은 거절 목록(8절)에 넣을 것
-- [ ] `etl/purchase/*.py`가 현재 스켈레톤(`...`) 상태라 ETL이 한 번도 실행된 적이 없다.
-      먼저 이 5개 시트에 대해서만 ETL을 구현·실행해서 실제 DB 행 수를 다시 확인할 것
+**현재 반영 결과:**
+
+- 원천에 없는 8개 테이블은 schema, DDL, LLM 공개 스키마에서 제외했다.
+- `etl/purchase/`에는 5개 시트의 추출·검증·변환·upsert 파이프라인이 구현돼 있다.
+- 이 문서의 행 수는 구현 전 원본 실측 이력이다. 실제 운영 DB 적재 결과는 ETL 실행 뒤
+  별도로 대조해야 한다.
 
 ### 3.3 실측 수치
 
@@ -159,7 +162,7 @@ LLM에게 골라도 된다고 알려주는 셈**이라, 같은 질문에 다른 
 | 발주(PO) 날짜 범위 | 2025-01-22 ~ 2026-06-25 |
 | 청구서 날짜 범위 | 2025-02-16 ~ 2026-07-13 |
 | 입고 날짜 범위 | 2025-02-10 ~ 2026-07-12 |
-| company_id 컬럼 | **원본 Vendors 시트에 없음** — DDL에는 있지만 ETL이 어떤 값을 넣을지 확인 필요 (sales처럼 상수 1일 가능성이 높지만 가정하지 말 것) |
+| company_id 컬럼 | 원본 Vendors 시트에 없으며 현재 purchase schema와 DDL에도 만들지 않는다. |
 
 **발주(PO) 상태 분포**
 
@@ -203,15 +206,10 @@ sales와 똑같은 대응이 필요하다 — 상세 단위 뷰에는 헤더 금
 
 ### 3.4 개인정보(PII) — sales보다 위험이 낮아 보이지만 방심 금지
 
-DDL([database/purchase/schema.sql](../../database/purchase/schema.sql))에는 `vendors`
-테이블에 `email`, `phone_number`, `address`, `tax_id`, `bank_account`, `iban`,
-`contact_person` 칼럼이 선언돼 있다. **그런데 지금 받은 원본 엑셀의 Vendors 시트에는
-이 칼럼들이 아예 없다** (있는 건 `Vendor_ID, Vendor_Code, Vendor_Name, Country,
-Currency, Payment_Terms, Is_Active` 7개뿐).
-
-즉 이 파일로 ETL을 돌리면 저 PII 칼럼들은 전부 빈 값(NULL)으로 채워질 가능성이 높다.
-**값이 비어있어도 원칙은 sales와 동일하게 가야 한다.** 스키마 리소스(LLM에게 주는
-정보)와 뷰에서 이 칼럼들을 아예 빼는 것을 권장한다. 이유:
+구현 전 초안에는 `email`, `phone_number`, `address`, `tax_id`, `bank_account`, `iban`,
+`contact_person` 같은 원천에 없는 PII 칼럼이 있었다. 현재
+[purchase DDL](../../database/purchase/ddl.sql)은 이 칼럼을 만들지 않으며 View와 LLM
+공개 스키마에도 노출하지 않는다. 이 결정의 근거는 다음과 같다.
 
 1. 나중에 다른 원본 파일로 이 칼럼들이 채워질 수도 있다 (지금 비어있다고 앞으로도
    비어있는다는 보장이 없음)
@@ -349,19 +347,13 @@ sales에서 쓴 구조를 그대로 재사용하면 된다 (자세한 이유는
 
 ---
 
-## 10. 착수 전 체크리스트
+## 10. 착수 체크리스트의 현재 상태
 
-```
-[ ] 2.1  git 병합 충돌 3개 파일 해소 (schema.py, query.py, text2sql.py)
-[ ] 2.2  finance.* import를 purchase.*로 통일
-[ ] 2.3  _FALLBACK_TEMPLATES 하드코딩 제거 여부 결정
-[ ] 2.4  business_glossary의 "또는" 표현 확정된 정의로 교체
-[ ] 3.2  8개 테이블에 실제 데이터가 있는지 확인 (다른 원본 파일 존재 여부)
-[ ] 3.4  ETL 실행 후 PII 칼럼이 실제로 비어있는지 확인
-[ ] 6절  체크리스트 질문에 전부 답하기 (본인 인터뷰 과정 — PM과 함께 진행 권장)
-[ ] 4절  뷰 설계 확정 및 DDL 작성
-[ ] RULE.md 5항에 따라 docs/plan/query-purchase-text2sql.md 작성 후 착수
-```
+이 문서가 제안했던 충돌 해소, purchase import 통일, fallback 제거, 지표 정의, 원천 기반
+5개 테이블 ETL, View·DDL과 읽기 전용 경계는 구현됐다. 당시 실제 적재와 검증 결과는
+[2026-08-03 purchase 진행 이력](../progress/purchase/2026-08-03.md)에 보존한다. 현재 변경은
+[AGENTS.md](../../AGENTS.md)의 소유권·검증 규칙과 [테스트 시나리오](../test-scenarios.md)를
+따른다.
 
 ---
 
@@ -369,4 +361,4 @@ sales에서 쓴 구조를 그대로 재사용하면 된다 (자세한 이유는
 
 - sales 쪽 전체 스펙(구조가 거의 동일하니 참고): [SPEC.md](../../SPEC.md)
 - sales 쪽 팀 공유 자료: [01_rag_sales_text2sql.md](01_rag_sales_text2sql.md)
-- 프로젝트 공통 규칙: [RULE.md](../../RULE.md)
+- 프로젝트 공통 규칙: [AGENTS.md](../../AGENTS.md)

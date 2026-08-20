@@ -1,5 +1,9 @@
 # [팀 공유 자료 1] rag_sales — Text2SQL 구축 방안 및 스펙
 
+> 현재 상태 메모(2026-08-20): 이 문서는 구현 전 설계 근거를 보존한 자료다. 현재 코드
+> 계약은 `mcp_servers/data_tools/sales/`, `etl/sales/`, `database/sales/`와
+> [인터페이스 계약](../interface.md)을 우선한다.
+
 - **작성자**: rag_sales 담당 (PM 겸임)
 - **읽는 대상**: 팀 전체 (backend, rag_pdf, rag_purchase)
 - **목적**: `query_sales` MCP 도구를 만들기 시작하기 전에, 어떻게 만들지 팀 전체가
@@ -381,5 +385,5 @@ EXPLAIN 실패 → 재시도 → 실행 완료 → 빈 결과 → 오류 → 개
 ## 참고
 
 - 전체 스펙: [SPEC.md](../../SPEC.md)
-- 구현 계획/체크리스트: [docs/plan/query-sales-text2sql.md](../plan/query-sales-text2sql.md)
-- 프로젝트 공통 규칙: [RULE.md](../../RULE.md)
+- 구현 진행 이력: [docs/progress/sales/2026-08-02.md](../progress/sales/2026-08-02.md)
+- 프로젝트 공통 규칙: [AGENTS.md](../../AGENTS.md)

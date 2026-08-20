@@ -111,12 +111,12 @@ async def jira_query(self, question: str, user_context=None) -> list[dict[str, A
 ```
 
 ### 4-6. 권한 정책 등록 (DB/외부 서비스 접근이 필요하면)
-`app/auth/policy.py`:
+공통 역할 계약인 `shared/auth_policy.py`:
 ```python
-SERVICE_DATABASES = frozenset({"document_db", "account_db", "sales_db", "purchase_db", "jira_db"})
+SERVICE_DATABASES = frozenset({"document_db", "sales_db", "purchase_db", "jira_db"})
 ROLE_DATABASES = {
     "admin": SERVICE_DATABASES,
-    "hr": frozenset({"document_db", "account_db", "jira_db"}),  # 필요한 role에만 추가
+    "hr": frozenset({"document_db", "jira_db"}),  # 필요한 role에만 추가
     ...
 }
 ```

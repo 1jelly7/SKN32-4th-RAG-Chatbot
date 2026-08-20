@@ -19,6 +19,25 @@ const logoutButton = document.querySelector('#logout-button');
 let chartCounter = 0;
 let auth_state_revision = 0;
 let activeRequestController = null;
+let csrfTokenValue = null;
+
+async function csrfHeaders() {
+  if (!csrfTokenValue) {
+    const response = await fetch('/api/auth/csrf');
+    if (!response.ok) throw new Error('로그인 보안 토큰을 발급받지 못했습니다.');
+    csrfTokenValue = (await response.json()).csrf_token;
+  }
+  return { 'Content-Type': 'application/json', 'X-CSRFToken': csrfTokenValue };
+}
+
+async function responseError(response, fallbackMessage) {
+  try {
+    const payload = await response.json();
+    return new Error(payload.detail || fallbackMessage);
+  } catch (_) {
+    return new Error(fallbackMessage);
+  }
+}
 
 function clearApplicationState() {
   activeRequestController?.abort();
@@ -34,8 +53,8 @@ function clearApplicationState() {
 function showLogin() { loginScreen.hidden = false; document.querySelector('.app-shell').setAttribute('aria-hidden', 'true'); document.querySelector('#username').focus(); }
 function showApplication(user) { loginScreen.hidden = true; document.querySelector('.app-shell').removeAttribute('aria-hidden'); currentUser.textContent = `${user.display_name} (${user.role})`; }
 async function restoreSession() { const response = await fetch('/api/auth/me'); if (response.ok) showApplication(await response.json()); else showLogin(); }
-loginForm.addEventListener('submit', async event => { event.preventDefault(); loginError.textContent = ''; loginButton.disabled = true; try { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: document.querySelector('#username').value, password: document.querySelector('#password').value }) }); if (!response.ok) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.'); clearApplicationState(); showApplication((await response.json()).user); document.querySelector('#password').value = ''; } catch (error) { loginError.textContent = error.message; } finally { loginButton.disabled = false; } });
-logoutButton.addEventListener('click', async () => { auth_state_revision += 1; clearApplicationState(); try { await fetch('/api/auth/logout', { method: 'POST' }); } finally { showLogin(); } });
+loginForm.addEventListener('submit', async event => { event.preventDefault(); loginError.textContent = ''; loginButton.disabled = true; try { const response = await fetch('/api/auth/login', { method: 'POST', headers: await csrfHeaders(), body: JSON.stringify({ username: document.querySelector('#username').value, password: document.querySelector('#password').value }) }); if (!response.ok) throw await responseError(response, '아이디 또는 비밀번호가 올바르지 않습니다.'); clearApplicationState(); csrfTokenValue = null; showApplication((await response.json()).user); document.querySelector('#password').value = ''; } catch (error) { csrfTokenValue = null; loginError.textContent = error.message; } finally { loginButton.disabled = false; } });
+logoutButton.addEventListener('click', async () => { auth_state_revision += 1; clearApplicationState(); loginError.textContent = ''; try { const response = await fetch('/api/auth/logout', { method: 'POST', headers: await csrfHeaders() }); if (!response.ok && response.status !== 401) throw await responseError(response, '로그아웃하지 못했습니다.'); csrfTokenValue = null; showLogin(); } catch (error) { csrfTokenValue = null; loginError.textContent = error.message; await restoreSession(); } });
 
 loginForm.addEventListener('submit', () => { auth_state_revision += 1; }, true);
 

@@ -6,9 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from app.agent.llm import AsyncLLMPort
-from app.auth.repository import SettingsAccountRepository
-from app.auth.session_store import SessionStore
-from app.auth.service import AuthenticationService
+from app.auth.gateway import AuthenticationGateway, SettingsDjangoAuthenticationGateway
 from app.cache.repository import CacheRepository, MemoryCache
 from app.logging import configure_logging
 from app.mcp.client import InProcessMCPPort, MCPClient
@@ -25,10 +23,6 @@ class AppDependencies:
     llm: AsyncLLMPort | None = None
     mcp: MCPClient | None = field(default_factory=lambda: MCPClient(InProcessMCPPort()))
     cache: CacheRepository = field(default_factory=MemoryCache)
-    auth_service: AuthenticationService = field(default_factory=lambda: AuthenticationService(SettingsAccountRepository()))
-    auth_secret: str | None = None
-    auth_expire_minutes: int | None = None
-    auth_cookie_secure: bool | None = None
-    session_store: SessionStore = field(default_factory=SessionStore)
+    auth_gateway: AuthenticationGateway = field(default_factory=SettingsDjangoAuthenticationGateway)
     configure_logging: Callable[[], None] = configure_logging
     warmup_providers: bool = False

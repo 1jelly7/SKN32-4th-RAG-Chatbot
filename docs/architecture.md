@@ -3,25 +3,32 @@
 ## 목적
 
 이 문서는 [README](../README.md)의 프로젝트 설명을 실제 코드 구조와 연결한다.
-현재 애플리케이션은 FastAPI가 인증, 캐시, LangGraph를 조율하고, LangGraph는 MCP Client
-경계를 통해 문서 검색과 구매·판매 조회를 요청한다. ETL과 문서 인덱싱은 채팅 요청과
-분리된 배치 작업이다.
+현재 애플리케이션은 Django가 사용자 UI와 계정·인증·관리자 기능을, FastAPI가 채팅·문서
+API와 캐시·LangGraph·MCP 조율을 담당한다. ETL과 문서 인덱싱은 채팅 요청과 분리된
+배치 작업이다.
 
 ## 전체 구성
 
 ```text
 Browser (HTML/CSS/JavaScript, Chart.js)
-  -> FastAPI
-      -> Auth: 서명된 HttpOnly 세션 + 서버 측 활성 세션 확인
-      -> RBAC: admin / hr / finance
-      -> Answer Cache: MemoryCache
-      -> LangGraph
-          -> Router
-          -> Document retrieval -> MCP Client -> Document Tool service
-          -> Database retrieval -> MCP Client -> Purchase/Sales Tool service
-          -> Evidence evaluation
-          -> Answer synthesis
-      -> ChatResponse / document download
+  -> 단일 공개 주소의 경로 라우팅
+      -> Django: /, /api/auth/*, /admin, /admin/*
+          -> web template: django_app/web/templates/web/
+          -> Auth: Django HttpOnly 서버 세션
+          -> Account DB + Admin
+      -> Static server: /django-static/*
+          -> Django UI·Admin collectstatic 산출물
+      -> FastAPI: /api/chat, /api/documents/*, /api/health
+          -> Internal auth introspection -> Django
+          -> RBAC: admin / hr / finance
+          -> Answer Cache: MemoryCache
+          -> LangGraph
+              -> Router
+              -> Document retrieval -> MCP Client -> Document Tool service
+              -> Database retrieval -> MCP Client -> Purchase/Sales Tool service
+              -> Evidence evaluation
+              -> Answer synthesis
+          -> ChatResponse / document download
 
 Offline preparation
   -> document registration -> document_paths
@@ -34,28 +41,42 @@ transport는 `InProcessMCPPort`이며 같은 Python 프로세스에서 Tool serv
 `.env`의 `DOCUMENT_MCP_URL`, `DATA_MCP_URL`을 사용하는 원격 MCP transport는 아직
 연결되지 않았다.
 
+활성 진입점은 FastAPI `app.main:app`과 Django
+`django_app.config.asgi:application`이다. `app/api/auth.py`와
+`app/auth/{repository,service,sessions,session_store}.py`는 배포 rollback용 legacy
+소스이며 현재 FastAPI 라우터·composition에는 연결되지 않는다.
+
 ## HTTP 요청 흐름
 
 ### 인증과 공통 처리
 
-1. `POST /api/auth/login`이 계정 저장소의 활성 계정과 scrypt 비밀번호 해시를 검증한다.
-2. 성공하면 HMAC 서명된 `chatbot_session` 쿠키를 `HttpOnly`, `SameSite=Lax`로 발급하고
-   서버의 `SessionStore`에 세션을 등록한다.
-3. `/api/chat`, `/api/auth/me`, `/api/auth/logout`, 문서 다운로드는 유효한 쿠키와 활성
-   서버 세션을 요구한다.
-4. HTTP middleware는 요청마다 `request_id`, `X-Request-ID`, `Server-Timing`을 만들고
+1. Django의 `POST /api/auth/login`이 활성 계정을 검증하고 `chatbot_session` 서버 세션
+   쿠키를 `HttpOnly`, `SameSite=Lax`로 발급한다. 로그인·로그아웃은 CSRF 토큰이 필요하다.
+2. 기존 scrypt 계정은 호환 hasher로 한 번 검증한 뒤 Django 기본 PBKDF2로 자동 재해싱한다.
+3. FastAPI의 `/api/chat`과 문서 다운로드는 쿠키를 Django 내부 인증 확인 API에 전달하고,
+   유효한 사용자 컨텍스트만 Graph와 MCP에 전달한다.
+4. FastAPI는 Django `SECRET_KEY`, 세션 테이블과 account DB에 접근하지 않는다. 내부 API는
+   별도 `AUTH_INTROSPECTION_KEY`로 호출자를 확인한다.
+5. 세션 수명은 `AUTH_SESSION_EXPIRE_SECONDS`의 고정 만료이며 내부 인증 확인 요청마다
+   연장하지 않는다. 로그아웃·세션 삭제·비활성화·역할 변경은 다음 보호 요청부터 반영된다.
+6. HTTP middleware는 요청마다 `request_id`, `X-Request-ID`, `Server-Timing`을 만들고
    비밀값 없는 요청 완료 로그를 기록한다.
 
-역할별 DB 허용 범위는 `app/auth/policy.py`가 결정한다.
+역할별 DB 허용 범위는 두 서비스가 사용하는 `shared/auth_policy.py`가 결정한다.
 
 | 역할 | 허용 DB |
 |---|---|
-| `admin` | `account_db`, `document_db`, `purchase_db`, `sales_db` |
-| `hr` | `account_db`, `document_db` |
+| `admin` | `document_db`, `purchase_db`, `sales_db` |
+| `hr` | `document_db` |
 | `finance` | `document_db`, `purchase_db`, `sales_db` |
 
 UI에서 버튼을 숨기는 것만으로 권한을 판단하지 않는다. Data/Document Tool 진입점에서
-서버가 만든 사용자 컨텍스트를 다시 검사한다.
+서버가 만든 사용자 컨텍스트를 다시 검사한다. `account_db`는 Django 전용 저장소이므로
+FastAPI·Graph·MCP의 `allowed_databases`에 포함하지 않는다.
+
+legacy DB로 되돌릴 수 있는 관찰 기간에는 `LEGACY_AUTH_ROLLBACK_WINDOW=true`를 유지해
+Django Admin의 계정 추가·삭제와 이관 계정 변경을 막는다. 현재 rollback은 런타임
+feature flag가 아니라 이전 배포 버전과 보존한 `accounts` 테이블로 되돌리는 절차다.
 
 ### 채팅 처리
 
@@ -82,10 +103,12 @@ POST /api/chat
 | `GENERAL` | 검색 없이 LLM 답변 생성 |
 | `DOCUMENT` | Document Tool만 호출 |
 | `DATABASE` | 질문에 따라 구매, 판매 또는 두 Data Tool 호출 |
-| `BOTH` | Document 이후 Database를 순서대로 호출해 근거를 분리 보존 |
+| `BOTH` | Document와 Database를 병렬 호출해 근거를 분리 보존 |
 
-`BOTH`는 현재 병렬 fan-out이 아니라 `document -> database` 순차 흐름이다. 한 도메인
-조회가 실패해도 다른 근거가 있으면 `PARTIALLY_SUPPORTED` 응답을 만들 수 있다.
+`BOTH`는 서로 다른 state 필드에 쓰는 Document와 Database 조회를 병렬 fan-out한 뒤
+evidence 노드에서 합류한다. 한 도메인 조회가 실패해도 다른 근거가 있으면
+`PARTIALLY_SUPPORTED` 응답을 만들 수 있다. 구매·판매 두 Data Tool은 같은 database
+분기 안에서 순차 호출한다.
 
 ## 문서 RAG 경계
 
@@ -186,19 +209,22 @@ seed와 규칙을 사용하고 실행 중 LLM API를 호출하지 않는다.
 | `scripts/ingest_documents.py` | 문서 로드·청킹·임베딩·FAISS 생성 |
 | `scripts/rebuild_faiss_index.py` | 문서 변경 후 인덱스 재생성 |
 | `etl/purchase/`, `etl/sales/` | 원천 workbook 검증·변환·UPSERT |
-| `scripts/seed_accounts.py` | 초기 로그인 계정 시딩 |
-| `scripts/setup_all.py` | Windows 로컬 DB·문서·ETL 초기화 보조 |
+| `django_app/accounts/migrations/` | 계정 schema와 기존 계정 보존 이관 |
+| `django_app/manage.py createsuperuser` | Django 관리자 계정 생성 |
+| `scripts/seed_accounts.py` | 분리 전 legacy `accounts` 시드; 현재 활성 Django 계정 생성에 사용 금지 |
 
-`scripts/setup_all.py`는 MySQL 8.0 기본 설치 경로와 여러 로컬 계정·비밀번호를 전제로
-한다. 또한 현재 파일 이동 후 내부 상대경로가 프로젝트 루트 실행 방식과 일치하지 않는
-부분이 있으므로, 경로·계정·DB명을 검토하고 각 수동 명령으로 검증하기 전에는 재현 가능한
-원클릭 설치로 간주하지 않는다.
+현재 저장소에는 account/document/purchase/sales 초기화를 한 번에 실행하는
+`scripts/setup_all.py`가 없다. 계정 migration은 Django 관리 명령으로, 문서 등록·인덱싱과
+구매·판매 ETL은 각 소유 스크립트로 별도 실행한다. `scripts/seed_accounts.py`는 legacy
+rollback 자산이며 Django 전환 뒤의 계정 생성·비밀번호 변경 절차로 사용하지 않는다.
 
 ## 소유권 기반 배치
 
 | 경로 | 책임 | 담당 |
 |---|---|---|
-| `app/` | FastAPI, 인증, Graph, 캐시, 공통 로그, UI | Backend/통합 |
+| `django_app/` | Django 사용자 UI, 계정, 인증 API, Admin, migration | Backend/통합 |
+| `app/` | FastAPI 채팅·문서 API, 인증 확인, Graph, 캐시, 공통 로그 | Backend/통합 |
+| `shared/` | 프레임워크 독립 역할·권한 계약 | Backend/통합 |
 | `ingestion/`, `mcp_servers/document_tools/` | 문서 등록·검색·FAISS | RAG PDF |
 | `mcp_servers/data_tools/server.py` | Data Tool 등록과 공통 envelope | Backend/통합 |
 | `mcp_servers/data_tools/purchase/`, `etl/purchase/`, `database/purchase/` | 구매 조회·ETL·DDL | RAG Purchasing |
@@ -209,6 +235,11 @@ seed와 규칙을 사용하고 실행 중 LLM API를 호출하지 않는다.
 
 ## 현재 구현 제한
 
+- 단일 공개 주소의 reverse proxy/Ingress 설정은 저장소에 없으며 외부 배포 계층에서
+  Django의 `/`·인증·Admin·정적 파일과 FastAPI API 경로를 분리해야 한다.
+- Chart.js vendor bundle은 UI 전환 관찰 기간 동안 `app/web/vendor/`에서 Django
+  staticfiles가 수집한다. 나머지 UI source의 정본은 `django_app/web/`이다.
+- `/internal/auth/*`의 실제 private network/TLS·network policy는 배포 환경에서 검증해야 한다.
 - 기본 MCP transport는 same-process이며 원격 URL transport가 없다.
 - Redis adapter와 readiness endpoint가 없다. `/api/health`는 프로세스 liveness만 확인한다.
 - 실제 외부 문서 DB·FAISS·구매·판매 DB를 한 번에 연결하는 자동 통합 테스트는 없다.

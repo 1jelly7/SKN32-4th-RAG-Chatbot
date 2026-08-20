@@ -1,10 +1,15 @@
 # [팀 공유 자료 7] 적대적 테스트 · pytest 실행 방법과 결과 리포트
 
+> 최신화 메모(2026-08-20): 아래 수치와 분석은 2026-08-04 실행 이력으로 보존한다.
+> 현재 구조는 Django UI·인증 서비스와 FastAPI 채팅 API로 분리됐으며 UI 이전 뒤 전체
+> 테스트는 `402 passed, 27 skipped`다. 현재 명령·범위의 정본은
+> [test-scenarios.md](../test-scenarios.md)다.
+
 - **작성자**: rag_sales 담당 (PM 겸임)
 - **목적**: `develop` 브랜치에 적용된 두 가지 테스트(적대적 테스트, pytest)가 각각
   무엇이고 어떻게 실행하는지 정리하고, 직접 실행한 결과를 남긴다.
 - **근거**: 두 테스트 다 실제로 로컬에서 직접 실행해 나온 결과다. 지어낸 수치 없음.
-  (`adversarial_eval.py`는 RAG(rag_pdf) 담당 소유 파일이라 실행·결과 확인만 했고
+  (`scripts/adversarial_eval.py`는 RAG(rag_pdf) 담당 소유 파일이라 실행·결과 확인만 했고
   코드는 손대지 않았다.)
 
 ---
@@ -13,18 +18,18 @@
 
 | 구분 | 무엇을 검증하나 | 실행 명령 | 이번 실행 결과 |
 |---|---|---|---|
-| ① 적대적 테스트 (`adversarial_eval.py`) | 사내 문서 RAG가 오타·줄임말·범위 밖 질문·프롬프트 인젝션 같은 "짓궂은" 질문에도 안전하게 동작하는지 | `python adversarial_eval.py` | 51/59 (86%) |
-| ② pytest (`tests/unit`, `tests/integration`) | 프로젝트 전체 기능(라우팅·캐시·인증·sales/purchase Text2SQL·RAG 등)이 코드 규격대로 동작하는지 | `python -m pytest` | 200 passed, 26 skipped (opt-in 66건까지 하면 266 passed) |
+| ① 적대적 테스트 (`scripts/adversarial_eval.py`) | 사내 문서 RAG가 오타·줄임말·범위 밖 질문·프롬프트 인젝션 같은 "짓궂은" 질문에도 안전하게 동작하는지 | `.venv\Scripts\python.exe scripts\adversarial_eval.py` | 51/59 (86%) |
+| ② pytest (`tests/unit`, `tests/integration`, `tests/django`) | 프로젝트 전체 기능(라우팅·캐시·Django/FastAPI 인증·sales/purchase Text2SQL·RAG 등)이 코드 규격대로 동작하는지 | `.venv\Scripts\python.exe -m pytest` | 2026-08-04 이력: 200 passed, 26 skipped (opt-in 66건 별도) |
 
 ---
 
-## ① 적대적 테스트 (`adversarial_eval.py`)
+## ① 적대적 테스트 (`scripts/adversarial_eval.py`)
 
 ### 무엇인가
 
 일반적인 테스트는 "정상적인 질문에 맞는 답이 나오는가"를 확인하지만, **적대적
 테스트는 일부러 시스템을 곤란하게 만드는 질문을 던져서 약점을 찾는 테스트**다.
-루트 폴더의 `adversarial_eval.py` 하나의 파일로 돼 있고, 사내 문서 RAG(rag_pdf
+`scripts/adversarial_eval.py` 하나의 파일로 돼 있고, 사내 문서 RAG(rag_pdf
 담당 영역)를 대상으로 한다. pytest가 아니라 **독립적으로 실행하는 평가
 스크립트**다(`assert`로 실패 시 죽는 게 아니라, 통과율을 점수로 보여줌).
 
@@ -51,12 +56,12 @@
 
 ### 실행 방법
 
-```bash
-python adversarial_eval.py            # 3개 계층 전체
-python adversarial_eval.py --layer 1  # 라우팅 계층만
-python adversarial_eval.py --layer 2  # 검색 계층만 (FAISS 인덱스 필요)
-python adversarial_eval.py --layer 3  # 방어 계층만
-python adversarial_eval.py --verbose  # 실패한 케이스의 상세 내용까지 출력
+```powershell
+.\.venv\Scripts\python.exe scripts\adversarial_eval.py            # 3개 계층 전체
+.\.venv\Scripts\python.exe scripts\adversarial_eval.py --layer 1  # 라우팅 계층만
+.\.venv\Scripts\python.exe scripts\adversarial_eval.py --layer 2  # 검색 계층만 (FAISS 인덱스 필요)
+.\.venv\Scripts\python.exe scripts\adversarial_eval.py --layer 3  # 방어 계층만
+.\.venv\Scripts\python.exe scripts\adversarial_eval.py --verbose  # 실패 상세
 ```
 
 MySQL은 필요 없다. 2번(검색 계층)만 `data/faiss/index.faiss`와
@@ -65,7 +70,8 @@ MySQL은 필요 없다. 2번(검색 계층)만 `data/faiss/index.faiss`와
 > **참고**: Windows에서 한글 출력이 깨지면(`UnicodeEncodeError`) 아래처럼
 > 인코딩을 지정하고 실행한다.
 > ```powershell
-> $env:PYTHONIOENCODING="utf-8"; python adversarial_eval.py
+> $env:PYTHONIOENCODING="utf-8"
+> .\.venv\Scripts\python.exe scripts\adversarial_eval.py
 > ```
 
 ### 이번에 직접 실행한 결과 (2026-08-04, 로컬)
@@ -118,22 +124,24 @@ MySQL은 필요 없다. 2번(검색 계층)만 `data/faiss/index.faiss`와
 ### 무엇인가
 
 파이썬 표준 테스트 프레임워크로, **프로젝트 전체의 코드가 의도한 대로 동작하는지**
-검증한다. `tests/unit/`(외부 서비스 없이 도는 단위 테스트)과 `tests/integration/`
-(여러 모듈을 엮어서 확인하는 통합 테스트) 두 폴더로 나뉜다. `pytest.ini`에
-`testpaths = tests`로 설정돼 있어서 `pytest` 한 명령으로 두 폴더가 전부 돈다.
+검증한다. `tests/unit/`, `tests/integration/`, `tests/django/`로 나뉜다.
+`tests/django/`는 계정·CSRF·세션·Admin·legacy hash 계약을, integration의
+`test_django_fastapi_auth_flow.py`는 두 ASGI 앱 사이 인증 흐름을 확인한다. `pytest.ini`에
+`testpaths = tests`와 Django test settings가 설정돼 있어 전체 명령으로 함께 실행된다.
 
 프로젝트 전 영역이 각자 자기 담당 테스트 파일을 갖고 있다.
 
 | 파일 | 담당 영역 |
 |---|---|
 | `tests/unit/test_agent.py` | LangGraph 라우팅·상태 전이 (통합) |
-| `tests/unit/test_api.py`, `test_auth.py`, `test_web_auth.py` | FastAPI, 로그인·RBAC (통합) |
+| `tests/unit/test_api.py`, `test_auth.py`, `test_auth_gateway.py`, `test_web_auth.py` | FastAPI API 전용 경계, Django 인증 gateway·RBAC, Django UI CSRF |
+| `tests/django/test_auth_api.py` | Django login/logout/me, CSRF, session introspection, legacy hash·rollback 잠금 계약 |
 | `tests/unit/test_cache.py`, `test_performance.py` | 캐시, 성능 로깅 (통합) |
 | `tests/unit/test_data_mcp.py` | Data MCP 공통 envelope (통합) |
 | `tests/unit/test_document_mcp.py`, `test_document_mcp_eval.py`, `test_query_expansion.py`, `test_ingestion.py` | 문서 RAG (rag_pdf) |
 | `tests/unit/test_sales_text2sql.py` | 판매 Text2SQL (sales, 우리 담당) |
 | `tests/unit/test_purchase_text2sql.py` | 구매 Text2SQL (purchase) |
-| `tests/integration/*.py` | 캐시·채팅·ETL 흐름을 엮은 통합 시나리오 |
+| `tests/integration/*.py` | 캐시·채팅·Django→FastAPI 인증·ETL 흐름을 엮은 통합 시나리오 |
 
 **opt-in 테스트**: sales·purchase의 골든 케이스 12개씩(총 24개)과 `test_agent.py`의
 실 MySQL 테스트 1개는 `RUN_LOCAL_MYSQL_TESTS=1` 환경변수를 켜야만 돈다. 실제
@@ -142,22 +150,19 @@ OpenAI API와 로컬 MySQL이 필요해서, 평소엔 자동으로 건너뛰고(
 
 ### 실행 방법
 
-```bash
-python -m pytest                              # 전체 (unit + integration)
-python -m pytest tests/unit                    # 단위 테스트만
-python -m pytest tests/unit/test_sales_text2sql.py   # 특정 파일만
-python -m pytest -k "sql_guard"                # 이름에 sql_guard가 들어간 테스트만
+```powershell
+.venv\Scripts\python.exe -m pytest                         # 전체
+.venv\Scripts\python.exe -m pytest tests\unit              # 단위 테스트
+.venv\Scripts\python.exe -m pytest tests\django            # Django 인증 테스트
+.venv\Scripts\python.exe -m pytest tests\integration       # 통합 테스트
+.venv\Scripts\python.exe -m pytest -k "sql_guard"          # 이름 필터
 
 # opt-in 테스트(실제 OpenAI + 로컬 MySQL 필요)까지 포함
-RUN_LOCAL_MYSQL_TESTS=1 python -m pytest tests/unit/test_sales_text2sql.py tests/unit/test_purchase_text2sql.py
+$env:RUN_LOCAL_MYSQL_TESTS="1"
+.venv\Scripts\python.exe -m pytest tests\unit\test_sales_text2sql.py tests\unit\test_purchase_text2sql.py
 ```
 
-Windows PowerShell에서 환경변수를 지정할 때는:
-```powershell
-$env:RUN_LOCAL_MYSQL_TESTS="1"; python -m pytest tests/unit/test_sales_text2sql.py
-```
-
-### 이번에 직접 실행한 결과 (2026-08-04, 로컬)
+### 이번에 직접 실행한 결과 (2026-08-04, 분리 전 로컬 이력)
 
 **기본 실행** (`python -m pytest`, opt-in 제외):
 ```
@@ -202,7 +207,7 @@ $env:RUN_LOCAL_MYSQL_TESTS="1"; python -m pytest tests/unit/test_sales_text2sql.
 
 ## 참고
 
-- `adversarial_eval.py`(루트) — RAG(rag_pdf) 담당 소유, 이번엔 실행·결과 확인만 함
+- `scripts/adversarial_eval.py` — RAG(rag_pdf) 담당 소유, 이번엔 실행·결과 확인만 함
 - `tests/unit/test_sales_text2sql.py`, `tests/unit/test_purchase_text2sql.py` — sales·purchase 담당 소유
 - 전체 스펙: [SPEC.md](../../SPEC.md)
 - Text2SQL 안전장치 상세: [05_text2sql_architecture.md](05_text2sql_architecture.md)

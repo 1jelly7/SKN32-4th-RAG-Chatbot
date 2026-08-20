@@ -11,7 +11,7 @@
 | 담당 | 프로젝트 역할 | 주 책임 |
 |---|---|---|
 | 문동원 | PM · RAG Sales | 일정·통합 조율, 판매 데이터·ETL·Text2SQL, 판매 증강 데이터 검토 |
-| 박회종 | Backend | FastAPI, 인증/RBAC, LangGraph, MCP Client, 캐시, 공통 API·로그·UI 통합 |
+| 박회종 | Backend | Django UI·계정·인증, FastAPI 인증 확인/RBAC, LangGraph, MCP Client, 캐시, 공통 API·로그 통합 |
 | 이태혁 | RAG PDF | 문서 등록, 로더·청킹·임베딩, FAISS, 문서 DB 경로, Document Tool |
 | 이호원 | RAG Purchasing | 구매 데이터·ETL·Text2SQL, 구매 증강 데이터 검토 |
 
@@ -25,13 +25,15 @@ GitHub 리뷰어 자동 지정이 필요하면 위 실명을 각자의 GitHub ID
 skn32_3rd_pj_rag_mcp_chatbot/
 ├── app/
 │   ├── main.py, api/, schemas/          # Backend
-│   ├── auth/                            # Backend
+│   ├── auth/                            # Backend (Django 인증 확인 gateway, legacy 롤백 코드)
 │   ├── agent/                           # Backend + 근거 기준은 각 도메인 협의
 │   ├── mcp/                             # Backend
 │   ├── cache/                           # Backend
 │   ├── core/                            # Backend
 │   ├── logging/                         # Backend
-│   └── web/                             # Backend
+│   └── web/vendor/                      # Backend (UI 전환 기간 Chart.js 호환 source)
+├── django_app/                           # Backend (UI·계정·인증·Admin·migration)
+├── shared/                               # Backend (프레임워크 독립 권한 계약)
 ├── ingestion/                           # RAG PDF
 ├── mcp_servers/
 │   ├── document_tools/                  # RAG PDF
@@ -63,14 +65,16 @@ skn32_3rd_pj_rag_mcp_chatbot/
 | 영역 | 주 소유자 | 필수 협의 대상 | 변경 원칙 |
 |---|---|---|---|
 | `app/main.py`, `app/api/`, `app/schemas/` | 박회종 | 영향 도메인 | HTTP 필드·상태·오류 매핑과 테스트 동기화 |
-| `app/auth/`, `database/account/` | 박회종 | 전체 | 역할·세션·DB 권한 변경 시 API/MCP 테스트 갱신 |
-| `app/agent/graph.py`, `nodes.py`, `state.py` | 박회종 | 문동원·이태혁·이호원 | route, BOTH 순서, evidence 필드 계약 보존 |
+| `django_app/accounts/`, `database/account/` | 박회종 | 전체 | 계정·세션·migration 변경 시 API/이관 테스트 갱신 |
+| `django_app/web/` | 박회종 | API/도메인 담당 | Django template·static namespace와 ChatResponse 계약 유지 |
+| `app/auth/`, `shared/auth_policy.py` | 박회종 | 전체 | 인증 확인·역할·DB 권한 변경 시 API/MCP 테스트 갱신 |
+| `app/agent/graph.py`, `nodes.py`, `state.py` | 박회종 | 문동원·이태혁·이호원 | route, BOTH 병렬 합류, DB 하위 도메인 순서와 evidence 계약 보존 |
 | `app/agent/evidence_eval.py` | 박회종 | 세 도메인 담당 | 판정 임계값·필수 metadata를 도메인별 검토 |
 | `app/mcp/client.py`, `mcp_servers/data_tools/server.py` | 박회종 | 관련 Tool 소유자 | Tool 이름·payload·envelope의 Host 정본 |
 | `app/cache/` | 박회종 | 전체 | 키 재료·TTL·무효화의 유일한 앱 경계 |
 | `app/core/`, `.env.example` | 박회종 | 전체 | 설정 필드 추가·삭제를 함께 반영, 비밀값 금지 |
 | `app/logging/` | 박회종 | 전체 | API/Agent 로그 인터페이스와 민감정보 제거 |
-| `app/web/` | 박회종 | API/도메인 담당 | vanilla HTML/CSS/JS와 ChatResponse 계약 유지 |
+| `app/web/vendor/` | 박회종 | 없음 | 전환 기간 vendor 호환 source만 유지하고 검증 후 Django 정본으로 이동 |
 | `ingestion/` | 이태혁 | 박회종 | 로더·청킹·임베딩·인덱스 버전 책임 |
 | `mcp_servers/document_tools/` | 이태혁 | 박회종 | 활성 문서 ID 허용 목록, FAISS 검색, 경로 미노출 |
 | `database/document/` | 이태혁 | 박회종 | `document_paths`와 다운로드 ID 매핑 동기화 |
@@ -88,25 +92,30 @@ skn32_3rd_pj_rag_mcp_chatbot/
 | `scripts/generate_sales_synthetic_data.py` | 문동원 | 원천 보존, 고정 seed, 합성 데이터 표시 유지 |
 | 구매 적재·View 보조 스크립트 | 이호원 | `etl/purchase/`와 중복 계약을 만들지 않음 |
 | 판매 적재 보조 스크립트 | 문동원 | `etl/sales/`를 정본으로 유지 |
-| `scripts/seed_accounts.py` | 박회종 | 초기 비밀번호는 `.env`에서만 읽고 로그 금지 |
-| `scripts/setup_all.py` | 박회종 | 각 도메인 담당과 경로·DB명·계정·명령을 공동 검증 |
+| `django_app/manage.py`, 계정 migration | 박회종 | 관리자 생성과 기존 계정 이관 시 평문·해시 로그 금지 |
+| `scripts/seed_accounts.py` | 박회종 | legacy rollback 전용; 활성 Django 계정 관리에 사용 금지 |
 | 평가·성능 스크립트 | 박회종 | fixture·공개 응답만 기록하고 질문 원문·근거·비밀값 로그 금지 |
 
-`scripts/setup_all.py`는 여러 소유 영역을 호출하는 통합 편의 도구다. 현재 이동 후 내부
-상대경로와 프로젝트 루트 실행 방식이 일치하지 않는 부분, 고정 MySQL 실행 경로와 로컬
-계정 전제가 있다. 수정할 때는 Backend 단독 판단으로 성공 조건을 완화하지 말고 문서,
-구매, 판매 초기화를 각각 담당자가 재검증한다.
+현재 통합 `scripts/setup_all.py`는 존재하지 않는다. 새 통합 초기화 도구를 만들려면
+Backend 단독으로 DB·경로를 추정하지 말고 문서, 구매, 판매 담당자가 각 단계의 명령,
+멱등성, 권한과 실패 복구를 함께 검토한다.
 
 ## 접근 경계
 
 | 경로 | 허용 | 금지 |
 |---|---|---|
 | `app/api/`, `app/agent/` | MCP Client 호출 | MySQL·FAISS·원문 직접 접근, SQL 직접 실행 |
+| `django_app/` | account DB ORM·migration, Django 세션 | 업무 DB·FAISS·MCP 직접 접근 |
+| `shared/auth_policy.py` | Document/Purchase/Sales Tool 접근 역할 정의 | Django 전용 `account_db`를 허용 업무 DB로 노출 |
 | `mcp_servers/document_tools/` | 활성 문서 metadata 조회, FAISS 읽기, 승인된 다운로드 해석 | 임의 경로 접근, 원문 수정, 경로 공개 |
 | `mcp_servers/data_tools/` | 허용 View의 단일 SELECT/WITH | 쓰기 SQL, DDL, ETL 호출 |
 | `etl/purchase/`, `etl/sales/` | 검증 후 INSERT/UPDATE/UPSERT | API 요청 경로에서 실행 |
 | `app/cache/` | 최종 답변 cache get/set/delete | Graph 노드에서 저장소 직접 접근 |
 | `app/logging/` | 비밀값 없는 파일 로그 | 질문 원문, 전체 근거, API key, 비밀번호, 내부 경로 기록 |
+
+`LEGACY_AUTH_ROLLBACK_WINDOW=true`인 동안 `django_app/accounts/admin.py`는 계정 추가·삭제와
+이관 계정 변경을 막는다. 이 잠금을 해제하거나 legacy 인증 소스를 제거하는 변경은
+rollback 종료 결정, 계정 DB 백업·감사 결과와 함께 Backend/통합 담당이 검토한다.
 
 ## 생성물과 원천 데이터
 

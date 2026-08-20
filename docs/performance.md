@@ -22,22 +22,26 @@
 
 ## 재현 명령
 
-모든 Python/pytest 명령은 Anaconda `skn_3rd` 환경에서 실행한다.
+현재 프로젝트 표준인 `.venv` 환경에서 실행한다.
 
 ```powershell
-conda run -n skn_3rd python --version
-conda run -n skn_3rd python -m pytest --version
-conda run -n skn_3rd python -m scripts.benchmark_chat_performance --scenario all --iterations 5
-conda run -n skn_3rd python -m pytest --durations=0 -vv
-conda run -n skn_3rd python -m pytest -vv -ra
+.venv\Scripts\python.exe --version
+.venv\Scripts\python.exe -m pytest --version
+.venv\Scripts\python.exe -m scripts.benchmark_chat_performance --scenario all --iterations 5
+.venv\Scripts\python.exe -m pytest --durations=0 -vv
+.venv\Scripts\python.exe -m pytest -vv -ra
 ```
 
-벤치마크는 인증만 비식별 메모리 계정으로 대체하고, 설정된 OpenAI·Document MCP·Data
-MCP·FAISS·MySQL 경계는 실제로 호출한다. 질문·응답·세션 토큰·접속정보는 결과에
-출력하지 않는다. UI 실측은 같은 benchmark app을 localhost에서 실행한 뒤 로그인,
-질문 전송, `.loading-row` 교체 완료까지 측정한다.
+벤치마크는 인증만 비식별 `BenchmarkAuthenticationGateway`로 대체하고, 설정된
+OpenAI·Document MCP·Data MCP·FAISS·MySQL 경계는 실제로 호출한다. 따라서 실제
+FastAPI→Django introspection 네트워크 지연은 이 수치에 포함되지 않는다. 질문·응답·세션
+토큰·접속정보는 결과에 출력하지 않는다. 현재 브라우저 인증 E2E는 benchmark app이 아니라
+Django와 FastAPI를 함께 실행하고 동일 origin 경로 라우팅을 적용한 환경에서 측정한다.
 
 ## 2026-08-03 측정 결과
+
+> 이 절의 수치는 Django 분리 전 측정 이력이다. 현재 구조의 성능 기준선으로 재사용하려면
+> 실제 Django introspection과 경로 라우팅을 포함해 다시 측정해야 한다.
 
 환경은 Python 3.11.9, pytest 9.1.1이다. 각 API 시나리오는 miss 5회와 동일 사용자·질문·
 conversation의 hit 5회로 측정했다. `provider_warmup_ms=11,731.699`는 요청 전 PDF/FAISS
@@ -71,9 +75,9 @@ p95 2,251ms, 복합 UI 5회는 모두 `INSUFFICIENT`였고 p95 3,957ms였다.
 
 OpenAI `AsyncOpenAI`도 요청마다 만들지 않고 앱 수명주기 동안 공유해 HTTP keep-alive
 연결 풀을 재사용한다. 구매·판매의 동기 PyMySQL/EXPLAIN은 `asyncio.to_thread`로 옮겨
-event loop 차단을 막았고, 서로 독립적인 구매·판매 Tool은 `data_domain=both`에서만
-병렬 실행한다. 문서→DB 순서인 `BOTH` 계약은 변경하지 않았다. 최종 답변은 최대 600
-completion token, Text2SQL은 400 token과 10초 timeout으로 제한한다.
+event loop 차단을 막았다. 현재 `BOTH`는 Document와 Database 분기를 병렬 실행해
+evidence에서 합류하고, 구매·판매 두 Tool은 Database 분기 안에서 순차 실행한다. 최종
+답변은 최대 600 completion token, Text2SQL은 400 token과 10초 timeout으로 제한한다.
 
 문서 검색이 반환한 실제 `index_version`은 다음 lookup 컨텍스트와 write key에 동시에
 반영한다. 사용자 ID·서버 세션 ID·역할·허용 DB·conversation hash는 기존처럼 cache key에
@@ -92,4 +96,6 @@ LLM 단계 시간, LLM call 유형·모델·시도 수·가능한 input/output t
 - cache hit 비율 급락, provider warmup 실패, HTTP 5xx, MCP timeout을 별도 알림으로 둔다.
 - 구매 읽기 계정 인증을 복구한 뒤 DB와 복합 시나리오를 각각 5회 이상 재측정한다.
 - 문서 변경 시 DB `updated_at`과 인덱스 버전을 함께 갱신하고 프로세스를 재예열한다.
-- 다중 worker 배포 전 MemoryCache와 SessionStore를 공유 Redis 구현으로 교체한다.
+- 다중 worker 배포 전 FastAPI의 `MemoryCache`를 공유 Redis 구현으로 교체한다. 인증
+  세션은 이미 Django DB session이 소유하므로 FastAPI `SessionStore` 교체 대상이 아니다.
+- 실제 배포 경로에서 Django introspection p95와 `503` 비율을 별도 관측한다.

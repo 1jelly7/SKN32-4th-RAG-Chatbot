@@ -1,6 +1,6 @@
 """실제 LLM/MCP/DB 경계를 사용하는 로컬 채팅 성능 벤치마크.
 
-인증만 비식별 메모리 계정으로 대체한다. 질문·응답·세션 토큰은 출력하지 않고,
+인증만 비식별 Django gateway 대역으로 대체한다. 질문·응답·세션 토큰은 출력하지 않고,
 HTTP 상태와 cache/route/timing 통계만 JSON으로 기록한다.
 """
 
@@ -17,16 +17,42 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.auth.models import Account
-from app.auth.passwords import hash_password
-from app.auth.repository import MemoryAccountRepository
-from app.auth.service import AuthenticationService
+from app.auth.gateway import AuthenticatedUser
 from app.cache.repository import MemoryCache
 from app.core.dependencies import AppDependencies
 from app.main import create_app
 
-BENCHMARK_PASSWORD = "local-performance-only"
-BENCHMARK_SECRET = "local-performance-benchmark-secret-key"
+BENCHMARK_USERS: dict[str, AuthenticatedUser] = {
+    "admin": AuthenticatedUser(
+        user_id=9101,
+        username="admin",
+        display_name="Benchmark Admin",
+        role="admin",
+        session_id="benchmark-admin",
+    ),
+    "hr": AuthenticatedUser(
+        user_id=9102,
+        username="hr",
+        display_name="Benchmark HR",
+        role="hr",
+        session_id="benchmark-hr",
+    ),
+    "finance": AuthenticatedUser(
+        user_id=9103,
+        username="finance",
+        display_name="Benchmark Finance",
+        role="finance",
+        session_id="benchmark-finance",
+    ),
+}
+
+
+class BenchmarkAuthenticationGateway:
+    """벤치마크 역할별 고정 세션을 제공하는 비네트워크 인증 대역."""
+
+    async def authenticate(self, session_token: str) -> AuthenticatedUser | None:
+        username = session_token.removeprefix("benchmark-")
+        return BENCHMARK_USERS.get(username)
 
 
 @dataclass(frozen=True)
@@ -48,18 +74,9 @@ SCENARIOS = (
 
 def build_benchmark_application() -> FastAPI:
     """실제 provider와 비식별 로컬 RBAC 계정을 조립한 localhost 전용 앱을 만든다."""
-    password_hash = hash_password(BENCHMARK_PASSWORD)
-    repository = MemoryAccountRepository(
-        [
-            Account(9101, "admin", password_hash, "Benchmark Admin", "admin", True),
-            Account(9102, "hr", password_hash, "Benchmark HR", "hr", True),
-            Account(9103, "finance", password_hash, "Benchmark Finance", "finance", True),
-        ]
-    )
     dependencies = AppDependencies(
         cache=MemoryCache(),
-        auth_service=AuthenticationService(repository),
-        auth_secret=BENCHMARK_SECRET,
+        auth_gateway=BenchmarkAuthenticationGateway(),
         configure_logging=lambda: None,
         warmup_providers=True,
     )
@@ -97,12 +114,10 @@ def summarize(values: list[float]) -> dict[str, float]:
 
 
 def _login(client: TestClient, username: str) -> None:
-    response = client.post(
-        "/api/auth/login",
-        json={"username": username, "password": BENCHMARK_PASSWORD},
-    )
-    if response.status_code != 200:
-        raise RuntimeError(f"benchmark login failed: status={response.status_code}")
+    """Django가 발급했다고 가정한 비식별 benchmark 세션을 설정한다."""
+    if username not in BENCHMARK_USERS:
+        raise ValueError("지원하지 않는 benchmark 사용자입니다.")
+    client.cookies.set("chatbot_session", f"benchmark-{username}")
 
 
 def run_scenario(client: TestClient, scenario: Scenario, iterations: int) -> dict[str, Any]:

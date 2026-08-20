@@ -1,10 +1,11 @@
 # Project Progress
 
-> Last updated: 2026-08-04 (reference-card merge session) KST
+> Last updated: 2026-08-20 (Django·FastAPI auth split static review) KST
 > Source logs: `docs/progress/<role>/YYYY-MM-DD.md`
 
 ## Current Verified State
 
+- Django 인증·계정 서비스와 FastAPI 내부 인증 확인 gateway를 구현했다. 구현 직후 `.venv` 기준선은 전체 pytest 393 passed, 27 skipped였고, 후속 정적 검토 수정 뒤에는 사용자 요청에 따라 테스트를 재실행하지 않았다.
 - 일반 지식 질의는 근거가 없다는 이유만으로 일괄 거절하지 않으며, 사내·최신성·고위험·인용 요구 질의는 검증 근거가 없을 때 안전 응답을 유지한다.
 - 문서 DB 접근 오류는 내부 오류로 뭉개지지 않고 Document MCP의 `QUERY_ERROR`로 분류된다. 지원 등록 절차로 문서 DB 스키마와 등록 문서 경로를 확인했다.
 - 로컬 문서 검색 점수에 맞춘 문서 전용 최소 점수 `0.12`를 적용했다. 대표 문서 질의의 실제 Chat API는 HTTP 200, `DOCUMENT`, `SUPPORTED`, source 1개와 비어 있지 않은 답변을 반환했다.
@@ -20,14 +21,17 @@
 
 | Area | Status | Current State | Evidence / Latest Log | Blocker or Next Decision |
 |---|---|---|---|---|
-| Backend | Partially verified | 로그인·세션·RBAC를 Chat API와 MCP 데이터 도구 경계에 적용하고 권한별 캐시 분리를 검증했다. | `docs/progress/integration/2026-08-03.md` Session 2 | 운영 계정 DB·Redis·원격 MCP를 함께 연결한 opt-in E2E가 남아 있다. |
+| Backend | In progress | Django가 계정·세션을 소유하고 FastAPI가 내부 인증 확인 결과만 사용하도록 분리했으며 정적 재검토 결함을 보정했다. | `docs/progress/integration/2026-08-20.md` Session 2 | 최신 수정 후 테스트와 실제 account DB 이관 감사가 남아 있다. |
 | RAG | Partially verified | 문서 DB 등록·로컬 검색·대표 실제 API 흐름이 검증됐다. | `docs/progress/integration/2026-08-02.md` Session 3 | 라벨된 질의셋으로 최소 점수와 top-k 품질을 평가해야 한다. |
 | Sales | Partially verified | `query_sales`에 뷰 화이트리스트, SQL 가드, EXPLAIN 사전검증과 1회 재시도를 적용했고 실제 OpenAI·MySQL opt-in 계약 테스트를 통과했다. | `docs/progress/sales/2026-08-02.md` | 원격 MCP transport와 채팅 차트 응답 계약의 end-to-end 검증이 남아 있다. |
 | Purchase | Verified | `query_purchase`를 sales와 동등한 3중 방어(뷰·조회 전용 계정·SQL 가드) + 시맨틱 레이어 + EXPLAIN 자기수정 구조로 완성했다. DB·ETL·뷰·계정을 전부 새로 만들고 실제 데이터로 적재·검증했다. | `docs/progress/purchase/2026-08-03.md` | `docs/team_share/04_chart_spec.md`(sales와 공유) 통합 담당 구현 대기, `server.py` envelope 확장 요청 대기. |
-| Integration | In progress | 실제 브라우저에서 관리자 로그인 후 UI 전환·세션 복원·로그아웃을 확인하고 전체 테스트를 재검증했다. | `docs/progress/integration/2026-08-03.md` Session 2 | 독립 프로세스/원격 MCP·Redis 및 운영 계정 저장소 E2E가 남아 있다. |
+| Integration | In progress | Django `/api/auth/*`, FastAPI 보호 API, `/django-static/*` 분리 계약을 구현·문서화했다. | `docs/progress/integration/2026-08-20.md` Session 2 | 최신 수정 후 테스트, 실제 경로 라우팅과 브라우저 E2E가 남아 있다. |
 
 ## Active Work
 
+- [ ] `[backend/integration]` 실제 account DB에 Django migration을 적용하고 계정 감사를 실행한다.
+- [ ] `[backend/integration]` 정적 재검토 수정 후 Django check, migration check와 전체 pytest를 재실행한다.
+- [ ] `[integration]` `/api/auth/*`, `/admin/*`, `/django-static/*`과 FastAPI 경로 라우팅 및 rollback을 검증한다.
 - [ ] `[rag/integration]` 라벨된 사내 문서 질의셋으로 문서 최소 점수 `0.12`와 top-k의 recall/precision을 측정한다.
 - [ ] `[integration]` 원격 Document MCP transport와 독립 프로세스 E2E를 실행한다.
 - [ ] `[integration]` Redis 및 문서 version/freshness 기반 캐시 무효화를 검증한다.
@@ -56,8 +60,14 @@
 | 2026-08-02 | Sales Text2SQL은 원본 테이블 대신 의미 기반 뷰와 화이트리스트로 조회한다. | 도메인 컬럼·집계 정의를 일관되게 유지하고 임의 테이블 접근을 방지한다. | 원격 MCP 환경에서도 동일한 envelope와 권한 경계를 검증한다. | `docs/progress/sales/2026-08-02.md` |
 | 2026-08-03 | Purchase 구매액은 Cancelled 상태만 제외한다(Approved 포함). | purchase에는 sales의 Draft에 해당하는 상태가 없고, Approved도 승인된 확정 구매로 본다(사용자 결정). | 취소 외 상태 해석이 바뀌면 뷰 정의를 다시 검토해야 한다. | `docs/progress/purchase/2026-08-03.md` |
 | 2026-08-03 | Purchase는 EXPLAIN 전용 계정으로 공용 admin(JangGGo) 대신 도메인 전용 ETL 계정(PURCHASE_DB_*)을 쓴다. | JangGGo에는 purchase.* 권한이 없어(도메인별 계정 분리 설계) EXPLAIN이 Access denied로 실패했다. | sales와 계정 모델이 다르므로 향후 다른 도메인 추가 시 이 차이를 먼저 확인해야 한다. | `docs/progress/purchase/2026-08-03.md` |
+| 2026-08-20 | 계정·세션은 Django가 소유하고 FastAPI는 내부 인증 확인 API만 호출한다. | 세션 DB·SECRET_KEY 공유 없이 로그아웃·비활성화·역할 변경을 즉시 반영한다. | 보호 요청당 내부 호출 지연과 Django 가용성 의존성이 추가된다. | `docs/progress/integration/2026-08-20.md` |
+| 2026-08-20 | `account_db`는 Django에만 허용하고 Admin 정적 파일은 `/django-static/*`로 분리한다. | FastAPI/MCP 책임 누수와 `/static` 경로 충돌을 제거한다. | 최신 정적 수정 후 테스트와 실제 gateway 검증이 필요하다. | `docs/progress/integration/2026-08-20.md` Session 2 |
 
 ## Blockers and Open Questions
+
+- **[Severity: High] [Backend/Integration] Django 인증 분리 실행 검증 보류**
+  - 영향: 구현 직후 기준선은 통과했지만 정적 검토 수정 후 테스트, 실제 MySQL 이관·브라우저 E2E와 경로 라우팅은 실행하지 않았다.
+  - 필요 조치: 최신 전체 테스트, 테스트 account DB 이관과 감사, 경로 라우팅·rollback을 순서대로 검증한다.
 
 - **[Severity: Medium] [RAG] 문서 최소 점수의 광범위한 품질 검증 미완료**
   - 영향: 대표 질의는 통과했지만 전체 문서군의 recall/precision은 보장하지 않는다.
@@ -81,15 +91,18 @@
 
 ## Next Steps
 
-1. **[P0] [RAG/Integration] 라벨된 문서 질의셋으로 검색 품질과 문서 최소 점수를 검증한다.**
-2. **[P0] [Integration] 원격 Document MCP와 Redis를 포함한 운영형 E2E를 실행한다.**
-3. **[P1] [Backend/Integration] Sales/Purchase chart metadata와 채팅 그래프 계약을 통합·검증한다.**
-4. **[P1] [RAG] 원문 문서 변경 시 등록 스크립트와 대표 RAG API 검증을 함께 수행한다.**
-5. **[P1] [Backend/Integration] 운영 환경에서 계정 시드 비밀값과 `AUTH_SECRET_KEY`를 비밀 관리 수단으로 제공하고 RBAC E2E를 수행한다.**
-6. **[P2] [Purchase] `scripts/Create purchase views.py` 사용 중단 처리 및 팀 공지.**
+1. **[P0] [Backend/Integration] 정적 재검토 수정 후 Django check와 전체 테스트를 재실행한다.**
+2. **[P0] [Backend/Integration] 실제 account DB에 Django migration을 적용하고 계정 감사를 실행한다.**
+3. **[P0] [Backend/Integration] `/django-static/*`를 포함한 단일 공개 주소 경로 라우팅과 rollback을 검증한다.**
+4. **[P0] [RAG/Integration] 라벨된 문서 질의셋으로 검색 품질과 문서 최소 점수를 검증한다.**
+5. **[P0] [Integration] 원격 Document MCP와 Redis를 포함한 운영형 E2E를 실행한다.**
+6. **[P1] [Backend/Integration] Sales/Purchase chart metadata와 채팅 그래프 계약을 통합·검증한다.**
+7. **[P1] [RAG] 원문 문서 변경 시 등록 스크립트와 대표 RAG API 검증을 함께 수행한다.**
+8. **[P2] [Purchase] `scripts/Create purchase views.py` 사용 중단 처리 및 팀 공지.**
 
 ## Recent Source Logs
 
+- `docs/progress/integration/2026-08-20.md` — Django·FastAPI 인증 책임 분리 구현과 미검증 범위.
 - `docs/progress/integration/2026-08-02.md` Session 3 — RAG 장애 원인 분리, 문서 DB/검색 점수 보정, 실제 API와 전체 pytest 검증.
 - `docs/progress/integration/2026-08-02.md` Sessions 1–2 — API/Agent/MCP 경계 및 정본 MCP 경로 정리.
 - `docs/progress/integration/2026-08-03.md` Session 2 — 로그인·세션·RBAC 구현, 시드 설정 오류 원인, 실제 브라우저 UI 전환 수정 및 134 passed 검증.

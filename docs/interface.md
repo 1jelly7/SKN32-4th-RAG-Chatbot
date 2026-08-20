@@ -2,9 +2,10 @@
 
 ## 목적
 
-FastAPI/LangGraph Host, MCP Client, 문서·데이터 Tool service 사이의 현재 호출 형식과
-공개 HTTP 응답을 정의한다. 구현 정본은 `app/schemas/`, `app/mcp/client.py`,
-`mcp_servers/*/server.py`다.
+Django 인증 서비스, FastAPI/LangGraph Host, MCP Client, 문서·데이터 Tool service
+사이의 현재 호출 형식과 공개·내부 HTTP 응답을 정의한다. 구현 정본은
+`django_app/accounts/views.py`, `app/auth/gateway.py`, `shared/auth_policy.py`,
+`app/schemas/`, `app/mcp/client.py`, `mcp_servers/*/server.py`다.
 
 - Host와 Agent는 문서 파일·FAISS·업무 DB에 직접 접근하지 않는다.
 - 캐시는 Graph 밖의 `app/cache/`에서만 처리한다.
@@ -28,7 +29,8 @@ FastAPI/LangGraph Host, MCP Client, 문서·데이터 Tool service 사이의 현
 
 ## 인증된 사용자 컨텍스트
 
-보호 HTTP API는 서명된 `chatbot_session` 쿠키로 다음 컨텍스트를 서버에서 복원한다.
+보호 HTTP API는 Django가 발급한 불투명한 `chatbot_session` 세션 키를 내부 인증
+인트로스펙션으로 검증한 뒤 다음 컨텍스트를 서버에서 복원한다.
 
 ```json
 {
@@ -237,9 +239,10 @@ service metadata다. 현재 운영 구현은 `table_name`, `query_id`, `freshnes
 | `DATABASE + purchase` | `query_purchase` |
 | `DATABASE + sales` | `query_sales` |
 | `DATABASE + both` | 구매 후 판매 순차 호출 |
-| `BOTH` | 문서 호출 후 선택된 구매·판매 호출 |
+| `BOTH` | 문서와 선택된 구매·판매 분기를 병렬 호출 |
 
 각 결과는 `document_evidence`, `database_evidence`에 분리 보존한 뒤 평가 시 합친다.
+구매·판매를 모두 조회하는 database 분기 안에서는 두 Data Tool을 순차 호출한다.
 
 - `NO_RESULT`는 retrieval 노드에서 정상적인 빈 결과로 처리한다.
 - 단일 도메인의 `FORBIDDEN`, `QUERY_ERROR`, `INTERNAL_ERROR`, timeout은 즉시 API 오류로 전파된다.
@@ -271,9 +274,74 @@ Graph state에는 다음 필드가 기록된다.
 
 | Method | Endpoint | 인증 | 성공 |
 |---|---|---|---|
-| `POST` | `/api/auth/login` | 불필요 | 사용자 profile, 세션 쿠키 |
-| `POST` | `/api/auth/logout` | 필요 | `204`와 쿠키 삭제 |
+| `GET` | `/api/auth/csrf` | 불필요 | CSRF token과 cookie |
+| `POST` | `/api/auth/login` | CSRF | `{"user": profile}`, 세션 쿠키 |
+| `POST` | `/api/auth/logout` | session + CSRF | `204`와 쿠키 삭제 |
 | `GET` | `/api/auth/me` | 필요 | 현재 사용자 profile |
+
+인증 API는 Django가 소유한다. `login`과 `logout`에는 `/api/auth/csrf`에서 받은 토큰을
+`X-CSRFToken` 헤더로 전달한다. 세션 쿠키는 JavaScript에서 읽지 않으며 인증 응답에는
+재사용 방지를 위한 `no-store/no-cache` 헤더를 적용한다.
+
+- `GET /api/auth/csrf`: `{"csrf_token": "..."}`와 CSRF cookie
+- login JSON 형식 오류: `400`; 자격증명·활성 상태·역할 오류: `401`; CSRF 실패: `403`
+- logout/me의 세션 없음: `401`; logout CSRF 실패: `403`
+
+공개 profile은 다음 필드만 포함한다. `allowed_databases`는 client 입력이 아니라
+`shared/auth_policy.py`가 role에서 계산한 결과다.
+
+```json
+{
+  "user_id": 1,
+  "username": "user",
+  "display_name": "사용자",
+  "role": "admin",
+  "allowed_databases": ["document_db", "purchase_db", "sales_db"]
+}
+```
+
+세션 cookie 이름은 `chatbot_session`이고 `HttpOnly`, `SameSite=Lax`, path `/`를 사용한다.
+`AUTH_COOKIE_SECURE=true`이면 session과 CSRF cookie 모두 Secure다. 만료는
+`AUTH_SESSION_EXPIRE_SECONDS` 기준의 고정 수명이며 보호 요청마다 연장하지 않는다.
+
+FastAPI는 보호 요청마다 `POST /internal/auth/introspect`를 Django 내부 주소로 호출한다.
+브라우저에 이 경로를 공개 라우팅하지 않으며, `Authorization: Bearer`의 별도 내부 키와
+유효한 Django 세션이 모두 있어야 사용자 profile과 원문이 아닌 `session_id`를 반환한다.
+인증 실패는 FastAPI에서 `401`, Django 인증 서비스 장애나 계약 오류는 `503`이다.
+내부 호출은 환경 proxy를 사용하지 않으며 `/internal/auth/*`는 private network 또는
+loopback에서만 접근할 수 있어야 한다. 원격 구간이라면 TLS 또는 service mesh 보호가
+필요하다. 공개 gateway는 `/api/auth/login`에 조직 표준 rate limit을 적용하고 인증
+header·cookie를 access log에 기록하지 않는다.
+
+내부 성공 응답은 공개 profile 필드에 64자리 hex `session_id`를 추가한다. FastAPI는
+응답의 `user_id`, 문자열 길이, role과 session ID 형식을 다시 검증한 뒤
+`allowed_databases`를 로컬 정책으로 재계산한다.
+
+| Django 내부 응답 | 의미 | FastAPI 공개 응답 |
+|---|---|---|
+| `200` | 내부 키·활성 세션·활성 계정 유효 | 보호 API 계속 처리 |
+| `401` | 세션 없음·만료·삭제, 비활성/잘못된 역할 | `401` |
+| `403` | 내부 키 불일치 | `503` |
+| `503` 또는 기타 오류/잘못된 JSON | 인증 서비스 설정·가용성·계약 오류 | `503` |
+
+FastAPI의 내부 client timeout은 `AUTH_INTROSPECTION_TIMEOUT_SECONDS`이며 환경 HTTP proxy를
+사용하지 않는다. `app/api/auth.py`의 legacy 라우터는 현재 FastAPI 앱에 등록되지 않는다.
+
+### 사용자 UI
+
+`GET /`은 Django `web` 앱이 `web/index.html` template으로 제공한다. HTML은 no-cache이고
+CSS·JavaScript는 `/django-static/web/*`, 전환 기간의 Chart.js bundle은
+`/django-static/vendor/*`에서 제공한다. UI는 같은 origin의 `/api/auth/*`, `/api/chat`과
+`/api/documents/*`만 호출한다.
+
+로컬에서 `DJANGO_SERVE_STATIC_FILES=true`이면 Django가 finder 기반 개발용 정적 route를
+등록한다. 운영에서는 이 값을 `false`로 두며 `/django-static/*`를 collectstatic 산출물이나
+CDN으로 라우팅한다.
+
+FastAPI는 더 이상 `/`, `/chat.js`, `/style.css`, `/static/*`를 제공하지 않는다. 공개
+gateway는 `/`와 사용자 page route를 Django로, 명시한 채팅·문서·상태 API를 FastAPI로
+보낸다. `/django-static/*`는 Django `collectstatic` 산출물을 제공하는 정적 파일 서버나
+CDN으로 보낸다.
 
 ### 채팅
 

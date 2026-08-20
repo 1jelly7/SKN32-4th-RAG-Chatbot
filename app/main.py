@@ -9,16 +9,12 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.api.chat import router as chat_router
 from app.api.documents import router as documents_router
-from app.api.auth import router as auth_router
 from app.api.system import router as system_router
 from app.agent.graph import build_graph
 from app.agent.prompts import PROMPT_VERSION
@@ -26,8 +22,6 @@ from app.core.dependencies import AppDependencies
 from app.logging.context import reset_request_id, set_request_id
 from app.logging.performance import elapsed_ms, server_timing_header, start_timer
 
-WEB_DIR = Path(__file__).resolve().parent / "web"
-UI_CACHE_HEADERS = {"Cache-Control": "no-store"}
 CACHE_KEY_CONTEXT = {
     "document_index_version": "unknown",
     "database_freshness_bucket": "unknown",
@@ -66,11 +60,6 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
     """설정·로깅·라우터·정적 UI를 일관되게 등록한 FastAPI 앱을 구성한다."""
     app_dependencies = dependencies or AppDependencies()
     if dependencies is None:
-        from app.core.config import get_settings
-        settings = get_settings()
-        app_dependencies.auth_secret = settings.auth_secret_key
-        app_dependencies.auth_expire_minutes = settings.auth_access_token_expire_minutes
-        app_dependencies.auth_cookie_secure = settings.auth_cookie_secure
         app_dependencies.warmup_providers = True
 
     @asynccontextmanager
@@ -88,7 +77,12 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
                 )
         if app_dependencies.warmup_providers:
             await _warmup_embedding_model()
-        yield
+        try:
+            yield
+        finally:
+            close_auth_gateway = getattr(app_dependencies.auth_gateway, "aclose", None)
+            if close_auth_gateway is not None:
+                await close_auth_gateway()
 
     application = FastAPI(title="RAG MCP Chatbot", lifespan=lifespan)
 
@@ -122,31 +116,12 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
             reset_request_id(request_id_token)
 
     application.state.dependencies = app_dependencies
-    application.state.auth_service = app_dependencies.auth_service
-    application.state.auth_secret = app_dependencies.auth_secret
-    application.state.auth_expire_minutes = app_dependencies.auth_expire_minutes or 60
-    application.state.auth_cookie_secure = bool(app_dependencies.auth_cookie_secure)
     application.state.graph = build_graph(app_dependencies.mcp, app_dependencies.llm)
     application.state.cache_key_context = dict(CACHE_KEY_CONTEXT)
 
     application.include_router(chat_router, prefix="/api")
     application.include_router(documents_router, prefix="/api")
-    application.include_router(auth_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
-
-    application.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
-
-    @application.get("/")
-    def index() -> FileResponse:
-        return FileResponse(WEB_DIR / "index.html", headers=UI_CACHE_HEADERS)
-
-    @application.get("/chat.js")
-    def chat_js() -> FileResponse:
-        return FileResponse(WEB_DIR / "chat.js", headers=UI_CACHE_HEADERS)
-
-    @application.get("/style.css")
-    def style_css() -> FileResponse:
-        return FileResponse(WEB_DIR / "style.css", headers=UI_CACHE_HEADERS)
 
     return application
 

@@ -6,6 +6,7 @@
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +32,7 @@ class Settings(BaseSettings):
     document_db_user: str
     document_db_password: str
     document_db_database: str
+    # 단계 5의 레거시 인증 제거가 끝날 때까지 롤백 전용 설정 계약을 보존한다.
     account_db_host: str = "127.0.0.1"
     account_db_port: int = 3306
     account_db_name: str = "account_db"
@@ -42,6 +44,9 @@ class Settings(BaseSettings):
     account_seed_admin_password: str | None = None
     account_seed_hr_password: str | None = None
     account_seed_finance_password: str | None = None
+    django_auth_introspection_url: str = "http://127.0.0.1:8001/internal/auth/introspect"
+    auth_introspection_key: str = ""
+    auth_introspection_timeout_seconds: float = Field(default=2.0, gt=0, le=30.0)
 
     # 임베딩 백엔드: "local"(기본값, 외부 API 불필요) 또는 "openai".
     embedding_backend: str = "local"
