@@ -61,3 +61,12 @@ def test_document_download_uses_server_filename_before_title_fallback() -> None:
     assert "function downloadFileName(response, fallbackFileName)" in script
     assert "filename\\*\\s*=\\s*UTF-8''" in script
     assert "link.download = downloadFileName(response, fileName);" in script
+
+
+def test_chat_does_not_parse_gateway_html_as_json() -> None:
+    """게이트웨이 HTML 오류 페이지가 JSON 파싱 예외로 노출되지 않아야 한다."""
+    script = WEB_SCRIPT.read_text(encoding="utf-8")
+
+    assert "async function chatResponsePayload(response)" in script
+    assert "response.headers.get('content-type')" in script
+    assert "const data = await chatResponsePayload(response);" in script

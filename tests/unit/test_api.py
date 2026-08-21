@@ -160,6 +160,15 @@ def test_fastapi_does_not_serve_django_owned_ui() -> None:
             assert response.status_code == 404
 
 
+def test_provider_warmup_is_started_without_blocking_api_startup() -> None:
+    """느린 SBERT/Provider 예열이 gateway 연결을 막지 않아야 한다."""
+    source = Path("app/main.py").read_text(encoding="utf-8")
+
+    assert "asyncio.create_task(_warmup_embedding_model())" in source
+    assert "await _warmup_embedding_model()" not in source
+    assert "yield" in source
+
+
 def test_document_download_uses_document_id_mapping_and_returns_404_for_unknown_id(tmp_path: Path) -> None:
     document_path = tmp_path / "법인카드_규정.pdf"
     document_path.write_bytes(b"sample-pdf")

@@ -5,6 +5,7 @@
 조회는 그래프에 주입된 MCP client가 담당한다.
 """
 
+import asyncio
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
@@ -66,20 +67,31 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         """logging을 구성하고 선택된 운영 provider의 읽기 전용 캐시를 예열한다."""
         app_dependencies.configure_logging()
+        warmup_tasks: list[asyncio.Task[None]] = []
         if app_dependencies.warmup_providers and app_dependencies.mcp is not None:
-            try:
-                await app_dependencies.mcp.warmup()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "provider_warmup_failed error_type=%s",
-                    type(exc).__name__,
-                    extra={"event": "provider_warmup_failed"},
-                )
+            async def warmup_providers() -> None:
+                try:
+                    await app_dependencies.mcp.warmup()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "provider_warmup_failed error_type=%s",
+                        type(exc).__name__,
+                        extra={"event": "provider_warmup_failed"},
+                    )
+
+            warmup_tasks.append(asyncio.create_task(warmup_providers()))
         if app_dependencies.warmup_providers:
-            await _warmup_embedding_model()
+            warmup_tasks.append(asyncio.create_task(_warmup_embedding_model()))
         try:
+            # SBERT 모델·FAISS 예열은 수 초에서 수십 초가 걸릴 수 있으므로 API가
+            # 준비되기 전에 기다리지 않는다. 이 지점에서 먼저 yield해야 gateway가
+            # startup 중인 FastAPI에 연결해 HTML 502를 받는 일이 없다.
             yield
         finally:
+            for task in warmup_tasks:
+                task.cancel()
+            if warmup_tasks:
+                await asyncio.gather(*warmup_tasks, return_exceptions=True)
             close_auth_gateway = getattr(app_dependencies.auth_gateway, "aclose", None)
             if close_auth_gateway is not None:
                 await close_auth_gateway()

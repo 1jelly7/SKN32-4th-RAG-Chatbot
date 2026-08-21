@@ -39,6 +39,21 @@ async function responseError(response, fallbackMessage) {
   }
 }
 
+async function chatResponsePayload(response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    if (response.status >= 500) {
+      throw new Error('채팅 서버에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+    throw new Error(`요청에 실패했습니다 (${response.status})`);
+  }
+  try {
+    return await response.json();
+  } catch (_) {
+    throw new Error('채팅 서버가 올바른 응답을 반환하지 않았습니다. 잠시 후 다시 시도해 주세요.');
+  }
+}
+
 function clearApplicationState() {
   activeRequestController?.abort();
   activeRequestController = null;
@@ -297,7 +312,7 @@ form.addEventListener('submit', async event => {
 
   try {
     const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: activeRequestController.signal, body: JSON.stringify({ question }) });
-    const data = await response.json();
+    const data = await chatResponsePayload(response);
     if (requestRevision !== auth_state_revision) return;
     if (response.status === 401) { showLogin(); throw new Error('세션이 만료되었습니다. 다시 로그인하세요.'); }
     if (!response.ok) throw new Error(data.detail || `요청에 실패했습니다 (${response.status})`);

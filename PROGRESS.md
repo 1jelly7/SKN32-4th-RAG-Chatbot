@@ -1,6 +1,6 @@
 # Project Progress
 
-> Last updated: 2026-08-20 (Django·FastAPI auth split static review) KST
+> Last updated: 2026-08-21 (문서 질의 startup 장애 복구) KST
 > Source logs: `docs/progress/<role>/YYYY-MM-DD.md`
 
 ## Current Verified State
@@ -11,6 +11,7 @@
 - 로컬 문서 검색 점수에 맞춘 문서 전용 최소 점수 `0.12`를 적용했다. 대표 문서 질의의 실제 Chat API는 HTTP 200, `DOCUMENT`, `SUPPORTED`, source 1개와 비어 있지 않은 답변을 반환했다.
 - `skn_3rd` 환경 전체 테스트는 127 passed, 2 skipped이며 `git diff --check`를 통과했다.
 - 상세 근거와 변경 범위는 `docs/progress/integration/2026-08-02.md` Session 3에 기록했다.
+- `법인카드 발급 규정` 질의의 간헐적 HTML 502 원인을 SBERT 예열 중 FastAPI startup 지연으로 특정하고, API 선기동·백그라운드 예열과 UI 비JSON 응답 방어를 적용했다. 상세 기록은 [`docs/progress/integration/2026-08-21.md`](docs/progress/integration/2026-08-21.md) Session 1에 있다.
 - 로그인·세션 기반 RBAC가 Chat API와 MCP 데이터 도구 경계에 적용됐으며, 관리자 실제 브라우저 로그인·새로고침 세션 복원·로그아웃 UI 전환을 확인했다.
 - `skn_3rd` 환경 전체 테스트는 134 passed, 2 skipped이며 `git diff --check`를 통과했다. 상세 기록은 `docs/progress/integration/2026-08-03.md` Session 2에 있다.
 - 문서 Chat 출처는 청크 대신 원본 문서 단위 카드로 병합되며, 정렬·중복 제거된 페이지와 발췌문, 보호된 다운로드 URL을 반환한다. 상세 기록은 `docs/progress/integration/2026-08-04.md` Session 1에 있다.
@@ -25,12 +26,13 @@
 | RAG | Partially verified | 문서 DB 등록·로컬 검색·대표 실제 API 흐름이 검증됐다. | `docs/progress/integration/2026-08-02.md` Session 3 | 라벨된 질의셋으로 최소 점수와 top-k 품질을 평가해야 한다. |
 | Sales | Partially verified | `query_sales`에 뷰 화이트리스트, SQL 가드, EXPLAIN 사전검증과 1회 재시도를 적용했고 실제 OpenAI·MySQL opt-in 계약 테스트를 통과했다. | `docs/progress/sales/2026-08-02.md` | 원격 MCP transport와 채팅 차트 응답 계약의 end-to-end 검증이 남아 있다. |
 | Purchase | Verified | `query_purchase`를 sales와 동등한 3중 방어(뷰·조회 전용 계정·SQL 가드) + 시맨틱 레이어 + EXPLAIN 자기수정 구조로 완성했다. DB·ETL·뷰·계정을 전부 새로 만들고 실제 데이터로 적재·검증했다. | `docs/progress/purchase/2026-08-03.md` | `docs/team_share/04_chart_spec.md`(sales와 공유) 통합 담당 구현 대기, `server.py` envelope 확장 요청 대기. |
-| Integration | In progress | Django `/api/auth/*`, FastAPI 보호 API, `/django-static/*` 분리 계약을 구현·문서화했다. | `docs/progress/integration/2026-08-20.md` Session 2 | 최신 수정 후 테스트, 실제 경로 라우팅과 브라우저 E2E가 남아 있다. |
+| Integration | In progress | Django/FastAPI gateway 분리와 문서 질의 startup 장애 수정을 반영했다. | [`docs/progress/integration/2026-08-21.md`](docs/progress/integration/2026-08-21.md) Session 1 | 재시작 후 startup 직후 브라우저·gateway E2E와 원격 MCP 검증이 남아 있다. |
 
 ## Active Work
 
 - [ ] `[backend/integration]` 실제 account DB에 Django migration을 적용하고 계정 감사를 실행한다.
 - [ ] `[backend/integration]` 정적 재검토 수정 후 Django check, migration check와 전체 pytest를 재실행한다.
+- [ ] `[integration]` startup 백그라운드 예열 수정 후 gateway 재시작 직후 문서 질문의 HTTP 200 및 출처 표시를 확인한다.
 - [ ] `[integration]` `/api/auth/*`, `/admin/*`, `/django-static/*`과 FastAPI 경로 라우팅 및 rollback을 검증한다.
 - [ ] `[rag/integration]` 라벨된 사내 문서 질의셋으로 문서 최소 점수 `0.12`와 top-k의 recall/precision을 측정한다.
 - [ ] `[integration]` 원격 Document MCP transport와 독립 프로세스 E2E를 실행한다.
