@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from django.contrib.staticfiles import finders
 from django.test import Client
 from django.urls import reverse
@@ -18,6 +20,18 @@ def test_django_serves_chat_ui_shell_without_cache() -> None:
     assert "/django-static/web/style.css" in response.content.decode()
     assert "/django-static/web/chat.js" in response.content.decode()
     assert "/django-static/vendor/chart.umd.min.js" in response.content.decode()
+    assert response.headers["Content-Security-Policy"] == (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; "
+        "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    )
+
+
+def test_django_admin_is_not_covered_by_web_ui_csp() -> None:
+    """UI 전용 CSP가 Django Admin의 별도 자산 계약을 변경하지 않는다."""
+    response = Client().get("/admin/")
+
+    assert "Content-Security-Policy" not in response.headers
 
 
 def test_django_staticfiles_discovers_all_ui_assets() -> None:
@@ -41,3 +55,17 @@ def test_development_static_routes_serve_ui_assets() -> None:
     assert "javascript" in script.headers["Content-Type"]
     assert chart.status_code == 200
     assert "javascript" in chart.headers["Content-Type"]
+
+
+def test_ui_script_restricts_untrusted_urls_to_known_safe_destinations() -> None:
+    """출처 link와 다운로드 요청은 허용된 URL scheme·same-origin 경계만 사용한다."""
+    script = finders.find("web/chat.js")
+    assert script is not None
+    source = Path(script).read_text(encoding="utf-8")
+
+    assert "function safeWebUrl(value)" in source
+    assert "['http:', 'https:'].includes(url.protocol)" in source
+    assert "function safeDownloadUrl(value)" in source
+    assert "url.origin !== window.location.origin" in source
+    assert "url.pathname !== '/api/documents/download'" in source
+    assert 'href="${escapeHtml(source.url)}"' not in source

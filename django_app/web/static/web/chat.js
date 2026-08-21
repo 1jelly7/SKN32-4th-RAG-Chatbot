@@ -123,6 +123,27 @@ function formatPages(pages) {
   return `${pages.join(', ')}페이지 참조`;
 }
 
+function safeWebUrl(value) {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function safeDownloadUrl(value) {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.origin !== window.location.origin || url.pathname !== '/api/documents/download') return null;
+    return `${url.pathname}${url.search}`;
+  } catch (_) {
+    return null;
+  }
+}
+
 function showDownloadError(message) {
   let toast = document.querySelector('#download-toast');
   if (!toast) {
@@ -192,6 +213,7 @@ function renderSources(sources, route) {
   if (webSources.length) {
     sourcesList.innerHTML = webSources.map(source => {
       const title = source.title || source.url || '웹 출처';
+      const sourceUrl = safeWebUrl(source.url);
       return `
       <article class="source-card">
         <div class="source-card-main">
@@ -199,7 +221,7 @@ function renderSources(sources, route) {
             <span class="source-icon" aria-hidden="true">🌐</span>
             <h3 class="source-title">${escapeHtml(title)}</h3>
           </div>
-          ${source.url ? `<p class="source-meta"><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.url)}</a></p>` : ''}
+          ${sourceUrl ? `<p class="source-meta"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(sourceUrl)}</a></p>` : ''}
         </div>
       </article>`;
     }).join('');
@@ -218,7 +240,8 @@ function renderSources(sources, route) {
         <p>${escapeHtml(chunk.text)}</p>
       </details>`).join('');
     const fileName = source.file_name || source.title || '문서';
-    const downloadButton = source.download_url ? `<button class="source-download" type="button" data-download-url="${escapeHtml(source.download_url)}" data-file-name="${escapeHtml(fileName)}" aria-label="${escapeHtml(fileName)} 다운로드">다운로드</button>` : '';
+    const downloadUrl = safeDownloadUrl(source.download_url);
+    const downloadButton = downloadUrl ? `<button class="source-download" type="button" data-download-url="${escapeHtml(downloadUrl)}" data-file-name="${escapeHtml(fileName)}" aria-label="${escapeHtml(fileName)} 다운로드">다운로드</button>` : '';
     return `
     <article class="source-card">
       <div class="source-card-main">

@@ -430,7 +430,7 @@ composition dependency가 없어 동작하지 않으므로 그렇게 복구하�
 - [x] CSS·JavaScript를 `django_app/web/static/web/` namespace로 이전
 - [ ] Chart.js vendor bundle을 `django_app/web/static/web/vendor/`로 이전
 - [x] UI가 `/api/auth/*`와 `/api/chat`을 같은 origin 상대 경로로 호출하도록 유지
-- [ ] 사용자 문자열·채팅 응답 렌더링의 escaping과 CSP 적용 방안 검토
+- [x] 사용자 문자열·채팅 응답 렌더링의 escaping과 CSP 적용 방안 검토
 - [ ] Django page 응답의 cache 정책과 정적 자산의 fingerprint·장기 cache 정책 분리
 - [ ] `collectstatic` 산출물을 gateway·정적 서버 또는 CDN이 제공하도록 배포 구성
 - [ ] gateway의 `/`와 UI page route를 Django로 전환하고 FastAPI API 경로를 명시적으로 유지
@@ -652,6 +652,11 @@ Nginx 설정 검사, launcher 기반 전체 기동·HTTP smoke·전체 종료를
 인증 없는 채팅은 `401`이며, 테스트용 2초 세션 만료 뒤 새로고침하면 로그인 화면으로
 되돌아가는 것을 확인했다.
 
+UI의 untrusted text는 `escapeHtml`을 거쳐 렌더링하고, 웹 출처 URL은 `http`·`https`,
+문서 다운로드 URL은 same-origin `/api/documents/download`로 제한했다. Django `web` HTML에
+`script-src 'self'`, `connect-src 'self'`, `frame-ancestors 'none'` 등을 포함한 CSP를
+적용했으며, 동적 입력창 높이 조절을 위해 `style-src`에만 `'unsafe-inline'`을 허용한다.
+
 ## 8. 진행 현황 요약
 
 | 단계 | 상태 | 완료 항목 | 전체 항목 | 차단 요인 | 다음 작업 |
@@ -662,7 +667,7 @@ Nginx 설정 검사, launcher 기반 전체 기동·HTTP smoke·전체 종료를
 | 3. 인증 계약 | 진행 중 | 6 | 7 | 실제 reverse proxy/Ingress 형태 미확인 | 배포 경로 검토 |
 | 4. 트래픽 전환 | 진행 중 | 8 | 10 | 외부 경로 라우팅·rollback 검증 필요 | reverse proxy/Ingress 경로 전환 |
 | 5. 기존 경계 정리 | 미착수 | 0 | 9 | 관찰 기간 전 | 운영 관찰 후 legacy 제거 |
-| 6. Django UI 이전 | 진행 중 | 10 | 22 | 정적 배포·확장 UI·CSP 검증 미완료 | CSP·cache·문서/차트 회귀 검증 |
+| 6. Django UI 이전 | 진행 중 | 11 | 22 | 정적 배포·확장 UI 검증 미완료 | cache·문서/차트·나머지 보안 회귀 검증 |
 | 7. 로컬 origin gateway | 완료 | 11 | 11 | 없음 | 운영 gateway/Ingress 계획으로 확장 시 별도 검토 |
 
 상태 정의:
