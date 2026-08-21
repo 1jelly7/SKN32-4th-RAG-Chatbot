@@ -111,6 +111,16 @@ function routeBadge(route) {
   return labels[route] ? `<span class="badge badge-${route}">${labels[route]}</span>` : '';
 }
 
+function evidenceStatusNote(status) {
+  const labels = {
+    SUPPORTED: '검증된 근거를 바탕으로 답변했습니다.',
+    PARTIALLY_SUPPORTED: '일부 조회 결과를 확인할 수 없어, 확인된 근거만 바탕으로 답변했습니다.',
+    INSUFFICIENT: '답변에 필요한 근거가 부족합니다. 다른 표현으로 다시 질문해 주세요.',
+    CONTRADICTED: '조회된 근거 사이에 차이가 있어 답변을 확정하지 않았습니다.',
+  };
+  return labels[status] || (status ? `근거 상태: ${escapeHtml(status)}` : '');
+}
+
 function formatScore(score) {
   if (typeof score !== 'number') return '근거 확인';
   if (score >= 0.7) return '높은 관련성';
@@ -347,7 +357,7 @@ form.addEventListener('submit', async event => {
       return renderTable(table) + (chart?.html || '');
     }).join('');
     const cacheBadge = data.cached ? '<span class="badge badge-cached">캐시됨</span>' : '';
-    const evidenceLabel = data.evidence_status === 'SUPPORTED' ? '검증된 근거를 바탕으로 답변했습니다.' : data.evidence_status ? `근거 상태: ${escapeHtml(data.evidence_status)}` : '';
+    const evidenceLabel = evidenceStatusNote(data.evidence_status);
     document.getElementById(loadingId).outerHTML = `<div class="msg-row assistant"><span class="avatar" aria-hidden="true">${robotIcon}</span><div class="msg"><span class="msg-label">사내 지식 챗봇</span><div class="meta">${routeBadge(data.route)}${cacheBadge}</div><div class="answer">${formatAnswer(data.answer)}</div>${tablesHtml}${evidenceLabel ? `<p class="evidence-note">${evidenceLabel}</p>` : ''}</div></div>`;
     chartPlaceholders.forEach(({ id, table }) => drawChart(id, table));
     renderSources(data.sources, data.route);

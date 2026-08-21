@@ -122,6 +122,9 @@ Django test DB와 fake MCP를 사용한다. 어느 테스트도 외부 MCP 프�
 - UI의 인증·채팅·문서 호출은 같은 origin 상대 `/api/*` 경로를 유지한다.
 - Django가 발급한 유효 세션은 `/api/chat`과 `/api/documents/download`에서 FastAPI의
   내부 인증 확인을 통과하며, gateway는 `/api/auth/*`를 Django, 두 API를 FastAPI로 전달한다.
+- UI는 API table을 escape한 HTML 표와 Chart.js 차트로 렌더링하고, 문서 다운로드는
+  same-origin `/api/documents/download` URL만 사용한다. `401`은 로그인 화면으로 전환하며,
+  `PARTIALLY_SUPPORTED`·`INSUFFICIENT` 등 근거 상태와 오류는 사용자 안내로 표시한다.
 
 ### TS-A02: 라우팅과 조회 선택
 

@@ -76,6 +76,27 @@ def test_ui_script_restricts_untrusted_urls_to_known_safe_destinations() -> None
     assert 'href="${escapeHtml(source.url)}"' not in source
 
 
+def test_ui_script_renders_tables_charts_and_failure_states_without_unsafe_html() -> None:
+    """표·차트·문서 다운로드·인증 및 부분 실패 UI 계약을 유지한다."""
+    script = finders.find("web/chat.js")
+    assert script is not None
+    source = Path(script).read_text(encoding="utf-8")
+
+    assert "function renderTable(table)" in source
+    assert "function renderChartPlaceholder(table)" in source
+    assert "function drawChart(canvasId, table)" in source
+    assert "new Chart(canvas" in source
+    assert "function handleDownload(button)" in source
+    assert "response.status === 401" in source
+    assert "showLogin(); throw new Error('세션이 만료되었습니다. 다시 로그인하세요.');" in source
+    assert "function evidenceStatusNote(status)" in source
+    assert "PARTIALLY_SUPPORTED: '일부 조회 결과를 확인할 수 없어" in source
+    assert "INSUFFICIENT: '답변에 필요한 근거가 부족합니다." in source
+    assert "error instanceof TypeError" in source
+    assert "escapeHtml(table.sql)" in source
+    assert "escapeHtml(chunk.text)" in source
+
+
 def test_local_gateway_sets_immutable_cache_only_for_static_assets() -> None:
     """HTML의 no-cache 응답과 hash된 정적 자산의 장기 cache를 분리한다."""
     config = Path("deploy/nginx/local.conf").read_text(encoding="utf-8")
