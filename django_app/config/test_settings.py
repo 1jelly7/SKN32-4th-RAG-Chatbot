@@ -18,3 +18,10 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
     "django_app.accounts.password_hashers.LegacyScryptPasswordHasher",
 ]
+
+# 단위 테스트는 collectstatic 산출물에 의존하지 않고 원본 정적 경로를 검증한다.
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    }
+}

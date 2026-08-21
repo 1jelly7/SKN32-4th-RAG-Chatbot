@@ -430,7 +430,7 @@ composition dependency가 없어 동작하지 않으므로 그렇게 복구하�
 - [x] Chart.js vendor bundle을 `django_app/web/static/web/vendor/`로 이전
 - [x] UI가 `/api/auth/*`와 `/api/chat`을 같은 origin 상대 경로로 호출하도록 유지
 - [x] 사용자 문자열·채팅 응답 렌더링의 escaping과 CSP 적용 방안 검토
-- [ ] Django page 응답의 cache 정책과 정적 자산의 fingerprint·장기 cache 정책 분리
+- [x] Django page 응답의 cache 정책과 정적 자산의 fingerprint·장기 cache 정책 분리
 - [ ] `collectstatic` 산출물을 gateway·정적 서버 또는 CDN이 제공하도록 배포 구성
 - [ ] gateway의 `/`와 UI page route를 Django로 전환하고 FastAPI API 경로를 명시적으로 유지
 - [x] 기존 `/chat.js`, `/style.css`, `/static/*`는 redirect 없이 제거하고 새 HTML이
@@ -457,7 +457,7 @@ composition dependency가 없어 동작하지 않으므로 그렇게 복구하�
 - [ ] Django UI → FastAPI chat/document API 동일 origin 통합 테스트
 - [ ] 표·차트·문서 다운로드·오류·부분 실패 UI 회귀 테스트
 - [ ] XSS escaping, CSP, cookie 속성, 내부 URL·비밀정보 비노출 점검
-- [ ] 정적 자산 누락, content type, cache header와 collectstatic manifest 검증
+- [x] 정적 자산 누락, content type, cache header와 collectstatic manifest 검증
 - [ ] 데스크톱·모바일 반응형, 키보드 탐색과 핵심 접근성 기준 검증
 - [ ] gateway 전환 전후 API latency·오류율과 UI 로딩 지표 비교
 
@@ -666,7 +666,7 @@ UI의 untrusted text는 `escapeHtml`을 거쳐 렌더링하고, 웹 출처 URL�
 | 3. 인증 계약 | 진행 중 | 6 | 7 | 실제 reverse proxy/Ingress 형태 미확인 | 배포 경로 검토 |
 | 4. 트래픽 전환 | 진행 중 | 8 | 10 | 외부 경로 라우팅·rollback 검증 필요 | reverse proxy/Ingress 경로 전환 |
 | 5. 기존 경계 정리 | 미착수 | 0 | 9 | 관찰 기간 전 | 운영 관찰 후 legacy 제거 |
-| 6. Django UI 이전 | 진행 중 | 13 | 22 | 정적 배포·확장 UI 검증 미완료 | cache·문서/차트·나머지 보안 회귀 검증 |
+| 6. Django UI 이전 | 진행 중 | 15 | 22 | 정적 배포·확장 UI 검증 미완료 | 문서/차트·나머지 보안 회귀 검증 |
 | 7. 로컬 origin gateway | 완료 | 11 | 11 | 없음 | 운영 gateway/Ingress 계획으로 확장 시 별도 검토 |
 
 상태 정의:
@@ -680,6 +680,7 @@ UI의 untrusted text는 `escapeHtml`을 거쳐 렌더링하고, 웹 출처 URL�
 
 | 날짜 | 결정 | 근거 | 영향 |
 | --- | --- | --- | --- |
+| 2026-08-21 | 정적 자산은 manifest fingerprint와 1년 immutable cache, HTML은 no-cache를 사용 | HTML은 새 해시 자산을 즉시 참조해야 하고, 내용이 바뀐 정적 파일은 새 URL을 받으므로 장기 cache가 안전함 | `collectstatic --clear --noinput`이 배포·로컬 launcher의 필수 단계이며 gateway/CDN은 `/django-static/*`을 장기 cache 처리 |
 | 2026-08-20 | Django 1차 범위를 인증·계정 관리로 제한 | 문서·MCP·ETL은 이미 별도 경계를 가지며 Django 이전 요구가 확인되지 않음 | 변경 범위와 회귀 위험 감소 |
 | 2026-08-20 | 기존 FastAPI 디렉터리를 초기 전환에서 이동하지 않음 | 기능 변경과 대규모 rename을 분리해야 검토·롤백이 쉬움 | `django_app/`만 병행 추가 |
 | 2026-08-20 | 정적 UI와 문서 다운로드는 첫 전환에서 FastAPI에 유지 | Django 기능을 필요로 하지 않으며 공개 계약 변경을 줄일 수 있음 | 인증 경로만 우선 전환 |

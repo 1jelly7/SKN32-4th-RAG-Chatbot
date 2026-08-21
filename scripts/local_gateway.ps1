@@ -134,7 +134,7 @@ function Start-LocalGateway {
     $started = @()
     try {
         Invoke-Checked $PythonPath @("django_app/manage.py", "check")
-        Invoke-Checked $PythonPath @("django_app/manage.py", "collectstatic", "--noinput")
+        Invoke-Checked $PythonPath @("django_app/manage.py", "collectstatic", "--clear", "--noinput")
         Invoke-Checked $nginx @("-p", $NginxPrefix, "-t", "-c", $NginxConfig)
 
         $djangoArguments = @{

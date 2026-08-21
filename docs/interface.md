@@ -330,8 +330,7 @@ FastAPI의 내부 client timeout은 `AUTH_INTROSPECTION_TIMEOUT_SECONDS`이며 �
 ### 사용자 UI
 
 `GET /`은 Django `web` 앱이 `web/index.html` template으로 제공한다. HTML은 no-cache이고
-CSS·JavaScript는 `/django-static/web/*`, 전환 기간의 Chart.js bundle은
-`/django-static/vendor/*`에서 제공한다. UI는 같은 origin의 `/api/auth/*`, `/api/chat`과
+CSS·JavaScript·Chart.js bundle은 `/django-static/web/*`에서 제공한다. UI는 같은 origin의 `/api/auth/*`, `/api/chat`과
 `/api/documents/*`만 호출한다.
 
 로컬에서 `DJANGO_SERVE_STATIC_FILES=true`이면 Django가 finder 기반 개발용 정적 route를
@@ -391,7 +390,9 @@ token 계열 필드는 공개하지 않는다.
 ### 공통 관측 헤더
 
 FastAPI middleware는 응답에 `X-Request-ID`와 `Server-Timing`을 추가한다. 채팅 응답의
-`request_id`는 헤더 ID와 같다. UI 정적 진입 파일은 `Cache-Control: no-store`를 사용한다.
+`request_id`는 헤더 ID와 같다. HTML page는 `Cache-Control: no-cache`를 사용하고,
+`collectstatic` manifest가 가리키는 hash된 UI 정적 자산은
+`Cache-Control: public, max-age=31536000, immutable`을 사용한다.
 
 ## 공개 오류 매핑
 

@@ -205,7 +205,7 @@ gateway 기준 Django Admin은 `http://127.0.0.1:8000/admin/`, FastAPI OpenAPI�
 로컬 gateway와 운영 배포에서는 먼저 Django UI·Admin 정적 파일을 수집한다.
 
 ```powershell
-.venv\Scripts\python.exe django_app\manage.py collectstatic --noinput
+.venv\Scripts\python.exe django_app\manage.py collectstatic --clear --noinput
 ```
 
 생성되는 `staticfiles/`는 배포 산출물이며 Git에 커밋하지 않는다. TLS 종료 proxy를 쓰는
@@ -214,6 +214,12 @@ gateway 기준 Django Admin은 `http://127.0.0.1:8000/admin/`, FastAPI OpenAPI�
 수 있는 proxy가 들어오는 `X-Forwarded-Proto`를 제거한 뒤 직접 다시 설정하는 경우에만
 `DJANGO_TRUST_X_FORWARDED_PROTO=true`를 사용한다. 내부 Django 서비스 hostname도
 `DJANGO_ALLOWED_HOSTS`에 포함해야 한다.
+
+`ManifestStaticFilesStorage`가 `collectstatic` 중 파일 내용 hash가 포함된 정적 URL과
+manifest를 생성한다. HTML page는 `no-cache`를 유지하고, Nginx/CDN은 hash된
+`/django-static/*` 자산에 `Cache-Control: public, max-age=31536000, immutable`을
+설정한다. 새 배포에서는 반드시 `collectstatic --clear --noinput`을 먼저 실행해 더 이상
+참조되지 않는 이전 번들을 제거한다.
 
 공개 gateway에서는 `/api/auth/login`에 조직 표준 rate limit을 적용하고
 `/internal/auth/*`를 외부 라우팅·접근 로그의 header 수집 대상에서 제외한다. Django

@@ -131,6 +131,11 @@ USE_TZ = True
 
 STATIC_URL = "/django-static/"
 STATIC_ROOT = PROJECT_ROOT / "staticfiles"
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.ManifestStaticFilesStorage",
+    }
+}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 SESSION_COOKIE_NAME = "chatbot_session"

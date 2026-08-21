@@ -116,8 +116,8 @@ Django test DB와 fake MCP를 사용한다. 어느 테스트도 외부 MCP 프�
 ### TS-A01-UI: 사용자 화면 소유권
 
 - `GET /`의 사용자 HTML은 Django `web` 앱이 제공하며 HTML 응답은 no-cache다.
-- CSS·JavaScript는 `/django-static/web/*`, 전환 기간 Chart.js는
-  `/django-static/vendor/*` 경로로 해석된다.
+- CSS·JavaScript와 Chart.js는 `/django-static/web/*` 경로로 해석된다. production
+  `collectstatic` manifest는 파일 내용 hash가 포함된 URL을 반환한다.
 - FastAPI의 `/`, `/chat.js`, `/style.css`는 `404`이며 FastAPI가 UI를 다시 소유하지 않는다.
 - UI의 인증·채팅·문서 호출은 같은 origin 상대 `/api/*` 경로를 유지한다.
 
