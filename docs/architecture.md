@@ -237,8 +237,8 @@ rollback 자산이며 Django 전환 뒤의 계정 생성·비밀번호 변경 �
 
 - 단일 공개 주소의 reverse proxy/Ingress 설정은 저장소에 없으며 외부 배포 계층에서
   Django의 `/`·인증·Admin·정적 파일과 FastAPI API 경로를 분리해야 한다.
-- Chart.js vendor bundle은 UI 전환 관찰 기간 동안 `app/web/vendor/`에서 Django
-  staticfiles가 수집한다. 나머지 UI source의 정본은 `django_app/web/`이다.
+- Chart.js vendor bundle을 포함한 UI source의 정본은 `django_app/web/`이며,
+  `collectstatic`은 `/django-static/web/*` namespace로 수집한다.
 - `/internal/auth/*`의 실제 private network/TLS·network policy는 배포 환경에서 검증해야 한다.
 - 기본 MCP transport는 same-process이며 원격 URL transport가 없다.
 - Redis adapter와 readiness endpoint가 없다. `/api/health`는 프로세스 liveness만 확인한다.

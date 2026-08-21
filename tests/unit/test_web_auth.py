@@ -45,7 +45,7 @@ def test_chart_ui_uses_local_bundle_and_stable_sizing() -> None:
     script = WEB_SCRIPT.read_text(encoding="utf-8")
     stylesheet = WEB_STYLE.read_text(encoding="utf-8")
 
-    assert "{% static 'vendor/chart.umd.min.js' %}" in index
+    assert "{% static 'web/vendor/chart.umd.min.js' %}" in index
     assert "cdnjs.cloudflare.com" not in index
     assert "const chartType = table.chart_type || 'bar';" in script
     assert "maintainAspectRatio: false" in script

@@ -19,7 +19,7 @@ def test_django_serves_chat_ui_shell_without_cache() -> None:
     assert "no-cache" in response.headers["Cache-Control"]
     assert "/django-static/web/style.css" in response.content.decode()
     assert "/django-static/web/chat.js" in response.content.decode()
-    assert "/django-static/vendor/chart.umd.min.js" in response.content.decode()
+    assert "/django-static/web/vendor/chart.umd.min.js" in response.content.decode()
     assert response.headers["Content-Security-Policy"] == (
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; "
@@ -35,10 +35,10 @@ def test_django_admin_is_not_covered_by_web_ui_csp() -> None:
 
 
 def test_django_staticfiles_discovers_all_ui_assets() -> None:
-    """collectstatic가 자체 UI source와 전환 기간 vendor bundle을 모두 찾는다."""
+    """collectstatic가 Django web 앱이 소유하는 UI 자산을 모두 찾는다."""
     assert finders.find("web/style.css") is not None
     assert finders.find("web/chat.js") is not None
-    assert finders.find("vendor/chart.umd.min.js") is not None
+    assert finders.find("web/vendor/chart.umd.min.js") is not None
 
 
 def test_development_static_routes_serve_ui_assets() -> None:
@@ -47,7 +47,7 @@ def test_development_static_routes_serve_ui_assets() -> None:
 
     stylesheet = client.get("/django-static/web/style.css")
     script = client.get("/django-static/web/chat.js")
-    chart = client.get("/django-static/vendor/chart.umd.min.js")
+    chart = client.get("/django-static/web/vendor/chart.umd.min.js")
 
     assert stylesheet.status_code == 200
     assert stylesheet.headers["Content-Type"].startswith("text/css")

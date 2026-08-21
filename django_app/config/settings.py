@@ -131,9 +131,6 @@ USE_TZ = True
 
 STATIC_URL = "/django-static/"
 STATIC_ROOT = PROJECT_ROOT / "staticfiles"
-# Chart.js vendor bundle은 UI 전환 관찰 기간 동안 기존 위치에서 수집한다.
-# 자체 UI source의 정본은 django_app/web이며 이 호환 경로는 단계 6 종료 전에 제거한다.
-STATICFILES_DIRS = [PROJECT_ROOT / "app" / "web"]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 SESSION_COOKIE_NAME = "chatbot_session"

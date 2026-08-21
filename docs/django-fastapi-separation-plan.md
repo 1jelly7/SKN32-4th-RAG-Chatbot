@@ -166,7 +166,6 @@ project/
 │   │   └── urls.py
 │   └── config/
 ├── app/                        # FastAPI API·Agent·MCP 조율
-│   └── web/vendor/             # 전환 기간 Chart.js collectstatic 호환 source
 └── staticfiles/                # collectstatic 산출물, Git 제외
 ```
 
@@ -428,7 +427,7 @@ composition dependency가 없어 동작하지 않으므로 그렇게 복구하�
 - [x] Django에 인증 앱과 분리된 `web` 앱 및 URL namespace 설계
 - [x] HTML을 `django_app/web/templates/web/`로 옮기고 Django template 렌더링 경계 정의
 - [x] CSS·JavaScript를 `django_app/web/static/web/` namespace로 이전
-- [ ] Chart.js vendor bundle을 `django_app/web/static/web/vendor/`로 이전
+- [x] Chart.js vendor bundle을 `django_app/web/static/web/vendor/`로 이전
 - [x] UI가 `/api/auth/*`와 `/api/chat`을 같은 origin 상대 경로로 호출하도록 유지
 - [x] 사용자 문자열·채팅 응답 렌더링의 escaping과 CSP 적용 방안 검토
 - [ ] Django page 응답의 cache 정책과 정적 자산의 fingerprint·장기 cache 정책 분리
@@ -436,9 +435,9 @@ composition dependency가 없어 동작하지 않으므로 그렇게 복구하�
 - [ ] gateway의 `/`와 UI page route를 Django로 전환하고 FastAPI API 경로를 명시적으로 유지
 - [x] 기존 `/chat.js`, `/style.css`, `/static/*`는 redirect 없이 제거하고 새 HTML이
   `/django-static/*`만 참조하도록 호환 정책 확정
-- [x] Chart.js는 전환 기간에 `app/web/vendor/`에서 Django staticfiles가 수집하도록 보존
+- [x] Chart.js를 Django `web` static namespace에서 수집하도록 전환
 - [x] FastAPI의 `/`, UI asset route와 `/static` mount를 제거하고 API 전용 계약으로 변경
-- [ ] vendor 이전과 gateway 안정화 뒤 `app/web/` 호환 디렉터리·설정을 제거
+- [x] vendor 이전과 gateway 안정화 뒤 `app/web/` 호환 디렉터리·설정을 제거
 
 최종 경로 라우팅 계약:
 
@@ -470,8 +469,8 @@ composition dependency가 없어 동작하지 않으므로 그렇게 복구하�
 3. `/`는 Django, 명시한 `/api/*`는 각 소유 서비스로 보내도록 gateway를 전환한다.
 4. 치명적 UI 회귀 시 gateway와 애플리케이션을 UI 이전 직전 검증 버전으로 되돌린다.
    account DB migration과 FastAPI API 계약은 되돌리지 않는다.
-5. 관찰 기간과 성공 기준을 충족한 뒤 Chart.js를 Django 정본으로 옮기고
-   `app/web/`·`STATICFILES_DIRS` 호환 설정을 제거한다.
+5. 관찰 기간과 성공 기준을 충족한 뒤 Django `web` 정적 자산만 남아 있는지 확인하고
+   이전 FastAPI UI 경로가 다시 추가되지 않게 검토한다.
 
 완료 조건:
 
@@ -667,7 +666,7 @@ UI의 untrusted text는 `escapeHtml`을 거쳐 렌더링하고, 웹 출처 URL�
 | 3. 인증 계약 | 진행 중 | 6 | 7 | 실제 reverse proxy/Ingress 형태 미확인 | 배포 경로 검토 |
 | 4. 트래픽 전환 | 진행 중 | 8 | 10 | 외부 경로 라우팅·rollback 검증 필요 | reverse proxy/Ingress 경로 전환 |
 | 5. 기존 경계 정리 | 미착수 | 0 | 9 | 관찰 기간 전 | 운영 관찰 후 legacy 제거 |
-| 6. Django UI 이전 | 진행 중 | 11 | 22 | 정적 배포·확장 UI 검증 미완료 | cache·문서/차트·나머지 보안 회귀 검증 |
+| 6. Django UI 이전 | 진행 중 | 13 | 22 | 정적 배포·확장 UI 검증 미완료 | cache·문서/차트·나머지 보안 회귀 검증 |
 | 7. 로컬 origin gateway | 완료 | 11 | 11 | 없음 | 운영 gateway/Ingress 계획으로 확장 시 별도 검토 |
 
 상태 정의:

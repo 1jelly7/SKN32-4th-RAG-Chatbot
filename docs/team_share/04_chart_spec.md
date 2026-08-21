@@ -87,7 +87,8 @@ chart_type: Literal["bar", "line"] | None = None
 
 ### 3-4. `index.html` — CDN 의존 제거
 
-Chart.js를 `app/web/vendor/chart.umd.min.js`로 내려받아 두고 로컬 경로로 로드한다.
+Chart.js를 `django_app/web/static/web/vendor/chart.umd.min.js`에 두고 Django static
+경로로 로드한다.
 사내망·오프라인 시연에서 CDN 차단 시 차트만 조용히 안 뜨는 문제(에러도 안 남)를 없앤다.
 
 ## 4. sales가 이미 보장하는 것 (믿고 구현해도 되는 전제)

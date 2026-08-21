@@ -257,7 +257,7 @@
   찾아 차트가 안 그려짐)를 포함해 상세 스펙을 이미 작성해뒀다.
 - **요청 내용**: [04_chart_spec.md](04_chart_spec.md) 전체(요약: `TableData.chart_type`
   필드 추가, `_build_tables` 라벨/값 컬럼 선택 개선, `chat.js`의 `drawChart`가
-  `chart_type`을 반영하도록 수정, Chart.js를 CDN에서 `app/web/vendor/`로 이관).
+  `chart_type`을 반영하도록 수정, Chart.js를 CDN에서 Django `web` static namespace로 이관).
 - **완료 기준**: 04번 문서 5절의 검증 체크리스트 전부 통과.
 
 

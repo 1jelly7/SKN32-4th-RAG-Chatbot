@@ -31,7 +31,6 @@ skn32_3rd_pj_rag_mcp_chatbot/
 │   ├── cache/                           # Backend
 │   ├── core/                            # Backend
 │   ├── logging/                         # Backend
-│   └── web/vendor/                      # Backend (UI 전환 기간 Chart.js 호환 source)
 ├── django_app/                           # Backend (UI·계정·인증·Admin·migration)
 ├── shared/                               # Backend (프레임워크 독립 권한 계약)
 ├── ingestion/                           # RAG PDF
@@ -74,7 +73,6 @@ skn32_3rd_pj_rag_mcp_chatbot/
 | `app/cache/` | 박회종 | 전체 | 키 재료·TTL·무효화의 유일한 앱 경계 |
 | `app/core/`, `.env.example` | 박회종 | 전체 | 설정 필드 추가·삭제를 함께 반영, 비밀값 금지 |
 | `app/logging/` | 박회종 | 전체 | API/Agent 로그 인터페이스와 민감정보 제거 |
-| `app/web/vendor/` | 박회종 | 없음 | 전환 기간 vendor 호환 source만 유지하고 검증 후 Django 정본으로 이동 |
 | `ingestion/` | 이태혁 | 박회종 | 로더·청킹·임베딩·인덱스 버전 책임 |
 | `mcp_servers/document_tools/` | 이태혁 | 박회종 | 활성 문서 ID 허용 목록, FAISS 검색, 경로 미노출 |
 | `database/document/` | 이태혁 | 박회종 | `document_paths`와 다운로드 ID 매핑 동기화 |
