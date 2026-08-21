@@ -454,7 +454,7 @@ composition dependency가 없어 동작하지 않으므로 그렇게 복구하�
 
 - [x] Django page view의 공개 응답과 template/static URL 테스트
 - [x] 로그인, 세션 복원, 로그아웃, CSRF 실패와 만료 세션의 브라우저 흐름 테스트
-- [ ] Django UI → FastAPI chat/document API 동일 origin 통합 테스트
+- [x] Django UI → FastAPI chat/document API 동일 origin 통합 테스트
 - [ ] 표·차트·문서 다운로드·오류·부분 실패 UI 회귀 테스트
 - [ ] XSS escaping, CSP, cookie 속성, 내부 URL·비밀정보 비노출 점검
 - [x] 정적 자산 누락, content type, cache header와 collectstatic manifest 검증
@@ -666,7 +666,7 @@ UI의 untrusted text는 `escapeHtml`을 거쳐 렌더링하고, 웹 출처 URL�
 | 3. 인증 계약 | 진행 중 | 6 | 7 | 실제 reverse proxy/Ingress 형태 미확인 | 배포 경로 검토 |
 | 4. 트래픽 전환 | 진행 중 | 8 | 10 | 외부 경로 라우팅·rollback 검증 필요 | reverse proxy/Ingress 경로 전환 |
 | 5. 기존 경계 정리 | 미착수 | 0 | 9 | 관찰 기간 전 | 운영 관찰 후 legacy 제거 |
-| 6. Django UI 이전 | 진행 중 | 15 | 22 | 정적 배포·확장 UI 검증 미완료 | 문서/차트·나머지 보안 회귀 검증 |
+| 6. Django UI 이전 | 진행 중 | 16 | 22 | 정적 배포·확장 UI 검증 미완료 | 문서/차트·나머지 보안 회귀 검증 |
 | 7. 로컬 origin gateway | 완료 | 11 | 11 | 없음 | 운영 gateway/Ingress 계획으로 확장 시 별도 검토 |
 
 상태 정의:

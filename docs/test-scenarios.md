@@ -120,6 +120,8 @@ Django test DB와 fake MCP를 사용한다. 어느 테스트도 외부 MCP 프�
   `collectstatic` manifest는 파일 내용 hash가 포함된 URL을 반환한다.
 - FastAPI의 `/`, `/chat.js`, `/style.css`는 `404`이며 FastAPI가 UI를 다시 소유하지 않는다.
 - UI의 인증·채팅·문서 호출은 같은 origin 상대 `/api/*` 경로를 유지한다.
+- Django가 발급한 유효 세션은 `/api/chat`과 `/api/documents/download`에서 FastAPI의
+  내부 인증 확인을 통과하며, gateway는 `/api/auth/*`를 Django, 두 API를 FastAPI로 전달한다.
 
 ### TS-A02: 라우팅과 조회 선택
 
