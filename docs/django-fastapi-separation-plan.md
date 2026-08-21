@@ -1,7 +1,7 @@
 # Django·FastAPI 구조 분리 계획 및 진행 현황
 
 > 최종 갱신: 2026-08-20 KST  
-> 전체 상태: **Django 인증·MySQL 계정 이관 완료 / Django UI 코드 이전 진행 중·로컬 gateway 구현 대기**  
+> 전체 상태: **Django 인증·MySQL 계정 이관 완료 / Django UI 코드 이전 진행 중·보안·정적 배포 검증 대기**
 > 문서 목적: FastAPI 단일 애플리케이션의 인증·계정 책임을 Django로 분리하고, 후속 UI
 > 고도화에서 화면 제공 책임까지 Django로 이전하는 범위와 진행 상태를 한 곳에서 관리한다.
 
@@ -454,7 +454,7 @@ composition dependency가 없어 동작하지 않으므로 그렇게 복구하�
 검증 계획:
 
 - [x] Django page view의 공개 응답과 template/static URL 테스트
-- [ ] 로그인, 세션 복원, 로그아웃, CSRF 실패와 만료 세션의 브라우저 흐름 테스트
+- [x] 로그인, 세션 복원, 로그아웃, CSRF 실패와 만료 세션의 브라우저 흐름 테스트
 - [ ] Django UI → FastAPI chat/document API 동일 origin 통합 테스트
 - [ ] 표·차트·문서 다운로드·오류·부분 실패 UI 회귀 테스트
 - [ ] XSS escaping, CSP, cookie 속성, 내부 URL·비밀정보 비노출 점검
@@ -571,7 +571,7 @@ AUTH_COOKIE_SECURE=false
 - [x] README의 로컬 실행 명령을 gateway 기준으로 변경
 - [x] direct upstream 주소는 진단용임을 문서에 명시
 - [x] 단일 launcher로 Django·FastAPI·Nginx 시작·상태·재시작·종료 자동화
-- [ ] 동일 origin 브라우저 회귀 검증 및 rollback 절차 확인
+- [x] 동일 origin 브라우저 회귀 검증 및 rollback 절차 확인
 
 #### 검증 및 rollback 계획
 
@@ -644,8 +644,13 @@ AUTH_COOKIE_SECURE=false
 Django UI 코드 이전 뒤 system check, migration·collectstatic dry-run과 전체 pytest
 `402 passed, 27 skipped`를 확인했다. reverse proxy와 실제 브라우저 흐름은 검증하지
 않았다. 로컬 gateway 설정 추가 뒤 Django system check와 실제 collectstatic(130개 파일),
-Nginx 설정 검사, launcher 기반 전체 기동·HTTP smoke·전체 종료를 확인했다. 실제 로그인과
-채팅을 포함한 브라우저 회귀 검증은 아직 보류했다.
+Nginx 설정 검사, launcher 기반 전체 기동·HTTP smoke·전체 종료를 확인했다. 브라우저에서
+로그인 화면·정적 자산·잘못된 로그인 오류와 내부 인증 경로의 외부 `404`를 확인했다.
+승인된 테스트 계정이 없어 실제 로그인·채팅·로그아웃 성공 흐름 검증은 아직 보류했다.
+이후 승인된 로컬 테스트 계정으로 로그인, 세션 복원, FastAPI 채팅, 로그아웃과 새로고침
+후 로그인 화면 복귀를 실제 브라우저에서 확인했다. CSRF 토큰 없는 로그인은 `403`,
+인증 없는 채팅은 `401`이며, 테스트용 2초 세션 만료 뒤 새로고침하면 로그인 화면으로
+되돌아가는 것을 확인했다.
 
 ## 8. 진행 현황 요약
 
@@ -657,8 +662,8 @@ Nginx 설정 검사, launcher 기반 전체 기동·HTTP smoke·전체 종료를
 | 3. 인증 계약 | 진행 중 | 6 | 7 | 실제 reverse proxy/Ingress 형태 미확인 | 배포 경로 검토 |
 | 4. 트래픽 전환 | 진행 중 | 8 | 10 | 외부 경로 라우팅·rollback 검증 필요 | reverse proxy/Ingress 경로 전환 |
 | 5. 기존 경계 정리 | 미착수 | 0 | 9 | 관찰 기간 전 | 운영 관찰 후 legacy 제거 |
-| 6. Django UI 이전 | 진행 중 | 9 | 22 | 실제 gateway·브라우저·정적 배포 미검증 | gateway 전환과 브라우저 회귀 검증 |
-| 7. 로컬 origin gateway | 진행 중 | 10 | 11 | 로그인·채팅 브라우저 회귀 검증 보류 | 동일 origin 브라우저 회귀와 rollback 검증 |
+| 6. Django UI 이전 | 진행 중 | 10 | 22 | 정적 배포·확장 UI·CSP 검증 미완료 | CSP·cache·문서/차트 회귀 검증 |
+| 7. 로컬 origin gateway | 완료 | 11 | 11 | 없음 | 운영 gateway/Ingress 계획으로 확장 시 별도 검토 |
 
 상태 정의:
 
