@@ -1,3 +1,0 @@
--- Run after 001-003 through scripts/seed_accounts.py, which injects scrypt hashes from environment variables.
--- This template deliberately has no passwords or hashes. Do not run it directly in production.
--- Required usernames and roles: admin/admin, hr/hr, finance/finance.

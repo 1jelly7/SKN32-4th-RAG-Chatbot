@@ -55,7 +55,6 @@ if len(AUTH_INTROSPECTION_KEY) < 32 and not DEBUG:
         "AUTH_INTROSPECTION_KEY must contain at least 32 characters when DJANGO_DEBUG is false"
     )
 LEGACY_ACCOUNT_TIME_ZONE = os.getenv("LEGACY_ACCOUNT_TIME_ZONE", "Asia/Seoul")
-LEGACY_AUTH_ROLLBACK_WINDOW = _boolean("LEGACY_AUTH_ROLLBACK_WINDOW", True)
 
 INSTALLED_APPS = [
     "django.contrib.admin",

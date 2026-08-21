@@ -42,9 +42,8 @@ transport는 `InProcessMCPPort`이며 같은 Python 프로세스에서 Tool serv
 연결되지 않았다.
 
 활성 진입점은 FastAPI `app.main:app`과 Django
-`django_app.config.asgi:application`이다. `app/api/auth.py`와
-`app/auth/{repository,service,sessions,session_store}.py`는 배포 rollback용 legacy
-소스이며 현재 FastAPI 라우터·composition에는 연결되지 않는다.
+`django_app.config.asgi:application`이다. 계정 DB 조회, 비밀번호 검증, 로그인과 세션
+발급은 Django만 담당하며 FastAPI는 내부 인증 확인 API만 호출한다.
 
 ## HTTP 요청 흐름
 
@@ -73,10 +72,6 @@ transport는 `InProcessMCPPort`이며 같은 Python 프로세스에서 Tool serv
 UI에서 버튼을 숨기는 것만으로 권한을 판단하지 않는다. Data/Document Tool 진입점에서
 서버가 만든 사용자 컨텍스트를 다시 검사한다. `account_db`는 Django 전용 저장소이므로
 FastAPI·Graph·MCP의 `allowed_databases`에 포함하지 않는다.
-
-legacy DB로 되돌릴 수 있는 관찰 기간에는 `LEGACY_AUTH_ROLLBACK_WINDOW=true`를 유지해
-Django Admin의 계정 추가·삭제와 이관 계정 변경을 막는다. 현재 rollback은 런타임
-feature flag가 아니라 이전 배포 버전과 보존한 `accounts` 테이블로 되돌리는 절차다.
 
 ### 채팅 처리
 
@@ -211,12 +206,11 @@ seed와 규칙을 사용하고 실행 중 LLM API를 호출하지 않는다.
 | `etl/purchase/`, `etl/sales/` | 원천 workbook 검증·변환·UPSERT |
 | `django_app/accounts/migrations/` | 계정 schema와 기존 계정 보존 이관 |
 | `django_app/manage.py createsuperuser` | Django 관리자 계정 생성 |
-| `scripts/seed_accounts.py` | 분리 전 legacy `accounts` 시드; 현재 활성 Django 계정 생성에 사용 금지 |
 
-현재 저장소에는 account/document/purchase/sales 초기화를 한 번에 실행하는
-`scripts/setup_all.py`가 없다. 계정 migration은 Django 관리 명령으로, 문서 등록·인덱싱과
-구매·판매 ETL은 각 소유 스크립트로 별도 실행한다. `scripts/seed_accounts.py`는 legacy
-rollback 자산이며 Django 전환 뒤의 계정 생성·비밀번호 변경 절차로 사용하지 않는다.
+`setup_all.py`는 account migration, 문서 등록·인덱싱, 구매·판매 ETL을 정해진 순서로
+조립한다. 기본은 계획 출력이며 실제 DB·FAISS·ETL 변경은 `--apply`로 명시 승인한다.
+계정 migration과 초기 관리자는 Django 관리 명령을 사용하고, 원본 workbook 경로·도메인별
+생략 옵션은 CLI에서 지정한다.
 
 ## 소유권 기반 배치
 

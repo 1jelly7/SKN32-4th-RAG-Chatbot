@@ -325,7 +325,7 @@ header·cookie를 access log에 기록하지 않는다.
 | `503` 또는 기타 오류/잘못된 JSON | 인증 서비스 설정·가용성·계약 오류 | `503` |
 
 FastAPI의 내부 client timeout은 `AUTH_INTROSPECTION_TIMEOUT_SECONDS`이며 환경 HTTP proxy를
-사용하지 않는다. `app/api/auth.py`의 legacy 라우터는 현재 FastAPI 앱에 등록되지 않는다.
+사용하지 않는다.
 
 ### 사용자 UI
 

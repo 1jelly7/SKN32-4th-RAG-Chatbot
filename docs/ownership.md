@@ -91,10 +91,9 @@ skn32_3rd_pj_rag_mcp_chatbot/
 | 구매 적재·View 보조 스크립트 | 이호원 | `etl/purchase/`와 중복 계약을 만들지 않음 |
 | 판매 적재 보조 스크립트 | 문동원 | `etl/sales/`를 정본으로 유지 |
 | `django_app/manage.py`, 계정 migration | 박회종 | 관리자 생성과 기존 계정 이관 시 평문·해시 로그 금지 |
-| `scripts/seed_accounts.py` | 박회종 | legacy rollback 전용; 활성 Django 계정 관리에 사용 금지 |
 | 평가·성능 스크립트 | 박회종 | fixture·공개 응답만 기록하고 질문 원문·근거·비밀값 로그 금지 |
 
-현재 통합 `scripts/setup_all.py`는 존재하지 않는다. 새 통합 초기화 도구를 만들려면
+현재 통합 초기화 도구는 존재하지 않는다. 새 통합 초기화 도구를 만들려면
 Backend 단독으로 DB·경로를 추정하지 말고 문서, 구매, 판매 담당자가 각 단계의 명령,
 멱등성, 권한과 실패 복구를 함께 검토한다.
 
@@ -110,10 +109,6 @@ Backend 단독으로 DB·경로를 추정하지 말고 문서, 구매, 판매 �
 | `etl/purchase/`, `etl/sales/` | 검증 후 INSERT/UPDATE/UPSERT | API 요청 경로에서 실행 |
 | `app/cache/` | 최종 답변 cache get/set/delete | Graph 노드에서 저장소 직접 접근 |
 | `app/logging/` | 비밀값 없는 파일 로그 | 질문 원문, 전체 근거, API key, 비밀번호, 내부 경로 기록 |
-
-`LEGACY_AUTH_ROLLBACK_WINDOW=true`인 동안 `django_app/accounts/admin.py`는 계정 추가·삭제와
-이관 계정 변경을 막는다. 이 잠금을 해제하거나 legacy 인증 소스를 제거하는 변경은
-rollback 종료 결정, 계정 DB 백업·감사 결과와 함께 Backend/통합 담당이 검토한다.
 
 ## 생성물과 원천 데이터
 

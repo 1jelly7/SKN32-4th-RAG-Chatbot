@@ -25,8 +25,8 @@ project/
 [구조 분리 계획](docs/django-fastapi-separation-plan.md)이다.
 
 현재 활성 FastAPI 앱은 `app.main:app`, Django 앱은
-`django_app.config.asgi:application`이다. `app/api/auth.py`와 일부 `app/auth/` 구현은
-관찰 기간의 배포 rollback을 위한 legacy 소스이며 FastAPI 활성 라우터에 등록되지 않는다.
+`django_app.config.asgi:application`이다. 계정·로그인·세션 발급은 Django만 소유하며,
+FastAPI는 내부 인증 확인 API를 통해서만 사용자 컨텍스트를 받는다.
 
 ## 준비
 
@@ -61,7 +61,6 @@ Copy-Item .env.example .env
 | `AUTH_COOKIE_SECURE` | HTTPS 환경의 session·CSRF cookie secure 속성 |
 | `DJANGO_SERVE_STATIC_FILES` | 로컬에서만 Django가 UI 정적 파일을 직접 제공할지 여부 |
 | `LEGACY_ACCOUNT_TIME_ZONE` | 기존 `accounts`의 naive `DATETIME` 해석 시간대 |
-| `LEGACY_AUTH_ROLLBACK_WINDOW` | legacy rollback 관찰 중 Admin 계정 변경 잠금 |
 
 ### Django 인증 보안 설정
 
@@ -141,12 +140,31 @@ Django 관리자 계정이 필요하면 migration 뒤에 생성한다.
 이 명령은 이메일, 표시 이름, 애플리케이션 역할을 함께 입력받는다. 애플리케이션의
 `admin` 역할만으로 Django Admin 권한이 생기지는 않는다.
 
-`LEGACY_AUTH_ROLLBACK_WINDOW=true`인 관찰 기간에는 Django Admin의 계정 추가·삭제와
-이관 계정 변경을 차단한다. 계정 집합이나 비밀번호·역할·활성 상태가 legacy 테이블과
-달라지면 이전 FastAPI 인증으로 안전하게 되돌릴 수 없기 때문이다. 관찰 기간을 종료하고
-legacy rollback을 포기하는 승인 뒤에만 이 값을 `false`로 바꾼다.
-기존 `accounts`가 없는 신규 설치는 legacy rollback 대상이 없으므로 migration 후 이 값을
-`false`로 설정할 수 있다.
+## 통합 초기화
+
+`setup_all.py`는 README의 Django migration, 문서 경로 등록·FAISS 인덱싱, 구매·판매 ETL을
+정해진 순서로 조립한다. 기본 실행은 변경 없이 계획만 출력한다.
+
+```powershell
+.venv\Scripts\python.exe setup_all.py
+```
+
+연결 정보가 채워진 `.env`와 선택한 ETL 원본 workbook을 준비한 뒤에만 실제 실행한다.
+
+```powershell
+.venv\Scripts\python.exe setup_all.py --apply
+```
+
+문서 또는 특정 도메인을 아직 준비하지 않았다면 해당 단계를 명시적으로 생략한다.
+
+```powershell
+.venv\Scripts\python.exe setup_all.py --apply --skip-documents --skip-purchase
+```
+
+기본 ETL 원본 대신 다른 workbook을 쓰려면 `--purchase-source`, `--sales-source`를 사용한다.
+대화형 Django 관리자 생성은 `--create-superuser` 옵션으로 migration 뒤에 별도 실행한다.
+이 도구는 `.env`를 만들거나 수정하지 않으며, `--apply` 전에는 DB·FAISS·ETL 데이터를
+변경하지 않는다.
 
 ## 로컬 origin gateway 실행
 
@@ -255,5 +273,3 @@ UI 이전 뒤 최근 검증은 Django system/migration/static dry-run check와 �
 - 전환 기간에 기존 위치에서 수집하는 Chart.js vendor bundle을 Django `web/static/web/`
   정본으로 옮긴 뒤 호환 설정을 제거한다.
 - 동일 origin 실제 브라우저에서 로그인·채팅·표·차트·문서 다운로드를 검증한다.
-- 관찰 기간과 정상 로그인 피크를 확인한 뒤 legacy FastAPI 인증 소스·설정을 별도 변경으로
-  제거한다.

@@ -5,7 +5,6 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.auth.gateway import AuthenticatedUser, AuthenticationUnavailableError
-from app.auth.passwords import hash_password, verify_password
 from app.auth.policy import allowed_databases
 from app.cache.repository import MemoryCache
 from app.core.dependencies import AppDependencies
@@ -55,13 +54,6 @@ def _user(
         role=role,
         session_id=session_id,
     )
-
-
-def test_legacy_password_hash_never_contains_plaintext_and_verifies() -> None:
-    encoded = hash_password("correct horse battery staple")
-    assert "correct horse" not in encoded
-    assert verify_password("correct horse battery staple", encoded)
-    assert not verify_password("wrong", encoded)
 
 
 def test_missing_or_unknown_django_session_is_unauthorized() -> None:

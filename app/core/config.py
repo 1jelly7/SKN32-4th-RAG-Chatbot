@@ -32,18 +32,6 @@ class Settings(BaseSettings):
     document_db_user: str
     document_db_password: str
     document_db_database: str
-    # 단계 5의 레거시 인증 제거가 끝날 때까지 롤백 전용 설정 계약을 보존한다.
-    account_db_host: str = "127.0.0.1"
-    account_db_port: int = 3306
-    account_db_name: str = "account_db"
-    account_db_user: str = ""
-    account_db_password: str = ""
-    auth_secret_key: str = "change-this-in-production"
-    auth_access_token_expire_minutes: int = 60
-    auth_cookie_secure: bool = False
-    account_seed_admin_password: str | None = None
-    account_seed_hr_password: str | None = None
-    account_seed_finance_password: str | None = None
     django_auth_introspection_url: str = "http://127.0.0.1:8001/internal/auth/introspect"
     auth_introspection_key: str = ""
     auth_introspection_timeout_seconds: float = Field(default=2.0, gt=0, le=30.0)

@@ -282,11 +282,8 @@ project/
   이 테이블을 쓰지 않되, 이전 배포 버전으로 rollback할 때 필요한 조회와
   `last_login_at` 갱신 권한은 rollback 자격 증명에 유지한다. 감사 명령 결과와 인증 지표를
   확인한 뒤 단계 5의 별도 변경으로 제거한다.
-- 관찰 기간에는 `LEGACY_AUTH_ROLLBACK_WINDOW=true`로 Django Admin의 계정 추가·삭제와
-  이관 계정 변경을 차단한다. 계정 집합·비밀번호·역할·활성 상태를 변경해야 한다면
-  legacy rollback을 포기하고 forward fix로 전환할지, 별도 승인된 동기화 절차를 만들지
-  먼저 결정한다. 자동
-  동기화가 없는 상태에서 설정만 해제해 두 저장소를 분기시키지 않는다.
+- rollback 종료 전에는 Django Admin의 계정 변경을 잠가 계정 집합 분기를 방지한다.
+  종료 승인 뒤에는 이 잠금과 FastAPI legacy 인증 경계를 함께 제거한다.
 - migration 전에 기존 DB 백업과 `LEGACY_ACCOUNT_TIME_ZONE` 확인을 먼저 수행한다. data
   migration은 안전하지 않은 부분 롤백을 허용하지 않으므로 실패 시 백업을 기준으로
   원인을 수정한 뒤 새 DB/복구 지점에서 다시 적용한다.
@@ -391,15 +388,15 @@ composition dependency가 없어 동작하지 않으므로 그렇게 복구하�
 
 목표: 안정화 기간이 끝난 후 중복 인증 구현과 직접 계정 DB 접근을 제거한다.
 
-- [ ] 운영 또는 스테이징 관찰 기간 완료
+- [x] legacy rollback 종료 승인
 - [ ] Django 인증 오류율과 로그인 성공률 확인
-- [ ] FastAPI의 legacy 직접 `account_db` adapter 삭제
-- [ ] FastAPI의 legacy 로그인·로그아웃·현재 사용자 라우터 소스 삭제
-- [ ] 기존 비밀번호·세션 유틸리티 제거
-- [ ] 계정 시딩 절차를 Django 관리 명령 또는 migration 경계로 이전
-- [ ] 사용되지 않는 인증 설정값 정리
-- [ ] 관련 문서·테스트·환경 변수 계약 동기화
-- [ ] 레거시 코드 제거 전 import 사용처 재확인
+- [x] FastAPI의 legacy 직접 `account_db` adapter 삭제
+- [x] FastAPI의 legacy 로그인·로그아웃·현재 사용자 라우터 소스 삭제
+- [x] 기존 비밀번호·세션 유틸리티 제거
+- [x] 계정 시딩 절차를 Django 관리 명령 또는 migration 경계로 이전
+- [x] 사용되지 않는 인증 설정값 정리
+- [x] 관련 문서·테스트·환경 변수 계약 동기화
+- [x] 레거시 코드 제거 전 import 사용처 재확인
 
 완료 조건:
 
@@ -665,7 +662,7 @@ UI의 untrusted text는 `escapeHtml`을 거쳐 렌더링하고, 웹 출처 URL�
 | 2. 계정 이관 | 완료 | 8 | 8 | 없음 | rollback 관찰 기간 동안 legacy 원본 보존 |
 | 3. 인증 계약 | 진행 중 | 6 | 7 | 실제 reverse proxy/Ingress 형태 미확인 | 배포 경로 검토 |
 | 4. 트래픽 전환 | 진행 중 | 8 | 10 | 외부 경로 라우팅·rollback 검증 필요 | reverse proxy/Ingress 경로 전환 |
-| 5. 기존 경계 정리 | 미착수 | 0 | 9 | 관찰 기간 전 | 운영 관찰 후 legacy 제거 |
+| 5. 기존 경계 정리 | 진행 중 | 8 | 9 | 인증 지표 기록 미확인 | Django 인증 지표 확인 후 완료 처리 |
 | 6. Django UI 이전 | 진행 중 | 18 | 22 | 정적 배포·확장 UI 검증 미완료 | 접근성·운영 지표 검증 |
 | 7. 로컬 origin gateway | 완료 | 11 | 11 | 없음 | 운영 gateway/Ingress 계획으로 확장 시 별도 검토 |
 
@@ -693,7 +690,7 @@ UI의 untrusted text는 `escapeHtml`을 거쳐 렌더링하고, 웹 출처 URL�
 | 2026-08-20 | `account_db`를 FastAPI/MCP 허용 DB 목록에서 제외 | 계정 저장소는 Django가 단독 소유하며 채팅 도메인 권한이 아님 | admin/hr profile과 RBAC 계약 수정 |
 | 2026-08-20 | Django Admin 정적 파일은 `/django-static/*`로 분리 | FastAPI UI `/static/*`와 충돌 없이 `collectstatic` 산출물을 배포해야 함 | gateway/정적 서버 경로 계약 추가 |
 | 2026-08-20 | legacy 시각은 명시한 DB 시간대로 해석하고 data migration은 irreversible로 표시 | naive `DATETIME`의 시간 왜곡과 부분 rollback 후 재적용 충돌 방지 | 사전 백업·시간대 확인·이관 직후 감사 필수 |
-| 2026-08-20 | rollback 관찰 중 Django Admin 계정 mutation 잠금 | 신규/변경 계정이 legacy snapshot과 달라지면 이전 FastAPI 인증으로 안전하게 복귀할 수 없음 | `LEGACY_AUTH_ROLLBACK_WINDOW`를 종료 승인 전까지 유지 |
+| 2026-08-21 | legacy FastAPI 인증 rollback 종료 및 source 제거 승인 | Django 인증·동일 origin gateway·세션·보안·UI 회귀 계약이 구현·검증됐고, 사용자 승인으로 이전 FastAPI 경계 복귀를 종료함 | FastAPI 직접 account DB, 로그인 route, 서명 세션, legacy 시드와 해당 환경 설정을 제거하고 Django를 단일 계정 인증 소유자로 확정 |
 | 2026-08-20 | UI 고도화 시 사용자 UI를 Django의 별도 `web` 앱으로 이전 | 템플릿·세션 기반 화면과 정적 자산 운영 책임을 한 경계에 모으고 FastAPI를 API 전용으로 유지 | 인증 안정화 뒤 단계 6에서 병행 배포·gateway 전환·독립 rollback 수행 |
 | 2026-08-20 | 로컬 origin gateway는 Nginx로 구성하고 공개 `:8000`, Django `:8001`, FastAPI `:8002`로 분리 | 동일 origin 브라우저 흐름을 운영과 유사한 reverse proxy 경계에서 검증하면서 애플리케이션 코드와 Python 의존성에 gateway 책임을 넣지 않기 위함 | `/internal/auth/*` 공개 차단, collectstatic 제공, forwarded header·timeout 정책을 단계 7에서 구현 |
 

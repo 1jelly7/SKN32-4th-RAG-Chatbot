@@ -5,12 +5,9 @@ from __future__ import annotations
 from importlib import import_module
 
 import pytest
-from django.contrib.admin.sites import AdminSite
 from django.conf import settings
-from django.test import Client, RequestFactory
+from django.test import Client
 
-from app.auth.passwords import hash_password
-from django_app.accounts.admin import AccountUserAdmin
 from django_app.accounts.models import User
 
 
@@ -88,7 +85,7 @@ def test_login_requires_csrf_and_blocks_inactive_user(db) -> None:
 
 
 def test_legacy_scrypt_is_rehashed_after_successful_login(db) -> None:
-    legacy_hash = hash_password("legacy-password")
+    legacy_hash = "scrypt$16384$8$1$iong7OS3EuyXwL6Tua79GA==$srK+4u0642gq2gfzz4dY9hSSIF4FA9AM8i78WeGDpt0=$32"
     user = User.objects.create(
         username="legacy",
         password=legacy_hash,
@@ -153,15 +150,3 @@ def test_custom_user_command_fields_and_legacy_hash_validation() -> None:
             "scrypt$999999$8$1$c2FsdA==$aGFzaA==$32",
             7,
         )
-
-
-def test_admin_freezes_migrated_users_during_rollback_window() -> None:
-    request = RequestFactory().get("/admin/accounts/user/")
-    request.user = User(username="root", is_active=True, is_staff=True, is_superuser=True)
-    migrated_user = User(username="legacy", legacy_account_id=7)
-    model_admin = AccountUserAdmin(User, AdminSite())
-
-    assert settings.LEGACY_AUTH_ROLLBACK_WINDOW is True
-    assert model_admin.has_add_permission(request) is False
-    assert model_admin.has_change_permission(request, migrated_user) is False
-    assert model_admin.has_delete_permission(request, migrated_user) is False

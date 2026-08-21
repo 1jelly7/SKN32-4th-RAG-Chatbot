@@ -272,9 +272,9 @@ Django test DB와 fake MCP를 사용한다. 어느 테스트도 외부 MCP 프�
 - Django migration·감사와 관리자 생성 순서가 명확하다.
 - 재실행이 기존 데이터와 설정을 손상하지 않는다.
 
-현재 저장소에는 `scripts/setup_all.py`가 없으며 README와 도메인별 스크립트를 따라
-수동으로 실행한다. `scripts/seed_accounts.py`는 legacy rollback 전용이므로 Django 계정
-초기화 단계에 포함하지 않는다. 통합 runbook이나 자동화가 실제 환경에서 검증되기 전에는
+`setup_all.py`는 기본적으로 초기화 계획만 출력하고 `--apply`가 있을 때만 Django migration,
+문서 인덱싱과 도메인 ETL을 실행한다. Django 계정 초기화에는 `createsuperuser` 또는 Django
+Admin을 사용한다. 실제 환경에서 원본·권한·복구 절차가 검증되기 전에는
 이 수용 테스트를 통과한 것으로 간주하지 않는다.
 
 ### TS-T08: readiness와 Redis
