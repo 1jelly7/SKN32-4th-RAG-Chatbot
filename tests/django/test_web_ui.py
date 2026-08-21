@@ -27,6 +27,12 @@ def test_django_serves_chat_ui_shell_without_cache() -> None:
         "img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; "
         "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     )
+    policy = response.headers["Content-Security-Policy"]
+    assert "script-src 'self'" in policy
+    assert "script-src 'unsafe-inline'" not in policy
+    assert "connect-src 'self'" in policy
+    assert "object-src 'none'" in policy
+    assert "frame-ancestors 'none'" in policy
 
 
 def test_django_admin_is_not_covered_by_web_ui_csp() -> None:
@@ -95,6 +101,17 @@ def test_ui_script_renders_tables_charts_and_failure_states_without_unsafe_html(
     assert "error instanceof TypeError" in source
     assert "escapeHtml(table.sql)" in source
     assert "escapeHtml(chunk.text)" in source
+    assert "textContent = message" in source
+
+
+def test_ui_template_loads_only_same_origin_script_assets() -> None:
+    """CSP와 일치하게 template은 외부 script·stylesheet URL을 추가하지 않는다."""
+    template = Path("django_app/web/templates/web/index.html").read_text(encoding="utf-8")
+
+    assert "https://" not in template
+    assert "http://" not in template
+    assert "<script src=\"{% static 'web/vendor/chart.umd.min.js' %}\"></script>" in template
+    assert "<script src=\"{% static 'web/chat.js' %}\"></script>" in template
 
 
 def test_local_gateway_sets_immutable_cache_only_for_static_assets() -> None:

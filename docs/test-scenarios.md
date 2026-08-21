@@ -125,6 +125,10 @@ Django test DB와 fake MCP를 사용한다. 어느 테스트도 외부 MCP 프�
 - UI는 API table을 escape한 HTML 표와 Chart.js 차트로 렌더링하고, 문서 다운로드는
   same-origin `/api/documents/download` URL만 사용한다. `401`은 로그인 화면으로 전환하며,
   `PARTIALLY_SUPPORTED`·`INSUFFICIENT` 등 근거 상태와 오류는 사용자 안내로 표시한다.
+- 사용자 UI HTML은 same-origin CSP, `X-Frame-Options: DENY`, `nosniff`를 적용한다.
+  세션 쿠키는 `HttpOnly`, `SameSite=Lax`를 사용하며 HTTPS 환경에서 `Secure` 설정을 따른다.
+  `/internal/auth/*`는 public gateway에서 `404`이고 응답에 내부 인증 key·원본 `file_path`를
+  포함하지 않는다.
 
 ### TS-A02: 라우팅과 조회 선택
 

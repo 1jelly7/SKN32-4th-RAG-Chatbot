@@ -42,6 +42,13 @@ def test_login_me_introspect_logout_contract(db) -> None:
     assert login.status_code == 200
     assert login.json()["user"]["allowed_databases"] == ["document_db", "purchase_db", "sales_db"]
     assert "password" not in login.content.decode()
+    session_cookie = login.cookies[settings.SESSION_COOKIE_NAME]
+    assert session_cookie["httponly"] is True
+    assert session_cookie["samesite"] == "Lax"
+    assert bool(session_cookie["secure"]) is settings.SESSION_COOKIE_SECURE
+    csrf_cookie = client.cookies["csrftoken"]
+    assert csrf_cookie["samesite"] == "Lax"
+    assert bool(csrf_cookie["secure"]) is settings.CSRF_COOKIE_SECURE
     previous_cookie = client.cookies[settings.SESSION_COOKIE_NAME].value
     me = client.get("/api/auth/me")
     assert me.status_code == 200
@@ -53,6 +60,7 @@ def test_login_me_introspect_logout_contract(db) -> None:
     )
     assert introspection.status_code == 200
     assert len(introspection.json()["session_id"]) == 64
+    assert settings.AUTH_INTROSPECTION_KEY not in introspection.content.decode()
 
     rotated_csrf_token = client.get("/api/auth/csrf").json()["csrf_token"]
     logout = client.post("/api/auth/logout", HTTP_X_CSRFTOKEN=rotated_csrf_token)
@@ -136,6 +144,9 @@ def test_custom_user_command_fields_and_legacy_hash_validation() -> None:
     assert User.REQUIRED_FIELDS == ["email", "display_name", "role"]
     assert settings.STATIC_URL == "/django-static/"
     assert settings.SESSION_SAVE_EVERY_REQUEST is False
+    assert settings.SESSION_COOKIE_HTTPONLY is True
+    assert settings.SESSION_COOKIE_SAMESITE == "Lax"
+    assert settings.CSRF_COOKIE_SAMESITE == "Lax"
     migration = import_module("django_app.accounts.migrations.0002_import_legacy_accounts")
     with pytest.raises(RuntimeError, match="Unsupported legacy password hash"):
         migration._validate_legacy_password_hash(
