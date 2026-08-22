@@ -17,7 +17,8 @@ from ingestion.loaders import load_documents
 from mcp_servers.document_tools.faiss_store import FaissStore
 from ingestion.index import build_index
 
-FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
+# 서비스 테스트와 공용 fixture를 분리해도 저장소 fixture를 사용한다.
+FIXTURES_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures"
 CASES_PATH = FIXTURES_DIR / "cases" / "rag_cases.jsonl"
 DOCUMENTS_DIR = FIXTURES_DIR / "documents"
 
