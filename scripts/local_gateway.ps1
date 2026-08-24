@@ -7,7 +7,8 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$PythonPath = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$DjangoPythonPath = Join-Path $ProjectRoot "django_app\.venv\Scripts\python.exe"
+$FastApiPythonPath = Join-Path $ProjectRoot "app\.venv\Scripts\python.exe"
 $NginxConfig = "deploy/nginx/local.conf"
 $RuntimeDirectory = Join-Path $ProjectRoot "temp"
 $LogDirectory = Join-Path $ProjectRoot "logs"
@@ -114,8 +115,11 @@ function Stop-LocalGateway {
 }
 
 function Start-LocalGateway {
-    if (-not (Test-Path -LiteralPath $PythonPath)) {
-        throw ".venv Python was not found: $PythonPath"
+    if (-not (Test-Path -LiteralPath $DjangoPythonPath)) {
+        throw "Django virtualenv Python was not found: $DjangoPythonPath"
+    }
+    if (-not (Test-Path -LiteralPath $FastApiPythonPath)) {
+        throw "FastAPI virtualenv Python was not found: $FastApiPythonPath"
     }
     $nginx = Get-NginxPath
 
@@ -133,12 +137,12 @@ function Start-LocalGateway {
     Push-Location $ProjectRoot
     $started = @()
     try {
-        Invoke-Checked $PythonPath @("django_app/manage.py", "check")
-        Invoke-Checked $PythonPath @("django_app/manage.py", "collectstatic", "--clear", "--noinput")
+        Invoke-Checked $DjangoPythonPath @("django_app/manage.py", "check")
+        Invoke-Checked $DjangoPythonPath @("django_app/manage.py", "collectstatic", "--clear", "--noinput")
         Invoke-Checked $nginx @("-p", $NginxPrefix, "-t", "-c", $NginxConfig)
 
         $djangoArguments = @{
-            FilePath = $PythonPath
+            FilePath = $DjangoPythonPath
             ArgumentList = @("django_app/manage.py", "runserver", "127.0.0.1:8001", "--noreload")
             WorkingDirectory = $ProjectRoot
             WindowStyle = "Hidden"
@@ -154,7 +158,7 @@ function Start-LocalGateway {
         }
 
         $fastapiArguments = @{
-            FilePath = $PythonPath
+            FilePath = $FastApiPythonPath
             ArgumentList = @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8002")
             WorkingDirectory = $ProjectRoot
             WindowStyle = "Hidden"
