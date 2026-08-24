@@ -56,7 +56,9 @@ async def test_gateway_rejects_malformed_success_payload() -> None:
     gateway = DjangoAuthenticationGateway(
         "http://django/internal/auth/introspect",
         INTROSPECTION_KEY,
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"role": "admin"})),
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"role": "admin"})
+        ),
     )
     with pytest.raises(AuthenticationUnavailableError):
         await gateway.authenticate("djangosession")
@@ -68,7 +70,9 @@ async def test_gateway_rejects_malformed_success_payload() -> None:
     ("field", "value"),
     [("user_id", True), ("role", "unknown"), ("session_id", "raw-session-key")],
 )
-async def test_gateway_rejects_wrong_success_field_types(field: str, value: object) -> None:
+async def test_gateway_rejects_wrong_success_field_types(
+    field: str, value: object
+) -> None:
     payload: dict[str, object] = {
         "user_id": 7,
         "username": "finance",
@@ -80,7 +84,9 @@ async def test_gateway_rejects_wrong_success_field_types(field: str, value: obje
     gateway = DjangoAuthenticationGateway(
         "http://django/internal/auth/introspect",
         INTROSPECTION_KEY,
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload)),
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json=payload)
+        ),
     )
     with pytest.raises(AuthenticationUnavailableError):
         await gateway.authenticate("djangosession")

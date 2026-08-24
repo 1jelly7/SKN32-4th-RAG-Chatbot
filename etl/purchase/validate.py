@@ -32,4 +32,6 @@ def validate(frame: pd.DataFrame, required_columns: list[str]) -> ValidationRepo
         errors.append("DataFrame is empty")
 
     is_valid = len(errors) == 0
-    return ValidationReport(is_valid=is_valid, invalid_row_count=invalid_row_count, errors=errors)
+    return ValidationReport(
+        is_valid=is_valid, invalid_row_count=invalid_row_count, errors=errors
+    )

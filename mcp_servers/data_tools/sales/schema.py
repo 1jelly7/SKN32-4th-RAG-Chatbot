@@ -42,10 +42,25 @@ _VIEWS: dict[str, ViewSpec] = {
     "v_sales_order": {
         "description": "유효한 주문 헤더 1건당 1행. 취소(Cancelled)·초안(Draft) 상태는 이미 제외되어 있다.",
         "columns": [
-            "sales_order_id", "order_number", "order_date", "order_year", "order_quarter",
-            "order_month", "customer_id", "customer_name", "customer_type", "industry",
-            "country", "status", "currency", "subtotal", "discount_amount", "tax_amount",
-            "order_amount", "required_delivery_date", "payment_terms",
+            "sales_order_id",
+            "order_number",
+            "order_date",
+            "order_year",
+            "order_quarter",
+            "order_month",
+            "customer_id",
+            "customer_name",
+            "customer_type",
+            "industry",
+            "country",
+            "status",
+            "currency",
+            "subtotal",
+            "discount_amount",
+            "tax_amount",
+            "order_amount",
+            "required_delivery_date",
+            "payment_terms",
         ],
     },
     "v_sales_order_line": {
@@ -55,19 +70,50 @@ _VIEWS: dict[str, ViewSpec] = {
             "order_amount와 절대 합치지 마라(라인 수만큼 중복 합산된다)."
         ),
         "columns": [
-            "sales_order_line_id", "sales_order_id", "order_number", "order_date",
-            "order_year", "order_quarter", "order_month", "customer_id", "customer_name",
-            "industry", "country", "item_id", "item_name", "quantity", "unit_price",
-            "discount_percent", "line_total", "quantity_delivered", "currency", "status",
+            "sales_order_line_id",
+            "sales_order_id",
+            "order_number",
+            "order_date",
+            "order_year",
+            "order_quarter",
+            "order_month",
+            "customer_id",
+            "customer_name",
+            "industry",
+            "country",
+            "item_id",
+            "item_name",
+            "quantity",
+            "unit_price",
+            "discount_percent",
+            "line_total",
+            "quantity_delivered",
+            "currency",
+            "status",
         ],
     },
     "v_invoice": {
         "description": "청구서 1건당 1행. 미수금(outstanding_amount)과 연체 여부(status)를 담는다.",
         "columns": [
-            "invoice_id", "invoice_number", "invoice_date", "due_date", "invoice_year",
-            "invoice_quarter", "invoice_month", "customer_id", "customer_name",
-            "customer_type", "country", "order_id", "subtotal", "tax_amount",
-            "invoice_amount", "amount_paid", "outstanding_amount", "currency", "status",
+            "invoice_id",
+            "invoice_number",
+            "invoice_date",
+            "due_date",
+            "invoice_year",
+            "invoice_quarter",
+            "invoice_month",
+            "customer_id",
+            "customer_name",
+            "customer_type",
+            "country",
+            "order_id",
+            "subtotal",
+            "tax_amount",
+            "invoice_amount",
+            "amount_paid",
+            "outstanding_amount",
+            "currency",
+            "status",
             "payment_terms",
         ],
     },
@@ -77,8 +123,16 @@ _VIEWS: dict[str, ViewSpec] = {
             "이 뷰에 아예 없다 — 그런 정보는 조회할 수 없다고 답하라."
         ),
         "columns": [
-            "customer_id", "customer_code", "customer_name", "customer_type", "industry",
-            "country", "currency", "payment_terms", "is_active", "created_at",
+            "customer_id",
+            "customer_code",
+            "customer_name",
+            "customer_type",
+            "industry",
+            "country",
+            "currency",
+            "payment_terms",
+            "is_active",
+            "created_at",
         ],
     },
     "v_sales_order_status": {
@@ -150,8 +204,22 @@ _METRICS: dict[str, MetricSpec] = {
 
 # 데이터가 없거나 뷰로 답할 수 없는 지표. 왜 안 되는지 사용자에게 설명할 때 쓴다.
 _OUT_OF_SCOPE: list[str] = [
-    "영업이익", "매출총이익", "원가", "마진율", "재고", "재고회전율", "구매", "발주",
-    "공급업체", "미지급금", "견적", "출하", "배송", "여신한도", "할인정책", "매출예측",
+    "영업이익",
+    "매출총이익",
+    "원가",
+    "마진율",
+    "재고",
+    "재고회전율",
+    "구매",
+    "발주",
+    "공급업체",
+    "미지급금",
+    "견적",
+    "출하",
+    "배송",
+    "여신한도",
+    "할인정책",
+    "매출예측",
     "공급업체평가",
 ]
 
@@ -171,8 +239,12 @@ def _load_data_coverage() -> dict[str, str]:
         return _cached_data_coverage
 
     try:
-        rows = query_readonly("SELECT MIN(order_date) AS min_d, MAX(order_date) AS max_d FROM v_sales_order")
-    except Exception:  # noqa: BLE001 - DB 미가용 시에도 스키마 정보 자체는 내려줄 수 있어야 한다.
+        rows = query_readonly(
+            "SELECT MIN(order_date) AS min_d, MAX(order_date) AS max_d FROM v_sales_order"
+        )
+    except (
+        Exception
+    ):  # noqa: BLE001 - DB 미가용 시에도 스키마 정보 자체는 내려줄 수 있어야 한다.
         rows = []
 
     if rows and rows[0].get("min_d") and rows[0].get("max_d"):

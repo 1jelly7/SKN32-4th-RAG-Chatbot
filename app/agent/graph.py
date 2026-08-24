@@ -17,13 +17,21 @@ from langgraph.graph import END, StateGraph
 
 from app.agent.evidence_eval import evidence_eval
 from app.agent.llm import AsyncLLMPort
-from app.agent.nodes import WebSearchFn, answer_synthesis, database_retrieval, document_retrieval, router
+from app.agent.nodes import (
+    WebSearchFn,
+    answer_synthesis,
+    database_retrieval,
+    document_retrieval,
+    router,
+)
 from app.agent.state import GraphState
 from app.mcp.client import MCPClient
 
 logger = logging.getLogger(__name__)
 
-GraphTransition = Literal["end", "router", "document", "database", "evidence", "retry", "answer"]
+GraphTransition = Literal[
+    "end", "router", "document", "database", "evidence", "retry", "answer"
+]
 
 
 def _delta(before: GraphState, after: GraphState) -> dict:
@@ -39,7 +47,9 @@ def _delta(before: GraphState, after: GraphState) -> dict:
     return {key: value for key, value in after.items() if before.get(key) != value}
 
 
-async def _run_document_node(state: GraphState, mcp_client: MCPClient | None = None) -> dict:
+async def _run_document_node(
+    state: GraphState, mcp_client: MCPClient | None = None
+) -> dict:
     request_id = state.get("request_id")
     started = time.perf_counter()
     logger.info("parallel_branch_start branch=document request_id=%s", request_id)
@@ -53,7 +63,9 @@ async def _run_document_node(state: GraphState, mcp_client: MCPClient | None = N
     return _delta(before, after)
 
 
-async def _run_database_node(state: GraphState, mcp_client: MCPClient | None = None) -> dict:
+async def _run_database_node(
+    state: GraphState, mcp_client: MCPClient | None = None
+) -> dict:
     request_id = state.get("request_id")
     started = time.perf_counter()
     logger.info("parallel_branch_start branch=database request_id=%s", request_id)
@@ -91,7 +103,10 @@ def after_router(state: GraphState) -> str | list[str]:
 
 def after_evidence(state: GraphState) -> str:
     """근거 부족일 때만 한 번의 보강 조회를 허용한다."""
-    if state.get("evidence_status") == "INSUFFICIENT" and state.get("evidence_retry_count", 0) < 1:
+    if (
+        state.get("evidence_status") == "INSUFFICIENT"
+        and state.get("evidence_retry_count", 0) < 1
+    ):
         return "retry"
     return "answer"
 

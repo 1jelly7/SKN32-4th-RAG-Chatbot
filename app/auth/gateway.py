@@ -67,14 +67,20 @@ class DjangoAuthenticationGateway:
                 },
             )
         except httpx.HTTPError as exc:
-            raise AuthenticationUnavailableError("인증 서비스에 연결할 수 없습니다.") from exc
+            raise AuthenticationUnavailableError(
+                "인증 서비스에 연결할 수 없습니다."
+            ) from exc
 
         if response.status_code == 401:
             return None
         if response.status_code == 403:
-            raise AuthenticationUnavailableError("인증 서비스 내부 호출 권한이 거부되었습니다.")
+            raise AuthenticationUnavailableError(
+                "인증 서비스 내부 호출 권한이 거부되었습니다."
+            )
         if response.status_code != 200:
-            raise AuthenticationUnavailableError("인증 서비스가 요청을 처리하지 못했습니다.")
+            raise AuthenticationUnavailableError(
+                "인증 서비스가 요청을 처리하지 못했습니다."
+            )
 
         try:
             payload = response.json()
@@ -105,7 +111,9 @@ class DjangoAuthenticationGateway:
             )
             return user
         except (KeyError, TypeError, ValueError) as exc:
-            raise AuthenticationUnavailableError("인증 서비스 응답 계약이 올바르지 않습니다.") from exc
+            raise AuthenticationUnavailableError(
+                "인증 서비스 응답 계약이 올바르지 않습니다."
+            ) from exc
 
     async def aclose(self) -> None:
         """공유 HTTP 연결 풀을 애플리케이션 종료 시 정리한다."""

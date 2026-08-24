@@ -110,7 +110,9 @@ async def generate_sql(question: str, schema: SchemaResource) -> str:
     답할 수 없다고 판단되면 빈 문자열을 반환한다(호출부가 범위 밖으로 처리).
     """
     today = date.today().isoformat()
-    user_content = f"{_format_schema(schema)}\n\n[오늘 날짜] {today}\n\n[질문] {question}"
+    user_content = (
+        f"{_format_schema(schema)}\n\n[오늘 날짜] {today}\n\n[질문] {question}"
+    )
     return _extract_sql(await _call_llm(user_content))
 
 

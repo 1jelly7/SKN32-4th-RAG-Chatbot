@@ -13,7 +13,15 @@ import pytest
 
 from app.agent.graph import build_graph
 from app.agent.llm import FakeLLMPort
-from app.agent.nodes import _build_sources, _build_tables, answer_synthesis, database_retrieval, route_data_domain, route_question, router
+from app.agent.nodes import (
+    _build_sources,
+    _build_tables,
+    answer_synthesis,
+    database_retrieval,
+    route_data_domain,
+    route_question,
+    router,
+)
 from app.agent.state import DataDomain, EvidencePolicy, GraphState, Route
 from app.mcp.client import FakeMCPPort, MCPClient
 
@@ -120,8 +128,7 @@ async def test_router_query_labels_empty_for_ordinary_general_question() -> None
 
 
 @pytest.mark.asyncio
-async def test_database_retrieval_preserves_database_origin_and_domain(
-) -> None:
+async def test_database_retrieval_preserves_database_origin_and_domain() -> None:
     port = FakeMCPPort(
         {
             "search_documents": _tool_success("document", []),
@@ -136,7 +143,10 @@ async def test_database_retrieval_preserves_database_origin_and_domain(
         mcp_client,
     )
 
-    assert [item["domain"] for item in result["database_evidence"]] == ["purchase", "sales"]
+    assert [item["domain"] for item in result["database_evidence"]] == [
+        "purchase",
+        "sales",
+    ]
     assert [call.tool_name for call in port.calls] == ["query_purchase", "query_sales"]
 
 
@@ -258,7 +268,9 @@ async def test_evidence_eval_low_confidence_is_insufficient_not_contradicted() -
 
     state: GraphState = {
         "route": "DOCUMENT",
-        "document_evidence": [{"type": "document", "content": "정책", "confidence": 0.1}],
+        "document_evidence": [
+            {"type": "document", "content": "정책", "confidence": 0.1}
+        ],
         "database_evidence": [],
     }
 
@@ -273,8 +285,18 @@ async def test_evidence_eval_low_confidence_is_insufficient_not_contradicted() -
     [
         [{"type": "document", "content": "정책", "contradicted": True}],
         [
-            {"type": "document", "content": "정책", "fact_id": "leave-days", "fact_value": 10},
-            {"type": "document", "content": "정책", "fact_id": "leave-days", "fact_value": 15},
+            {
+                "type": "document",
+                "content": "정책",
+                "fact_id": "leave-days",
+                "fact_value": 10,
+            },
+            {
+                "type": "document",
+                "content": "정책",
+                "fact_id": "leave-days",
+                "fact_value": 15,
+            },
         ],
     ],
 )
@@ -284,7 +306,11 @@ async def test_evidence_eval_marks_only_explicit_or_fact_value_conflicts_contrad
     from app.agent.evidence_eval import evidence_eval
 
     result = await evidence_eval(
-        {"route": "DOCUMENT", "document_evidence": document_evidence, "database_evidence": []}
+        {
+            "route": "DOCUMENT",
+            "document_evidence": document_evidence,
+            "database_evidence": [],
+        }
     )
 
     assert result["evidence_status"] == "CONTRADICTED"
@@ -309,8 +335,7 @@ async def test_answer_synthesis_does_not_call_llm_for_contradicted_evidence() ->
 
 
 @pytest.mark.asyncio
-async def test_database_retrieval_keeps_sales_evidence_when_purchase_fails(
-) -> None:
+async def test_database_retrieval_keeps_sales_evidence_when_purchase_fails() -> None:
     port = FakeMCPPort(
         {
             "search_documents": _tool_success("document", []),
@@ -343,7 +368,9 @@ async def test_graph_calls_only_allowed_mcp_tools_for_each_route(
     expected_calls: list[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_complete(prompt: str, context: list[dict[str, Any]], question: str, llm: object = None) -> str:
+    async def fake_complete(
+        prompt: str, context: list[dict[str, Any]], question: str, llm: object = None
+    ) -> str:
         return "답변"
 
     monkeypatch.setattr("app.agent.nodes.complete", fake_complete)
@@ -368,7 +395,9 @@ async def test_graph_calls_only_allowed_mcp_tools_for_each_route(
 async def test_graph_both_fans_in_document_and_partial_database_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_complete(prompt: str, context: list[dict[str, Any]], question: str, llm: object = None) -> str:
+    async def fake_complete(
+        prompt: str, context: list[dict[str, Any]], question: str, llm: object = None
+    ) -> str:
         return "부분 답변"
 
     monkeypatch.setattr("app.agent.nodes.complete", fake_complete)
@@ -379,12 +408,19 @@ async def test_graph_both_fans_in_document_and_partial_database_evidence(
                 [{"content": "휴가 규정", "score": 0.9}],
                 [{"document_id": "policy-1", "title": "휴가 규정"}],
             ),
-            "query_purchase": {"status": "error", "domain": "purchase", "message": "실패", "error_code": "QUERY_ERROR"},
+            "query_purchase": {
+                "status": "error",
+                "domain": "purchase",
+                "message": "실패",
+                "error_code": "QUERY_ERROR",
+            },
             "query_sales": _tool_success("sales", [{"revenue": 200}]),
         }
     )
 
-    result = await build_graph(MCPClient(port)).ainvoke({"question": "휴가 규정과 구매 및 판매 현황"})
+    result = await build_graph(MCPClient(port)).ainvoke(
+        {"question": "휴가 규정과 구매 및 판매 현황"}
+    )
 
     # document/database는 이제 병렬로 실행되므로 호출 순서가 보장되지 않는다.
     assert sorted(call.tool_name for call in port.calls) == sorted(
@@ -410,13 +446,16 @@ async def test_graph_retries_insufficient_evidence_exactly_once() -> None:
         }
     )
 
-    result = await build_graph(MCPClient(port), FakeLLMPort("사용되지 않음"), web_search=_fake_web_search_empty).ainvoke(
-        {"question": "휴가 규정 알려줘"}
-    )
+    result = await build_graph(
+        MCPClient(port), FakeLLMPort("사용되지 않음"), web_search=_fake_web_search_empty
+    ).ainvoke({"question": "휴가 규정 알려줘"})
 
     assert result["evidence_status"] == "INSUFFICIENT"
     assert result["evidence_retry_count"] == 1
-    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
+    assert [call.tool_name for call in port.calls] == [
+        "search_documents",
+        "search_documents",
+    ]
 
 
 @pytest.mark.asyncio
@@ -466,13 +505,23 @@ def test_source_and_table_serialization_preserves_safe_metadata_only() -> None:
             "score": 0.9,
             "page": 3,
             "file_path": "C:/internal/policy.pdf",
-            "metadata": {"updated_at": "2026-08-01", "index_version": "v3", "api_key": "secret"},
+            "metadata": {
+                "updated_at": "2026-08-01",
+                "index_version": "v3",
+                "api_key": "secret",
+            },
         },
         {
             "type": "database",
             "domain": "sales",
             "generated_sql": "SELECT customer, revenue FROM sales_summary",
-            "rows": [{"customer": "A사", "revenue": 100, "file_path": "C:/internal/sales.csv"}],
+            "rows": [
+                {
+                    "customer": "A사",
+                    "revenue": 100,
+                    "file_path": "C:/internal/sales.csv",
+                }
+            ],
             "row_count": 1,
             "metadata": {
                 "table_name": "sales_summary",
@@ -501,24 +550,44 @@ def test_source_and_table_serialization_preserves_safe_metadata_only() -> None:
 
 
 def test_document_sources_merge_pages_and_chunks_by_document_id() -> None:
-    sources = _build_sources([
-        {
-            "type": "document", "document_id": "policy-card", "title": "법인카드 규정.pdf",
-            "content": "3쪽 발췌", "score": 0.7, "page": 3, "metadata": {"index_version": "v1"},
-        },
-        {
-            "type": "document", "document_id": "policy-card", "title": "법인카드 규정.pdf",
-            "content": "12쪽 발췌", "score": 0.9, "page": 12, "metadata": {"index_version": "v1"},
-        },
-        {
-            "type": "document", "document_id": "policy-card", "title": "법인카드 규정.pdf",
-            "content": "3쪽 발췌", "score": 0.8, "page": 3, "metadata": {"index_version": "v1"},
-        },
-    ])
+    sources = _build_sources(
+        [
+            {
+                "type": "document",
+                "document_id": "policy-card",
+                "title": "법인카드 규정.pdf",
+                "content": "3쪽 발췌",
+                "score": 0.7,
+                "page": 3,
+                "metadata": {"index_version": "v1"},
+            },
+            {
+                "type": "document",
+                "document_id": "policy-card",
+                "title": "법인카드 규정.pdf",
+                "content": "12쪽 발췌",
+                "score": 0.9,
+                "page": 12,
+                "metadata": {"index_version": "v1"},
+            },
+            {
+                "type": "document",
+                "document_id": "policy-card",
+                "title": "법인카드 규정.pdf",
+                "content": "3쪽 발췌",
+                "score": 0.8,
+                "page": 3,
+                "metadata": {"index_version": "v1"},
+            },
+        ]
+    )
 
     assert len(sources) == 1
     assert sources[0]["pages"] == [3, 12]
-    assert sources[0]["chunks"] == [{"page": 3, "text": "3쪽 발췌"}, {"page": 12, "text": "12쪽 발췌"}]
+    assert sources[0]["chunks"] == [
+        {"page": 3, "text": "3쪽 발췌"},
+        {"page": 12, "text": "12쪽 발췌"},
+    ]
     assert sources[0]["download_url"] == "/api/documents/download?doc_id=policy-card"
     assert sources[0]["score"] == 0.9
 
@@ -547,7 +616,10 @@ def _mysql_available() -> bool:
 
 
 MYSQL_READY = os.getenv("RUN_LOCAL_MYSQL_TESTS") == "1" and _mysql_available()
-skip_without_mysql = pytest.mark.skipif(not MYSQL_READY, reason="로컬에 MySQL(erp_system/purchase/sales)이 준비되어 있지 않습니다")
+skip_without_mysql = pytest.mark.skipif(
+    not MYSQL_READY,
+    reason="로컬에 MySQL(erp_system/purchase/sales)이 준비되어 있지 않습니다",
+)
 
 
 @skip_without_mysql
@@ -561,7 +633,9 @@ async def test_graph_sales_route_uses_in_process_data_mcp_and_mysql(
     async def deterministic_sql(question: str, schema: object) -> str:
         return "SELECT 1 AS health_check LIMIT 1"
 
-    monkeypatch.setattr("mcp_servers.data_tools.sales.query.generate_sql", deterministic_sql)
+    monkeypatch.setattr(
+        "mcp_servers.data_tools.sales.query.generate_sql", deterministic_sql
+    )
     graph = build_graph(MCPClient(InProcessMCPPort()), FakeLLMPort("판매 조회 완료"))
     result = await graph.ainvoke({"question": "고객별 매출 순위 알려줘"})
 
@@ -582,7 +656,10 @@ def test_build_tables_extracts_columns_and_rows():
             "type": "database",
             "domain": "purchase",
             "generated_sql": "SELECT vendor_name, total FROM x;",
-            "rows": [{"vendor_name": "A사", "total": 100}, {"vendor_name": "B사", "total": 200}],
+            "rows": [
+                {"vendor_name": "A사", "total": 100},
+                {"vendor_name": "B사", "total": 200},
+            ],
         }
     ]
     tables = _build_tables(evidence)
@@ -619,7 +696,10 @@ def test_build_tables_marks_chartable_when_label_and_value_present():
             "type": "database",
             "domain": "sales",
             "generated_sql": "x",
-            "rows": [{"customer": "A", "revenue": 1000}, {"customer": "B", "revenue": 2000}],
+            "rows": [
+                {"customer": "A", "revenue": 1000},
+                {"customer": "B", "revenue": 2000},
+            ],
         }
     ]
     tables = _build_tables(evidence)
@@ -648,7 +728,14 @@ def test_build_tables_prefers_last_numeric_column_as_value():
 def test_build_tables_not_chartable_without_label_column():
     from app.agent.nodes import _build_tables
 
-    evidence = [{"type": "database", "domain": "purchase", "generated_sql": "x", "rows": [{"count": 5, "total": 10}]}]
+    evidence = [
+        {
+            "type": "database",
+            "domain": "purchase",
+            "generated_sql": "x",
+            "rows": [{"count": 5, "total": 10}],
+        }
+    ]
     tables = _build_tables(evidence)
 
     assert tables[0]["chartable"] is False
@@ -665,13 +752,18 @@ def test_build_tables_skips_document_evidence():
 def test_build_tables_skips_empty_rows():
     from app.agent.nodes import _build_tables
 
-    evidence = [{"type": "database", "domain": "purchase", "generated_sql": "x", "rows": []}]
+    evidence = [
+        {"type": "database", "domain": "purchase", "generated_sql": "x", "rows": []}
+    ]
     tables = _build_tables(evidence)
     assert tables == []
 
 
 def test_query_classifier_keeps_stable_general_knowledge_answerable() -> None:
-    from app.agent.query_classification import classify_question, requires_verified_context
+    from app.agent.query_classification import (
+        classify_question,
+        requires_verified_context,
+    )
 
     labels = classify_question("사과는 무슨 색인가?")
 
@@ -738,7 +830,14 @@ async def test_web_evidence_produces_web_source_cards_not_document_cards() -> No
     fake_llm = FakeLLMPort(NEEDS_LIVE_SEARCH_MARKER)
 
     async def fake_web_search(question: str) -> list[dict[str, Any]]:
-        return [{"type": "web", "title": "적극행정 운영규정 개정", "url": "https://korea.kr/news/1", "content": "..."}]
+        return [
+            {
+                "type": "web",
+                "title": "적극행정 운영규정 개정",
+                "url": "https://korea.kr/news/1",
+                "content": "...",
+            }
+        ]
 
     result = await answer_synthesis(
         {
@@ -847,15 +946,23 @@ async def test_freshness_question_web_search_exception_falls_back_safely() -> No
     assert fake_llm.calls == []
 
 
-
 @pytest.mark.asyncio
-async def test_document_route_falls_back_to_web_search_when_internal_insufficient() -> None:
-    """"내부정보 우선, 없으면 웹검색" 요구사항: DOCUMENT 질문이 사내 자료에서
+async def test_document_route_falls_back_to_web_search_when_internal_insufficient() -> (
+    None
+):
+    """ "내부정보 우선, 없으면 웹검색" 요구사항: DOCUMENT 질문이 사내 자료에서
     근거를 못 찾으면(INSUFFICIENT), 그때서야 웹 검색으로 보충한다."""
     fake_llm = FakeLLMPort("웹 검색 결과 기반 답변")
 
     async def fake_web_search(question: str) -> list[dict[str, Any]]:
-        return [{"type": "web", "title": "적극행정 운영규정", "url": "https://law.go.kr/x", "content": "..."}]
+        return [
+            {
+                "type": "web",
+                "title": "적극행정 운영규정",
+                "url": "https://law.go.kr/x",
+                "content": "...",
+            }
+        ]
 
     result = await answer_synthesis(
         {
@@ -896,7 +1003,9 @@ async def test_document_route_reports_not_found_when_web_search_also_empty() -> 
 
 
 @pytest.mark.asyncio
-async def test_database_route_does_not_fall_back_to_web_search_when_insufficient() -> None:
+async def test_database_route_does_not_fall_back_to_web_search_when_insufficient() -> (
+    None
+):
     """DATABASE/BOTH는 매출·구매 같은 사내 고유 데이터라 웹 검색 대상이 아니다 -
     내부정보 우선 정책이 DOCUMENT에만 적용되는지 고정한다."""
     fake_llm = FakeLLMPort("should not be called")
@@ -919,6 +1028,7 @@ async def test_database_route_does_not_fall_back_to_web_search_when_insufficient
 
     assert search_calls == []
     assert "사내 자료에서 관련된 근거를 찾지 못해" in result["answer"]
+
 
 @pytest.mark.asyncio
 async def test_escape_hatch_general_answer_without_marker_skips_search() -> None:
@@ -956,12 +1066,23 @@ async def test_escape_hatch_marker_triggers_search_and_final_generation() -> Non
     """방법 B: 키워드로 안 잡힌 질문이라도, LLM이 스스로 실시간 정보가 필요하다고
     판단하면(NEEDS_LIVE_SEARCH 마커) 검색을 트리거하고, 검색 결과로 최종 답변을
     다시 생성한다 - 시험 호출 1회 + 최종 생성 1회, 총 2회 호출된다."""
-    from app.agent.prompts import ANSWER_PROMPT, FRESHNESS_ESCAPE_HATCH_PROMPT, NEEDS_LIVE_SEARCH_MARKER
+    from app.agent.prompts import (
+        ANSWER_PROMPT,
+        FRESHNESS_ESCAPE_HATCH_PROMPT,
+        NEEDS_LIVE_SEARCH_MARKER,
+    )
 
     fake_llm = FakeLLMPort(NEEDS_LIVE_SEARCH_MARKER)
 
     async def fake_web_search(question: str) -> list[dict[str, Any]]:
-        return [{"type": "web", "title": "삼성전자 주가", "url": "https://example.com", "content": "..."}]
+        return [
+            {
+                "type": "web",
+                "title": "삼성전자 주가",
+                "url": "https://example.com",
+                "content": "...",
+            }
+        ]
 
     result = await answer_synthesis(
         {
@@ -991,10 +1112,15 @@ async def test_empty_internal_search_is_not_reported_as_mcp_failure() -> None:
         }
     )
 
-    result = await build_graph(MCPClient(port), FakeLLMPort("should not be called"), web_search=_fake_web_search_empty).ainvoke(
-        {"question": "우리 회사 복리후생 규정은?"}
-    )
+    result = await build_graph(
+        MCPClient(port),
+        FakeLLMPort("should not be called"),
+        web_search=_fake_web_search_empty,
+    ).ainvoke({"question": "우리 회사 복리후생 규정은?"})
 
     assert result["evidence_status"] == "INSUFFICIENT"
     assert "사내 자료" in result["answer"]
-    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
+    assert [call.tool_name for call in port.calls] == [
+        "search_documents",
+        "search_documents",
+    ]

@@ -10,7 +10,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-ToolName = Literal["search_documents", "resolve_document_download", "query_purchase", "query_sales"]
+ToolName = Literal[
+    "search_documents", "resolve_document_download", "query_purchase", "query_sales"
+]
 MCPDomain = Literal["document", "purchase", "sales", "both"]
 MCPErrorCode = Literal[
     "FORBIDDEN",

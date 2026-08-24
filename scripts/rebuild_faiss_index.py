@@ -95,7 +95,9 @@ async def main() -> None:
         for filename in ("index.faiss", "metadata.json"):
             shutil.move(str(staging_path / filename), str(active_path / filename))
 
-        print(f"재인덱싱 완료: index_version={result['index_version']}, chunk_count={result['chunk_count']}")
+        print(
+            f"재인덱싱 완료: index_version={result['index_version']}, chunk_count={result['chunk_count']}"
+        )
         print("이 index_version을 캐시 무효화 트리거에 사용할 수 있습니다.")
 
     except Exception as exc:  # noqa: BLE001

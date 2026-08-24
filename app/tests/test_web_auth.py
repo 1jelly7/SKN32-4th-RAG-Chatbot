@@ -13,7 +13,10 @@ def test_login_invalidates_stale_session_restore_result() -> None:
     """초기 /auth/me 401이 로그인 성공 후 화면을 덮어쓰지 않게 한다."""
     script = WEB_SCRIPT.read_text(encoding="utf-8")
     assert "let auth_state_revision = 0;" in script
-    assert "loginForm.addEventListener('submit', () => { auth_state_revision += 1; }, true);" in script
+    assert (
+        "loginForm.addEventListener('submit', () => { auth_state_revision += 1; }, true);"
+        in script
+    )
     assert "if (revision !== auth_state_revision) return;" in script
 
 

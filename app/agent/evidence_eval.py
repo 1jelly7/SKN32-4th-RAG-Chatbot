@@ -39,12 +39,16 @@ async def evidence_eval(
         return state
 
     active_policy = policy or state.get("evidence_policy", DEFAULT_EVIDENCE_POLICY)
-    accepted_evidence = [item for item in all_evidence if _meets_policy(item, active_policy)]
+    accepted_evidence = [
+        item for item in all_evidence if _meets_policy(item, active_policy)
+    ]
     has_rejected_non_document_evidence = any(
         item.get("type") != "document" and not _meets_policy(item, active_policy)
         for item in all_evidence
     )
-    has_tool_error = bool(state.get("_errors")) or any(item.get("error") for item in database_evidence)
+    has_tool_error = bool(state.get("_errors")) or any(
+        item.get("error") for item in database_evidence
+    )
 
     # BOTH 경로에서 한쪽이 에러 없이 그냥 0건으로 끝나는 경우("이번 연도 매출"처럼 데이터
     # 보유 기간 밖이라 정상적으로 빈 결과가 나온 경우)는 has_tool_error에도 안 잡히고
@@ -57,12 +61,16 @@ async def evidence_eval(
         or (bool(database_evidence) and not document_evidence)
     )
 
-    has_contradiction = _has_explicit_contradiction(all_evidence) or _has_conflicting_fact_values(all_evidence)
+    has_contradiction = _has_explicit_contradiction(
+        all_evidence
+    ) or _has_conflicting_fact_values(all_evidence)
     state["evidence"] = [] if has_contradiction else accepted_evidence
 
     if has_contradiction:
         state["evidence_status"] = "CONTRADICTED"
-        state["evidence_reason"] = "채택 가능한 근거 사이에 명시적인 사실 충돌이 있습니다."
+        state["evidence_reason"] = (
+            "채택 가능한 근거 사이에 명시적인 사실 충돌이 있습니다."
+        )
     elif not accepted_evidence:
         mcp_errors = state.get("_mcp_errors") or []
         if mcp_errors and not (document_evidence or database_evidence):
@@ -77,7 +85,9 @@ async def evidence_eval(
     elif has_tool_error or has_rejected_non_document_evidence or has_missing_side:
         state["evidence_status"] = "PARTIALLY_SUPPORTED"
         if has_tool_error or has_rejected_non_document_evidence:
-            state["evidence_reason"] = "일부 조회가 실패했거나 일부 근거가 품질 기준에서 제외됐습니다."
+            state["evidence_reason"] = (
+                "일부 조회가 실패했거나 일부 근거가 품질 기준에서 제외됐습니다."
+            )
         else:
             no_result_reasons = state.get("_no_result_reasons") or {}
             if document_evidence and not database_evidence:
@@ -91,9 +101,13 @@ async def evidence_eval(
 
             missing_kind = "데이터 조회 결과" if document_evidence else "문서 근거"
             if specific_reason:
-                state["evidence_reason"] = f"질문 중 일부는 답변했지만, {missing_kind}가 없어 그 부분은 답변에서 빠졌습니다. ({specific_reason})"
+                state["evidence_reason"] = (
+                    f"질문 중 일부는 답변했지만, {missing_kind}가 없어 그 부분은 답변에서 빠졌습니다. ({specific_reason})"
+                )
             else:
-                state["evidence_reason"] = f"질문 중 일부는 답변했지만, {missing_kind}가 없어 그 부분은 답변에서 빠졌습니다."
+                state["evidence_reason"] = (
+                    f"질문 중 일부는 답변했지만, {missing_kind}가 없어 그 부분은 답변에서 빠졌습니다."
+                )
     else:
         state["evidence_status"] = "SUPPORTED"
         state["evidence_reason"] = "수집된 근거가 현재 품질 정책을 충족합니다."
@@ -101,10 +115,18 @@ async def evidence_eval(
     return state
 
 
-def _retrieval_diagnostics(evidence: list[dict[str, Any]], state: GraphState) -> dict[str, object]:
+def _retrieval_diagnostics(
+    evidence: list[dict[str, Any]], state: GraphState
+) -> dict[str, object]:
     """Expose retrieval health separately from answerability for trace logging."""
-    scores = [item.get("score") for item in evidence if isinstance(item.get("score"), (int, float))]
-    relevant = [item for item in evidence if _meets_policy(item, DEFAULT_EVIDENCE_POLICY)]
+    scores = [
+        item.get("score")
+        for item in evidence
+        if isinstance(item.get("score"), (int, float))
+    ]
+    relevant = [
+        item for item in evidence if _meets_policy(item, DEFAULT_EVIDENCE_POLICY)
+    ]
     errors = state.get("_errors", [])
     return {
         "has_documents": bool(evidence),
@@ -121,7 +143,9 @@ def _meets_policy(item: dict[str, Any], policy: EvidencePolicy) -> bool:
     relevance = item.get("relevance", item.get("score", 1.0))
     confidence = item.get("confidence", 1.0)
     minimum_relevance = (
-        policy.min_document_score if item.get("type") == "document" else policy.min_relevance
+        policy.min_document_score
+        if item.get("type") == "document"
+        else policy.min_relevance
     )
     if not _is_number_at_least(relevance, minimum_relevance):
         return False
@@ -136,18 +160,28 @@ def _meets_policy(item: dict[str, Any], policy: EvidencePolicy) -> bool:
             return False
 
     if policy.max_freshness_seconds is not None:
-        freshness_seconds = metadata.get("freshness_seconds") if isinstance(metadata, dict) else None
+        freshness_seconds = (
+            metadata.get("freshness_seconds") if isinstance(metadata, dict) else None
+        )
         if not _is_number_at_most(freshness_seconds, policy.max_freshness_seconds):
             return False
     return True
 
 
 def _is_number_at_least(value: object, threshold: float) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value >= threshold
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value >= threshold
+    )
 
 
 def _is_number_at_most(value: object, threshold: float) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value <= threshold
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value <= threshold
+    )
 
 
 def _has_explicit_contradiction(evidence: list[dict[str, Any]]) -> bool:
@@ -161,6 +195,8 @@ def _has_conflicting_fact_values(evidence: list[dict[str, Any]]) -> bool:
         fact_id = item.get("fact_id")
         if not isinstance(fact_id, str) or "fact_value" not in item:
             continue
-        normalized_value = json.dumps(item["fact_value"], ensure_ascii=False, sort_keys=True, default=str)
+        normalized_value = json.dumps(
+            item["fact_value"], ensure_ascii=False, sort_keys=True, default=str
+        )
         values_by_fact_id.setdefault(fact_id, set()).add(normalized_value)
     return any(len(values) > 1 for values in values_by_fact_id.values())

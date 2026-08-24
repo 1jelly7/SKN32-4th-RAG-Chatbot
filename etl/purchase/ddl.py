@@ -33,7 +33,9 @@ def build_create_table_sql(table_name: str) -> str:
 
     for c in columns:
         if c["unique"]:
-            col_lines.append(f"    UNIQUE KEY `uk_{table_name}_{c['name']}` (`{c['name']}`)")
+            col_lines.append(
+                f"    UNIQUE KEY `uk_{table_name}_{c['name']}` (`{c['name']}`)"
+            )
 
     for c in columns:
         if c["fk_table"]:

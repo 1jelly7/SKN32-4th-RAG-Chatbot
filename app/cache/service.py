@@ -26,9 +26,7 @@ def lookup_cached_answer(
     return cached_value
 
 
-def write_answer_cache(
-    state: GraphState, repository: CacheRepository = cache
-) -> bool:
+def write_answer_cache(state: GraphState, repository: CacheRepository = cache) -> bool:
     """LangGraph 완료 후 재사용 가능한 최종 답변만 캐시에 저장한다.
 
     오류, 불충분·상충 근거, 이전 cache hit는 저장하지 않는다. 실제 재인덱싱·ETL

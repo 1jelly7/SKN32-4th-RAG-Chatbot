@@ -11,6 +11,7 @@ class ETLMySQLClient:
     채팅용 read-only 계정이나 Data MCP의 연결을 재사용하지 않으며, 허용된 적재 테이블
     목록을 적용한다.
     """
+
     def __init__(self, host: str, user: str, password: str, database: str) -> None:
         """쓰기 전용 연결 설정을 보관하고 비밀번호가 로그에 남지 않게 한다."""
         # TODO(contract clarification): 소유 도메인과 table allowlist를 확정한 뒤 쓰기

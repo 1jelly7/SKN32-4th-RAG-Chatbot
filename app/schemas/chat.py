@@ -71,12 +71,15 @@ class ChatResponse(BaseModel):
     tables: list[TableData] = Field(default_factory=list)
     cached: bool
     route: str | None = None
-    evidence_status: Literal[
-        "SUPPORTED",
-        "PARTIALLY_SUPPORTED",
-        "INSUFFICIENT",
-        "CONTRADICTED",
-    ] | None = None
+    evidence_status: (
+        Literal[
+            "SUPPORTED",
+            "PARTIALLY_SUPPORTED",
+            "INSUFFICIENT",
+            "CONTRADICTED",
+        ]
+        | None
+    ) = None
     request_id: str | None = None
 
 

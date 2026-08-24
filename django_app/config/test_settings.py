@@ -6,7 +6,9 @@ import os
 
 os.environ["DJANGO_DEBUG"] = "true"
 os.environ["DJANGO_SECRET_KEY"] = "django-test-secret-key-that-is-at-least-32-bytes"
-os.environ["AUTH_INTROSPECTION_KEY"] = "test-introspection-key-that-is-at-least-32-bytes"
+os.environ["AUTH_INTROSPECTION_KEY"] = (
+    "test-introspection-key-that-is-at-least-32-bytes"
+)
 os.environ["DJANGO_SERVE_STATIC_FILES"] = "true"
 
 from django_app.config.settings import *  # noqa: F403,E402

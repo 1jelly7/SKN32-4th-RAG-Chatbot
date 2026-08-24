@@ -24,7 +24,9 @@ class MySQLService:
 
         # MySQL 기능이 비활성화되어 있으면 명확한 오류를 발생시킵니다.
         if not self.settings.mysql_enabled:
-            raise RuntimeError("MYSQL_ENABLED=false입니다. .env에서 MySQL 기능을 활성화하세요.")
+            raise RuntimeError(
+                "MYSQL_ENABLED=false입니다. .env에서 MySQL 기능을 활성화하세요."
+            )
 
         # 환경설정 값으로 MySQL 연결을 생성하여 반환합니다.
         return mysql.connector.connect(
@@ -187,7 +189,14 @@ class MySQLService:
                     version_date = VALUES(version_date),
                     allowed_departments = VALUES(allowed_departments)
                 """,
-                (filename, file_path, department, category, version_date, allowed_departments),
+                (
+                    filename,
+                    file_path,
+                    department,
+                    category,
+                    version_date,
+                    allowed_departments,
+                ),
             )
             connection.commit()
             return {"filename": filename, "file_path": file_path}

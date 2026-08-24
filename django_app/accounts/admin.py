@@ -14,7 +14,10 @@ class AccountUserAdmin(UserAdmin):
     list_filter = ("role", "is_active", "is_staff", "is_superuser")
     search_fields = ("username", "display_name")
     fieldsets = UserAdmin.fieldsets + (
-        ("Application access", {"fields": ("display_name", "role", "legacy_account_id")}),
+        (
+            "Application access",
+            {"fields": ("display_name", "role", "legacy_account_id")},
+        ),
     )
     add_fieldsets = UserAdmin.add_fieldsets + (
         ("Application access", {"fields": ("display_name", "role")}),

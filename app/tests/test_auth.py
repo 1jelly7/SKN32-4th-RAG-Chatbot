@@ -57,7 +57,9 @@ def _user(
 
 
 def test_missing_or_unknown_django_session_is_unauthorized() -> None:
-    gateway = FakeAuthenticationGateway({"known": _user(1, "known", "Known", "admin", "opaque-known")})
+    gateway = FakeAuthenticationGateway(
+        {"known": _user(1, "known", "Known", "admin", "opaque-known")}
+    )
     with _client(gateway) as client:
         assert client.post("/api/chat", json={"question": "hello"}).status_code == 401
         client.cookies.set("chatbot_session", "unknown")

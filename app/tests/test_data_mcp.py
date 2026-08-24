@@ -18,7 +18,9 @@ from app.mcp.client import (
     MCPQueryError,
     MCPTimeoutError,
 )
-from mcp_servers.data_tools.purchase.mysql import ReadOnlyMySQLClient as PurchaseMySQLClient
+from mcp_servers.data_tools.purchase.mysql import (
+    ReadOnlyMySQLClient as PurchaseMySQLClient,
+)
 from mcp_servers.data_tools.sales.mysql import ReadOnlyMySQLClient as SalesMySQLClient
 from mcp_servers.data_tools.server import _execute_query
 from tests.auth_helpers import TEST_ADMIN_CONTEXT
@@ -44,8 +46,16 @@ def test_data_query_normalizes_purchase_and_sales_and_records_calls() -> None:
     port = FakeMCPPort(
         {
             "search_documents": _success("document", []),
-            "query_purchase": _success("purchase", [{"vendor": "A사", "amount": 100}], metadata={"generated_sql": "SELECT amount"}),
-            "query_sales": _success("sales", [{"customer": "B사", "revenue": 200}], metadata={"generated_sql": "SELECT revenue"}),
+            "query_purchase": _success(
+                "purchase",
+                [{"vendor": "A사", "amount": 100}],
+                metadata={"generated_sql": "SELECT amount"},
+            ),
+            "query_sales": _success(
+                "sales",
+                [{"customer": "B사", "revenue": 200}],
+                metadata={"generated_sql": "SELECT revenue"},
+            ),
         }
     )
     client = MCPClient(port)
@@ -72,7 +82,17 @@ def test_document_search_normalizes_data_and_sources() -> None:
 
     evidence = asyncio.run(MCPClient(port).document_search("휴가", 3))
 
-    assert evidence == [{"type": "document", "document_id": "policy-1", "title": "휴가 규정", "content": "휴가 신청 절차", "score": 0.9, "page": 3, "metadata": {}}]
+    assert evidence == [
+        {
+            "type": "document",
+            "document_id": "policy-1",
+            "title": "휴가 규정",
+            "content": "휴가 신청 절차",
+            "score": 0.9,
+            "page": 3,
+            "metadata": {},
+        }
+    ]
     assert len(port.calls) == 1
     assert port.calls[0].tool_name == "search_documents"
     assert port.calls[0].payload == {"query": "휴가", "top_k": 3}
@@ -83,15 +103,57 @@ def test_document_search_normalizes_data_and_sources() -> None:
     [
         ("not-an-envelope", MCPMalformedPayloadError),
         (_success("sales", []), MCPMalformedPayloadError),
-        ({"status": "error", "domain": "purchase", "message": "결과 없음", "error_code": "NO_RESULT"}, MCPNoResultError),
-        ({"status": "error", "domain": "purchase", "message": "잘못된 입력", "error_code": "INVALID_INPUT"}, MCPInvalidInputError),
-        ({"status": "error", "domain": "purchase", "message": "근거 부족", "error_code": "EVIDENCE_INSUFFICIENT"}, MCPEvidenceInsufficientError),
-        ({"status": "error", "domain": "purchase", "message": "내부 오류", "error_code": "INTERNAL_ERROR"}, MCPInternalError),
-        ({"status": "error", "domain": "purchase", "message": "실패", "error_code": "QUERY_ERROR"}, MCPQueryError),
+        (
+            {
+                "status": "error",
+                "domain": "purchase",
+                "message": "결과 없음",
+                "error_code": "NO_RESULT",
+            },
+            MCPNoResultError,
+        ),
+        (
+            {
+                "status": "error",
+                "domain": "purchase",
+                "message": "잘못된 입력",
+                "error_code": "INVALID_INPUT",
+            },
+            MCPInvalidInputError,
+        ),
+        (
+            {
+                "status": "error",
+                "domain": "purchase",
+                "message": "근거 부족",
+                "error_code": "EVIDENCE_INSUFFICIENT",
+            },
+            MCPEvidenceInsufficientError,
+        ),
+        (
+            {
+                "status": "error",
+                "domain": "purchase",
+                "message": "내부 오류",
+                "error_code": "INTERNAL_ERROR",
+            },
+            MCPInternalError,
+        ),
+        (
+            {
+                "status": "error",
+                "domain": "purchase",
+                "message": "실패",
+                "error_code": "QUERY_ERROR",
+            },
+            MCPQueryError,
+        ),
         (asyncio.TimeoutError(), MCPTimeoutError),
     ],
 )
-def test_purchase_query_distinguishes_mcp_errors(response: object, error_type: type[Exception]) -> None:
+def test_purchase_query_distinguishes_mcp_errors(
+    response: object, error_type: type[Exception]
+) -> None:
     """malformed, NO_RESULT, QUERY_ERROR, timeout이 서로 다른 내부 예외로 유지되게 한다."""
     port = FakeMCPPort(
         {
@@ -124,15 +186,23 @@ def test_fake_mcp_returns_defensive_response_copy() -> None:
 
 def test_data_tool_preserves_domain_metadata() -> None:
     async def query(_: str) -> list[dict[str, Any]]:
-        return [{
-            "domain": "sales",
-            "rows": [{"order_month": "2026-01", "total_sales": 1200}],
-            "generated_sql": "SELECT total_sales",
-            "elapsed_ms": 1.2,
-            "metadata": {"chart_hint": "line", "currency": "JOD", "views_used": ["v_sales_order"]},
-        }]
+        return [
+            {
+                "domain": "sales",
+                "rows": [{"order_month": "2026-01", "total_sales": 1200}],
+                "generated_sql": "SELECT total_sales",
+                "elapsed_ms": 1.2,
+                "metadata": {
+                    "chart_hint": "line",
+                    "currency": "JOD",
+                    "views_used": ["v_sales_order"],
+                },
+            }
+        ]
 
-    envelope = asyncio.run(_execute_query("sales", "월별 매출", query, TEST_ADMIN_CONTEXT))
+    envelope = asyncio.run(
+        _execute_query("sales", "월별 매출", query, TEST_ADMIN_CONTEXT)
+    )
 
     assert envelope["metadata"]["chart_hint"] == "line"
     assert envelope["metadata"]["currency"] == "JOD"
@@ -141,12 +211,19 @@ def test_data_tool_preserves_domain_metadata() -> None:
 
 def test_data_tool_preserves_specific_empty_result_message() -> None:
     async def query(_: str) -> list[dict[str, Any]]:
-        return [{
-            "domain": "sales", "rows": [], "generated_sql": "SELECT total_sales",
-            "message": "요청한 지표는 판매 데이터로 계산할 수 없습니다.", "metadata": {},
-        }]
+        return [
+            {
+                "domain": "sales",
+                "rows": [],
+                "generated_sql": "SELECT total_sales",
+                "message": "요청한 지표는 판매 데이터로 계산할 수 없습니다.",
+                "metadata": {},
+            }
+        ]
 
-    envelope = asyncio.run(_execute_query("sales", "영업이익", query, TEST_ADMIN_CONTEXT))
+    envelope = asyncio.run(
+        _execute_query("sales", "영업이익", query, TEST_ADMIN_CONTEXT)
+    )
 
     assert envelope["error_code"] == "NO_RESULT"
     assert envelope["message"] == "요청한 지표는 판매 데이터로 계산할 수 없습니다."
@@ -182,7 +259,9 @@ def test_success_envelope_with_empty_data_is_no_result(
     assert port.calls[0].payload
 
 
-def test_data_server_wraps_purchase_rows_in_common_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_data_server_wraps_purchase_rows_in_common_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """공식 구매 service 결과가 Host가 검증할 envelope로 변환되게 한다."""
     from mcp_servers.data_tools import server
 
@@ -195,10 +274,16 @@ def test_data_server_wraps_purchase_rows_in_common_envelope(monkeypatch: pytest.
 
     async def fake_query(question: str) -> list[dict[str, Any]]:
         assert question == "구매 현황"
-        return [{
-            "type": "database", "domain": "purchase", "generated_sql": "SELECT 1",
-            "row_count": 1, "rows": [{"amount": 100}], "elapsed_ms": 1.0,
-        }]
+        return [
+            {
+                "type": "database",
+                "domain": "purchase",
+                "generated_sql": "SELECT 1",
+                "row_count": 1,
+                "rows": [{"amount": 100}],
+                "elapsed_ms": 1.0,
+            }
+        ]
 
     monkeypatch.setattr(server, "run_purchase_query", fake_query)
     result = asyncio.run(server.execute_data_tool("query_purchase", "구매 현황"))
@@ -209,7 +294,9 @@ def test_data_server_wraps_purchase_rows_in_common_envelope(monkeypatch: pytest.
     assert result["metadata"]["generated_sql"] == "SELECT 1"
 
 
-def test_data_server_distinguishes_empty_and_query_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_data_server_distinguishes_empty_and_query_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """빈 결과와 provider 실패가 서로 다른 표준 오류로 유지되게 한다."""
     from mcp_servers.data_tools import server
 
@@ -244,7 +331,10 @@ def test_data_server_distinguishes_empty_and_query_error(monkeypatch: pytest.Mon
         pytest.param(SalesMySQLClient, id="sales"),
     ],
 )
-@pytest.mark.parametrize("sql", ["UPDATE orders SET status='x'", "SELECT 1; SELECT 2", "SELECT /* bypass */ 1"])
+@pytest.mark.parametrize(
+    "sql",
+    ["UPDATE orders SET status='x'", "SELECT 1; SELECT 2", "SELECT /* bypass */ 1"],
+)
 def test_domain_mysql_clients_reject_non_single_select_before_connect(
     client_type: type,
     sql: str,

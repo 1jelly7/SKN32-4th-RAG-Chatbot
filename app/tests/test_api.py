@@ -28,18 +28,21 @@ from tests.auth_helpers import TEST_ADMIN_CONTEXT, authentication_dependencies, 
 
 class FakeLLMClient(LLMClient):
     """생성자에서 실제 OpenAI client를 만들지 않는 API 조립용 대역."""
+
     def __init__(self) -> None:
         pass
 
 
 class FakeMCPClient(MCPClient):
     """생성자에서 실제 transport를 요구하지 않는 API 조립용 대역."""
+
     def __init__(self) -> None:
         pass
 
 
 class RecordingCache(MemoryCache):
     """cache lookup/write 순서와 호출 횟수를 기록하는 저장소 대역."""
+
     def __init__(self) -> None:
         super().__init__()
         self.events: list[str] = []
@@ -59,6 +62,7 @@ class RecordingCache(MemoryCache):
 
 class CountingGraph:
     """cache miss에서만 호출돼야 하는 downstream 작업 횟수를 기록한다."""
+
     def __init__(self, events: list[str] | None = None) -> None:
         self.events = events
         self.graph_calls = 0
@@ -82,6 +86,7 @@ class CountingGraph:
 
 class ErrorGraph:
     """API 오류 매핑을 위해 지정된 경계 예외를 발생시킨다."""
+
     def __init__(self, error: Exception) -> None:
         self.error = error
 
@@ -95,7 +100,9 @@ class DownloadMCPClient:
     def __init__(self, document_path: Path | None) -> None:
         self.document_path = document_path
 
-    async def resolve_document_download(self, document_id: str, user_context: dict[str, object]) -> Path:
+    async def resolve_document_download(
+        self, document_id: str, user_context: dict[str, object]
+    ) -> Path:
         if self.document_path is None or document_id != "policy-card":
             raise MCPNoResultError("resolve_document_download", "missing")
         return self.document_path
@@ -169,7 +176,9 @@ def test_provider_warmup_is_started_without_blocking_api_startup() -> None:
     assert "yield" in source
 
 
-def test_document_download_uses_document_id_mapping_and_returns_404_for_unknown_id(tmp_path: Path) -> None:
+def test_document_download_uses_document_id_mapping_and_returns_404_for_unknown_id(
+    tmp_path: Path,
+) -> None:
     document_path = tmp_path / "법인카드_규정.pdf"
     document_path.write_bytes(b"sample-pdf")
     application = _application(MemoryCache(), CountingGraph())
@@ -177,7 +186,9 @@ def test_document_download_uses_document_id_mapping_and_returns_404_for_unknown_
 
     with TestClient(application) as client:
         login(client)
-        success = client.get("/api/documents/download", params={"doc_id": "policy-card"})
+        success = client.get(
+            "/api/documents/download", params={"doc_id": "policy-card"}
+        )
         missing = client.get("/api/documents/download", params={"doc_id": "unknown"})
 
     assert success.status_code == 200
@@ -274,11 +285,19 @@ def test_invalid_chat_request_does_not_invoke_cache_or_graph() -> None:
         (MCPNoResultError("query_purchase", "secret=hidden"), 404, "NO_RESULT"),
         (MCPInvalidInputError("query_purchase", "secret=hidden"), 400, "INVALID_INPUT"),
         (MCPForbiddenError("query_purchase", "secret=hidden"), 403, "FORBIDDEN"),
-        (MCPEvidenceInsufficientError("query_purchase", "secret=hidden"), 422, "EVIDENCE_INSUFFICIENT"),
+        (
+            MCPEvidenceInsufficientError("query_purchase", "secret=hidden"),
+            422,
+            "EVIDENCE_INSUFFICIENT",
+        ),
         (MCPQueryError("query_purchase", "password=hidden"), 502, "QUERY_ERROR"),
         (MCPInternalError("query_purchase", "secret=hidden"), 502, "INTERNAL_ERROR"),
         (MCPTimeoutError("query_purchase", "token=hidden"), 504, "TIMEOUT"),
-        (MCPMalformedPayloadError("query_purchase", "key=hidden"), 502, "INTERNAL_ERROR"),
+        (
+            MCPMalformedPayloadError("query_purchase", "key=hidden"),
+            502,
+            "INTERNAL_ERROR",
+        ),
     ],
 )
 def test_tool_errors_use_safe_contract_response(
@@ -303,9 +322,15 @@ def test_session_id_is_hashed_into_cache_context() -> None:
 
     with TestClient(application) as client:
         login(client)
-        first = client.post("/api/chat", json={"question": "세션 질문", "session_id": "session-a"})
-        second = client.post("/api/chat", json={"question": "세션 질문", "session_id": "session-b"})
-        repeat = client.post("/api/chat", json={"question": "세션 질문", "session_id": "session-a"})
+        first = client.post(
+            "/api/chat", json={"question": "세션 질문", "session_id": "session-a"}
+        )
+        second = client.post(
+            "/api/chat", json={"question": "세션 질문", "session_id": "session-b"}
+        )
+        repeat = client.post(
+            "/api/chat", json={"question": "세션 질문", "session_id": "session-a"}
+        )
 
     assert first.json()["cached"] is False
     assert second.json()["cached"] is False

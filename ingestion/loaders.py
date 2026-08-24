@@ -94,7 +94,9 @@ def load_pdf_with_docling_fallback(path: Path) -> RawDocument:
 
     try:
         return load_pdf_docling(path)
-    except Exception as exc:  # noqa: BLE001 - 재인덱싱 전체를 막지 않기 위한 의도적 폴백
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - 재인덱싱 전체를 막지 않기 위한 의도적 폴백
         import logging
 
         logging.getLogger(__name__).warning(
@@ -148,7 +150,9 @@ def load_pdf_docling(path: Path) -> RawDocument:
     pipeline_options.picture_description_options = picture_description_options
 
     converter = DocumentConverter(
-        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
+        format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+        }
     )
     result = converter.convert(str(path))
     doc = result.document
@@ -159,15 +163,23 @@ def load_pdf_docling(path: Path) -> RawDocument:
         page_texts.setdefault(page_no, []).append(text_item.text)
 
     picture_count = 0
-    detected_picture_count = 0  # 캡션 성공 여부와 무관하게, 레이아웃 모델이 "그림"으로 감지한 전체 개수
-    pictures_without_caption = 0  # 그림으로는 감지됐지만 캡션이 안 달린 개수(면적 임계값 미달, API 실패 등)
+    detected_picture_count = (
+        0  # 캡션 성공 여부와 무관하게, 레이아웃 모델이 "그림"으로 감지한 전체 개수
+    )
+    pictures_without_caption = (
+        0  # 그림으로는 감지됐지만 캡션이 안 달린 개수(면적 임계값 미달, API 실패 등)
+    )
     for picture in doc.pictures:
         if not isinstance(picture, PictureItem):
             continue
         detected_picture_count += 1
         page_no = picture.prov[0].page_no if picture.prov else 1
         caption = next(
-            (annotation.text for annotation in picture.annotations if annotation.kind == "description"),
+            (
+                annotation.text
+                for annotation in picture.annotations
+                if annotation.kind == "description"
+            ),
             None,
         )
         if caption:
@@ -177,7 +189,9 @@ def load_pdf_docling(path: Path) -> RawDocument:
             pictures_without_caption += 1
 
     last_page = max(page_texts, default=0)
-    ordered_pages = ["\n".join(page_texts.get(page_no, [])) for page_no in range(1, last_page + 1)]
+    ordered_pages = [
+        "\n".join(page_texts.get(page_no, [])) for page_no in range(1, last_page + 1)
+    ]
     content = "\f".join(ordered_pages)
 
     return {

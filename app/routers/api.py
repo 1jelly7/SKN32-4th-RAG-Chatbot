@@ -142,7 +142,10 @@ def get_prompt(name: str) -> dict:
     # 존재하지 않는 Prompt 오류를 처리하기 위해 try 블록을 사용합니다.
     try:
         # 요청한 Prompt를 조회하여 반환합니다.
-        return {"name": name, "template": get_container().prompt_service.get_prompt(name)}
+        return {
+            "name": name,
+            "template": get_container().prompt_service.get_prompt(name),
+        }
     except ValueError as exc:
         # 존재하지 않는 Prompt는 HTTP 404로 반환합니다.
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -236,7 +239,11 @@ def list_documents() -> dict:
     # mysql 모드가 아니면 파일시스템 스캔 결과를 간단한 형태로 반환합니다.
     if container.settings.document_source.lower() != "mysql":
         files = container.document_service.list_files()
-        return {"source": "filesystem", "count": len(files), "documents": [{"filename": f} for f in files]}
+        return {
+            "source": "filesystem",
+            "count": len(files),
+            "documents": [{"filename": f} for f in files],
+        }
 
     # mysql 모드면 DB 오류를 HTTP 응답으로 변환합니다.
     try:

@@ -15,7 +15,14 @@ from typing import Any, Mapping, Protocol
 from pydantic import ValidationError
 
 from app.agent.state import DataDomain
-from app.schemas.mcp import DocumentChunk, DocumentSource, MCPDomain, ToolErrorEnvelope, ToolName, ToolSuccessEnvelope
+from app.schemas.mcp import (
+    DocumentChunk,
+    DocumentSource,
+    MCPDomain,
+    ToolErrorEnvelope,
+    ToolName,
+    ToolSuccessEnvelope,
+)
 
 
 class AsyncMCPPort(Protocol):
@@ -66,10 +73,15 @@ class InProcessMCPPort:
         if tool_name in ("query_purchase", "query_sales"):
             from mcp_servers.data_tools.server import execute_data_tool
 
-            return await execute_data_tool(tool_name, str(payload.get("question", "")), payload.get("user_context"))
+            return await execute_data_tool(
+                tool_name, str(payload.get("question", "")), payload.get("user_context")
+            )
         if tool_name == "search_documents":
             from app.auth.policy import require_database_access
-            from mcp_servers.document_tools.search import DocumentSearchUnavailableError, search_documents
+            from mcp_servers.document_tools.search import (
+                DocumentSearchUnavailableError,
+                search_documents,
+            )
 
             from mcp_servers.document_tools.rag import get_last_index_version
             from mcp_servers.document_tools.search import search_documents
@@ -80,47 +92,83 @@ class InProcessMCPPort:
                 require_database_access(payload.get("user_context"), "document_db")
             except PermissionError:
                 return {
-                    "status": "error", "domain": "document", "message": "문서 데이터베이스에 접근할 권한이 없습니다.",
-                    "error_code": "FORBIDDEN", "data": [], "sources": [], "metadata": {},
+                    "status": "error",
+                    "domain": "document",
+                    "message": "문서 데이터베이스에 접근할 권한이 없습니다.",
+                    "error_code": "FORBIDDEN",
+                    "data": [],
+                    "sources": [],
+                    "metadata": {},
                 }
             if not query.strip() or not isinstance(top_k, int) or top_k <= 0:
                 return {
-                    "status": "error", "domain": "document",
+                    "status": "error",
+                    "domain": "document",
                     "message": "문서 검색 입력이 올바르지 않습니다.",
-                    "error_code": "INVALID_INPUT", "data": [], "sources": [], "metadata": {},
+                    "error_code": "INVALID_INPUT",
+                    "data": [],
+                    "sources": [],
+                    "metadata": {},
                 }
             try:
                 chunks = await search_documents(query, top_k)
             except DocumentSearchUnavailableError:
                 return {
-                    "status": "error", "domain": "document",
+                    "status": "error",
+                    "domain": "document",
                     "message": "문서 조회 서비스를 현재 사용할 수 없습니다.",
-                    "error_code": "QUERY_ERROR", "data": [], "sources": [], "metadata": {},
+                    "error_code": "QUERY_ERROR",
+                    "data": [],
+                    "sources": [],
+                    "metadata": {},
                 }
-            except Exception:  # noqa: BLE001 - 내부 상세를 Host 경계 밖으로 노출하지 않는다.
+            except (
+                Exception
+            ):  # noqa: BLE001 - 내부 상세를 Host 경계 밖으로 노출하지 않는다.
                 return {
-                    "status": "error", "domain": "document",
+                    "status": "error",
+                    "domain": "document",
                     "message": "문서 검색 중 오류가 발생했습니다.",
-                    "error_code": "INTERNAL_ERROR", "data": [], "sources": [], "metadata": {},
+                    "error_code": "INTERNAL_ERROR",
+                    "data": [],
+                    "sources": [],
+                    "metadata": {},
                 }
             if not chunks:
                 return {
-                    "status": "error", "domain": "document", "message": "관련 문서가 없습니다.",
-                    "error_code": "NO_RESULT", "data": [], "sources": [], "metadata": {"result_count": 0},
+                    "status": "error",
+                    "domain": "document",
+                    "message": "관련 문서가 없습니다.",
+                    "error_code": "NO_RESULT",
+                    "data": [],
+                    "sources": [],
+                    "metadata": {"result_count": 0},
                 }
             return {
-                "status": "success", "domain": "document", "message": None,
-                "data": [{"content": item["content"], "score": item["score"]} for item in chunks],
+                "status": "success",
+                "domain": "document",
+                "message": None,
+                "data": [
+                    {"content": item["content"], "score": item["score"]}
+                    for item in chunks
+                ],
                 "sources": [
                     {
                         "document_id": item["document_id"],
                         "title": item["title"],
                         "page": item.get("page"),
-                        **({"file_name": item["file_name"]} if item.get("file_name") else {}),
+                        **(
+                            {"file_name": item["file_name"]}
+                            if item.get("file_name")
+                            else {}
+                        ),
                     }
                     for item in chunks
                 ],
-                "metadata": {"result_count": len(chunks), "index_version": get_last_index_version()},
+                "metadata": {
+                    "result_count": len(chunks),
+                    "index_version": get_last_index_version(),
+                },
             }
         if tool_name == "resolve_document_download":
             from app.auth.policy import require_database_access
@@ -131,15 +179,24 @@ class InProcessMCPPort:
                 require_database_access(payload.get("user_context"), "document_db")
             except PermissionError:
                 return {
-                    "status": "error", "domain": "document", "message": "문서 다운로드 권한이 없습니다.",
-                    "error_code": "FORBIDDEN", "data": [], "sources": [], "metadata": {},
+                    "status": "error",
+                    "domain": "document",
+                    "message": "문서 다운로드 권한이 없습니다.",
+                    "error_code": "FORBIDDEN",
+                    "data": [],
+                    "sources": [],
+                    "metadata": {},
                 }
             path = await resolve_document_download(document_id)
             return {
                 "status": "success",
                 "domain": "document",
                 "message": None,
-                "data": [] if path is None else [{"file_path": str(path), "file_name": path.name}],
+                "data": (
+                    []
+                    if path is None
+                    else [{"file_path": str(path), "file_name": path.name}]
+                ),
                 "sources": [],
                 "metadata": {},
             }
@@ -211,7 +268,9 @@ class MCPClient:
         if callable(warmup):
             await warmup()
 
-    async def document_search(self, query: str, top_k: int, user_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    async def document_search(
+        self, query: str, top_k: int, user_context: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """`search_documents` 성공 envelope를 문서 evidence 목록으로 정규화한다."""
         payload: dict[str, Any] = {"query": query, "top_k": top_k}
         if user_context is not None:
@@ -223,7 +282,9 @@ class MCPClient:
                 chunk = DocumentChunk.model_validate(item)
                 source = DocumentSource.model_validate(envelope.sources[index])
             except (IndexError, ValidationError) as exc:
-                raise MCPMalformedPayloadError("search_documents", "문서 evidence 형식이 올바르지 않습니다.") from exc
+                raise MCPMalformedPayloadError(
+                    "search_documents", "문서 evidence 형식이 올바르지 않습니다."
+                ) from exc
             evidence.append(
                 {
                     "type": "document",
@@ -256,13 +317,19 @@ class MCPClient:
         item = envelope.data[0]
         file_path = item.get("file_path")
         if not isinstance(file_path, str):
-            raise MCPMalformedPayloadError("resolve_document_download", "다운로드 문서 형식이 올바르지 않습니다.")
+            raise MCPMalformedPayloadError(
+                "resolve_document_download", "다운로드 문서 형식이 올바르지 않습니다."
+            )
         path = Path(file_path)
         if not path.is_file():
-            raise MCPNoResultError("resolve_document_download", "문서를 찾을 수 없습니다.")
+            raise MCPNoResultError(
+                "resolve_document_download", "문서를 찾을 수 없습니다."
+            )
         return path
 
-    async def purchase_query(self, question: str, user_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    async def purchase_query(
+        self, question: str, user_context: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """`query_purchase` 성공 envelope를 구매 database evidence로 정규화한다."""
         payload: dict[str, Any] = {"question": question}
         if user_context is not None:
@@ -270,7 +337,9 @@ class MCPClient:
         envelope = await self._call_success("query_purchase", payload, "purchase")
         return _database_evidence("purchase", envelope)
 
-    async def sales_query(self, question: str, user_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    async def sales_query(
+        self, question: str, user_context: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """`query_sales` 성공 envelope를 판매 database evidence로 정규화한다."""
         payload: dict[str, Any] = {"question": question}
         if user_context is not None:
@@ -278,7 +347,9 @@ class MCPClient:
         envelope = await self._call_success("query_sales", payload, "sales")
         return _database_evidence("sales", envelope)
 
-    async def data_query(self, domain: DataDomain, question: str) -> list[dict[str, Any]]:
+    async def data_query(
+        self, domain: DataDomain, question: str
+    ) -> list[dict[str, Any]]:
         """명시된 데이터 도메인의 Tool만 호출한다."""
         if domain == "purchase":
             return await self.purchase_query(question)
@@ -303,17 +374,25 @@ class MCPClient:
                 timeout=self._timeout_seconds,
             )
         except asyncio.TimeoutError as exc:
-            raise MCPTimeoutError(tool_name, "MCP Tool 호출 시간이 초과되었습니다.") from exc
+            raise MCPTimeoutError(
+                tool_name, "MCP Tool 호출 시간이 초과되었습니다."
+            ) from exc
         except MCPClientError:
             raise
-        except Exception as exc:  # noqa: BLE001 - 외부 transport 오류를 경계 예외로 정규화
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - 외부 transport 오류를 경계 예외로 정규화
             raise MCPQueryError(tool_name, "MCP Tool 호출에 실패했습니다.") from exc
 
         envelope = _parse_envelope(tool_name, raw_response)
         if envelope.domain != expected_domain:
-            raise MCPMalformedPayloadError(tool_name, "MCP Tool domain이 요청과 일치하지 않습니다.")
+            raise MCPMalformedPayloadError(
+                tool_name, "MCP Tool domain이 요청과 일치하지 않습니다."
+            )
         if not envelope.data:
-            raise MCPNoResultError(tool_name, "MCP Tool이 조회 결과를 반환하지 않았습니다.")
+            raise MCPNoResultError(
+                tool_name, "MCP Tool이 조회 결과를 반환하지 않았습니다."
+            )
         return envelope
 
 
@@ -329,9 +408,13 @@ def _parse_envelope(tool_name: ToolName, raw_response: object) -> ToolSuccessEnv
         if status == "error":
             error = ToolErrorEnvelope.model_validate(raw_response)
         else:
-            raise MCPMalformedPayloadError(tool_name, "MCP Tool status가 올바르지 않습니다.")
+            raise MCPMalformedPayloadError(
+                tool_name, "MCP Tool status가 올바르지 않습니다."
+            )
     except ValidationError as exc:
-        raise MCPMalformedPayloadError(tool_name, "MCP Tool envelope 형식이 올바르지 않습니다.") from exc
+        raise MCPMalformedPayloadError(
+            tool_name, "MCP Tool envelope 형식이 올바르지 않습니다."
+        ) from exc
 
     if error.error_code == "NO_RESULT":
         raise MCPNoResultError(tool_name, error.message)
@@ -346,11 +429,16 @@ def _parse_envelope(tool_name: ToolName, raw_response: object) -> ToolSuccessEnv
     raise MCPQueryError(tool_name, error.message)
 
 
-def _database_evidence(domain: MCPDomain, envelope: ToolSuccessEnvelope) -> list[dict[str, Any]]:
+def _database_evidence(
+    domain: MCPDomain, envelope: ToolSuccessEnvelope
+) -> list[dict[str, Any]]:
     """SQL을 변경하지 않고 Data MCP의 행과 metadata를 database evidence로 보존한다."""
     generated_sql = envelope.metadata.get("generated_sql", "")
     if not isinstance(generated_sql, str):
-        raise MCPMalformedPayloadError("query_purchase" if domain == "purchase" else "query_sales", "generated_sql 형식이 올바르지 않습니다.")
+        raise MCPMalformedPayloadError(
+            "query_purchase" if domain == "purchase" else "query_sales",
+            "generated_sql 형식이 올바르지 않습니다.",
+        )
     return [
         {
             "type": "database",

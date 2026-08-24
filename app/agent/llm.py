@@ -49,7 +49,9 @@ def _strip_injection_markers(text: str) -> str:
 class AsyncLLMPort(Protocol):
     """검증된 근거만 사용해 답변을 완성하는 비동기 LLM 경계다."""
 
-    async def complete(self, prompt: str, context: list[dict[str, Any]], question: str) -> str:
+    async def complete(
+        self, prompt: str, context: list[dict[str, Any]], question: str
+    ) -> str:
         """프롬프트와 안전하게 정규화된 근거로 답변을 생성한다."""
         ...
 
@@ -70,9 +72,13 @@ class FakeLLMPort:
         self._response = response
         self.calls: list[LLMCall] = []
 
-    async def complete(self, prompt: str, context: list[dict[str, Any]], question: str) -> str:
+    async def complete(
+        self, prompt: str, context: list[dict[str, Any]], question: str
+    ) -> str:
         """응답을 반환하고 방어적 context 사본을 호출 이력에 기록한다."""
-        self.calls.append(LLMCall(prompt=prompt, context=deepcopy(context), question=question))
+        self.calls.append(
+            LLMCall(prompt=prompt, context=deepcopy(context), question=question)
+        )
         return self._response
 
 
@@ -91,7 +97,9 @@ class LLMClient:
         """외부 OpenAI client가 구성되지 않아 로컬 요약을 사용할지 반환한다."""
         return self._client is None
 
-    async def complete(self, prompt: str, context: list[dict[str, Any]], question: str) -> str:
+    async def complete(
+        self, prompt: str, context: list[dict[str, Any]], question: str
+    ) -> str:
         """프롬프트와 검증·정규화된 근거로 텍스트 완료를 요청한다."""
         if self._client is None:
             return DEMO_NOTICE + _format_context_as_demo_answer(context, question)
@@ -115,7 +123,9 @@ class LLMClient:
                 max_completion_tokens=600,
                 timeout=30,
             )
-        except Exception as exc:  # noqa: BLE001 - 외부 SDK 오류 세부값을 사용자·로그에 노출하지 않음
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - 외부 SDK 오류 세부값을 사용자·로그에 노출하지 않음
             raise RuntimeError("LLM 호출에 실패했습니다.") from exc
 
         content = response.choices[0].message.content
@@ -145,7 +155,9 @@ def _sanitize_value(value: Any, key: str | None = None) -> Any:
 
 
 def _is_sensitive_key(key: object) -> bool:
-    return isinstance(key, str) and any(part in key.casefold() for part in SENSITIVE_KEY_PARTS)
+    return isinstance(key, str) and any(
+        part in key.casefold() for part in SENSITIVE_KEY_PARTS
+    )
 
 
 def _stringify_evidence(item: dict[str, Any]) -> str:
@@ -159,6 +171,7 @@ def _stringify_evidence(item: dict[str, Any]) -> str:
             text += f"\n안내: {message}"
         return text
     return str(item.get("content", item))
+
 
 def _format_context_as_demo_answer(context: list[dict[str, Any]], question: str) -> str:
     if not context:
@@ -176,7 +189,9 @@ def _get_default_client() -> LLMClient:
     global _default_client
     if _default_client is None:
         settings = get_settings()
-        _default_client = LLMClient(api_key=settings.openai_api_key, model=settings.openai_model)
+        _default_client = LLMClient(
+            api_key=settings.openai_api_key, model=settings.openai_model
+        )
     return _default_client
 
 
@@ -187,4 +202,6 @@ async def complete(
     llm: AsyncLLMPort | None = None,
 ) -> str:
     """주입된 LLM 또는 기본 client에 안전한 근거 사본을 전달한다."""
-    return await (llm or _get_default_client()).complete(prompt, sanitize_evidence(context), question)
+    return await (llm or _get_default_client()).complete(
+        prompt, sanitize_evidence(context), question
+    )

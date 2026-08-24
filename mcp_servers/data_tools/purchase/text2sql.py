@@ -61,7 +61,9 @@ def _format_schema(schema: SchemaResource) -> str:
         for term, metric in schema["metrics"].items()
     )
     coverage = schema["data_coverage"]
-    coverage_text = f"{coverage.get('min_po_date') or '?'} ~ {coverage.get('max_po_date') or '?'}"
+    coverage_text = (
+        f"{coverage.get('min_po_date') or '?'} ~ {coverage.get('max_po_date') or '?'}"
+    )
     return (
         f"[허용된 뷰]\n{views_desc}\n\n"
         f"[지표 정의]\n{metrics_desc}\n\n"
@@ -112,7 +114,9 @@ async def generate_sql(question: str, schema: SchemaResource) -> str:
     답할 수 없다고 판단되면 빈 문자열을 반환한다(호출부가 범위 밖으로 처리).
     """
     today = date.today().isoformat()
-    user_content = f"{_format_schema(schema)}\n\n[오늘 날짜] {today}\n\n[질문] {question}"
+    user_content = (
+        f"{_format_schema(schema)}\n\n[오늘 날짜] {today}\n\n[질문] {question}"
+    )
     return _extract_sql(await _call_llm(user_content))
 
 

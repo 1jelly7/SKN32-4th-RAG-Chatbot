@@ -12,7 +12,9 @@ from app.llm.embedding_service import EmbeddingService
 @pytest.fixture
 def local_settings():
     """API 키 없이 로컬 백엔드만 쓰는 설정을 만듭니다."""
-    return Settings(embedding_backend="local", openai_api_key="", local_embedding_dimension=64)
+    return Settings(
+        embedding_backend="local", openai_api_key="", local_embedding_dimension=64
+    )
 
 
 def test_local_embedding_dimension_matches_settings(local_settings):
@@ -39,7 +41,9 @@ def test_local_embedding_is_normalized(local_settings):
 
 def test_local_embedding_similar_text_scores_higher_than_unrelated():
     """조사가 다른 같은 단어(법인카드는/법인카드를)가 무관한 단어보다 더 비슷해야 합니다."""
-    settings = Settings(embedding_backend="local", openai_api_key="", local_embedding_dimension=256)
+    settings = Settings(
+        embedding_backend="local", openai_api_key="", local_embedding_dimension=256
+    )
     service = EmbeddingService(settings)
 
     a = service.embed_query("법인카드는 어떻게 사용하나요")

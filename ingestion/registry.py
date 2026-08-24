@@ -217,7 +217,15 @@ class DocumentRegistry:
                         allowed_roles = VALUES(allowed_roles),
                         is_active = VALUES(is_active)
                     """,
-                    (filename, title_override, department, category, version_date, roles_value, is_active),
+                    (
+                        filename,
+                        title_override,
+                        department,
+                        category,
+                        version_date,
+                        roles_value,
+                        is_active,
+                    ),
                 )
             connection.commit()
         finally:

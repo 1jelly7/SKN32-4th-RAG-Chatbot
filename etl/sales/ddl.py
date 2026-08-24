@@ -6,6 +6,7 @@ schema.py의 정의로부터 MySQL DDL(CREATE TABLE)을 생성한다.
   일반 BIGINT 컬럼으로만 두고 제약을 걸지 않는다(다른 도메인 테이블 존재를
   전제하지 않기 위함 - ownership.md: 도메인은 서로의 적재 규칙을 직접 다루지 않는다).
 """
+
 from __future__ import annotations
 
 from etl.sales.schema import SALES_SCHEMA, TABLE_LOAD_ORDER

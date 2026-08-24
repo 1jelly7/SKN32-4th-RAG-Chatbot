@@ -6,6 +6,7 @@
 
     python -m etl.purchase.main [xlsx_path]
 """
+
 from __future__ import annotations
 
 import sys

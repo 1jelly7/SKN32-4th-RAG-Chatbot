@@ -3,7 +3,11 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.integration.chat_fakes import build_fake_application, database_success, document_success
+from tests.integration.chat_fakes import (
+    build_fake_application,
+    database_success,
+    document_success,
+)
 from tests.auth_helpers import login
 
 

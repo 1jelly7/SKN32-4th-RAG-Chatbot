@@ -40,7 +40,9 @@ def server_timing_header(timings: MutableMapping[str, float]) -> str:
     )
 
 
-def log_llm_completion(call_type: str, model: str, started_ns: int, response: Any) -> None:
+def log_llm_completion(
+    call_type: str, model: str, started_ns: int, response: Any
+) -> None:
     """응답 본문 없이 LLM 지연과 사용 가능한 token 수만 기록한다."""
     usage = getattr(response, "usage", None)
     logger.info(

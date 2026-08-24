@@ -15,7 +15,11 @@ from typing import Any
 from urllib.parse import quote
 
 from app.agent.llm import AsyncLLMPort, complete
-from app.agent.prompts import ANSWER_PROMPT, FRESHNESS_ESCAPE_HATCH_PROMPT, NEEDS_LIVE_SEARCH_MARKER
+from app.agent.prompts import (
+    ANSWER_PROMPT,
+    FRESHNESS_ESCAPE_HATCH_PROMPT,
+    NEEDS_LIVE_SEARCH_MARKER,
+)
 from app.agent.query_classification import classify_question
 from app.agent.query_expansion import expand_document_queries
 from app.agent.state import DataDomain, GraphState, Route
@@ -33,15 +37,47 @@ def route_question(question: str) -> Route:
     """
     normalized = "".join(question.casefold().split())
     document_terms = (
-        "정책", "규정", "가이드", "매뉴얼", "문서", "지침", "절차", "휴가", "휴직", "취업규칙",
+        "정책",
+        "규정",
+        "가이드",
+        "매뉴얼",
+        "문서",
+        "지침",
+        "절차",
+        "휴가",
+        "휴직",
+        "취업규칙",
         # 아래는 실제 등록된 사내규정 10종의 제목에서 뽑은 단어들입니다.
         # 원래 목록이 일반적인 단어("규정", "지침" 등) 위주라, 구체적인 명사로 질문하면
         # (예: "법인카드", "회계") 하나도 안 걸려서 GENERAL로 잘못 분류되는 문제가 있었습니다.
-        "법인카드", "카드", "계약", "복지", "후생", "안전보건", "인사", "직원보수", "보수", "급여", "회계",
+        "법인카드",
+        "카드",
+        "계약",
+        "복지",
+        "후생",
+        "안전보건",
+        "인사",
+        "직원보수",
+        "보수",
+        "급여",
+        "회계",
     )
     database_terms = (
-        "매출", "현황", "집계", "실적", "기간", "판매", "구매", "지출",
-        "고객", "공급업체", "재고", "vip", "발주", "미수금", "미지급",
+        "매출",
+        "현황",
+        "집계",
+        "실적",
+        "기간",
+        "판매",
+        "구매",
+        "지출",
+        "고객",
+        "공급업체",
+        "재고",
+        "vip",
+        "발주",
+        "미수금",
+        "미지급",
     )
     # "경쟁사/타사" 등 외부 회사에 대한 질문은 매출/판매 같은 단어가 들어있어도
     # 우리 내부 DB로 답할 수 없는 범위 밖 질문이라 DATABASE로 보내면 안 됩니다.
@@ -75,9 +111,13 @@ def route_data_domain(question: str) -> DataDomain:
     normalized = "".join(question.casefold().split())
     sales_terms = ("매출", "고객", "판매", "재고", "vip", "여신", "수주")
     purchase_terms = ("구매", "지출", "공급업체", "발주", "미지급", "벤더")
-    if any(t in normalized for t in sales_terms) and not any(t in normalized for t in purchase_terms):
+    if any(t in normalized for t in sales_terms) and not any(
+        t in normalized for t in purchase_terms
+    ):
         return "sales"
-    if any(t in normalized for t in purchase_terms) and not any(t in normalized for t in sales_terms):
+    if any(t in normalized for t in purchase_terms) and not any(
+        t in normalized for t in sales_terms
+    ):
         return "purchase"
     # 둘 다 걸리거나 둘 다 안 걸리면 두 도메인 다 조회해서 병합합니다.
     return "both"
@@ -112,7 +152,9 @@ def _merge_document_evidence(
     for item in items:
         key = (item.get("document_id"), item.get("page"))
         existing = merged.get(key)
-        if existing is None or float(item.get("score", 0.0)) > float(existing.get("score", 0.0)):
+        if existing is None or float(item.get("score", 0.0)) > float(
+            existing.get("score", 0.0)
+        ):
             merged[key] = item
 
 
@@ -134,7 +176,9 @@ async def document_retrieval(
     """
     if mcp_client is None:
         state["document_evidence"] = []
-        state.setdefault("_errors", []).append("document_retrieval 실패: MCP client가 주입되지 않았습니다.")
+        state.setdefault("_errors", []).append(
+            "document_retrieval 실패: MCP client가 주입되지 않았습니다."
+        )
         return state
 
     question = state.get("question", "")
@@ -152,12 +196,16 @@ async def document_retrieval(
 
         policy = state.get("evidence_policy")
         min_document_score = float(getattr(policy, "min_document_score", 0.58))
-        direct_score = max((float(item.get("score", 0.0)) for item in merged.values()), default=0.0)
+        direct_score = max(
+            (float(item.get("score", 0.0)) for item in merged.values()), default=0.0
+        )
 
         if len(search_queries) > 1 and direct_score < min_document_score:
             expanded_results = await asyncio.gather(
                 *(
-                    mcp_client.document_search(query, top_k=10, user_context=state.get("user_context"))
+                    mcp_client.document_search(
+                        query, top_k=10, user_context=state.get("user_context")
+                    )
                     for query in search_queries[1:]
                 ),
                 return_exceptions=True,
@@ -211,7 +259,9 @@ async def database_retrieval(
     """
     if mcp_client is None:
         state["database_evidence"] = []
-        state.setdefault("_errors", []).append("database_retrieval 실패: MCP client가 주입되지 않았습니다.")
+        state.setdefault("_errors", []).append(
+            "database_retrieval 실패: MCP client가 주입되지 않았습니다."
+        )
         return state
 
     question = state.get("question", "")
@@ -223,7 +273,9 @@ async def database_retrieval(
     retrieval_errors: list[MCPClientError] = []
     if domain in ("purchase", "both"):
         try:
-            evidence.extend(await mcp_client.purchase_query(question, user_context=user_context))
+            evidence.extend(
+                await mcp_client.purchase_query(question, user_context=user_context)
+            )
         except MCPNoResultError as exc:
             state.setdefault("_no_result_reasons", {})["purchase"] = str(exc)
         except MCPClientError as exc:
@@ -233,7 +285,9 @@ async def database_retrieval(
             retrieval_errors.append(exc)
     if domain in ("sales", "both"):
         try:
-            evidence.extend(await mcp_client.sales_query(question, user_context=user_context))
+            evidence.extend(
+                await mcp_client.sales_query(question, user_context=user_context)
+            )
         except MCPNoResultError as exc:
             state.setdefault("_no_result_reasons", {})["sales"] = str(exc)
         except MCPClientError as exc:
@@ -314,7 +368,9 @@ async def answer_synthesis(
         # 안전망이다. 키워드로 이미 확실한 경우에는 이 시험 호출을 건너뛰고 바로
         # 검색한다 - 모든 질문마다 분류용 LLM 호출을 추가하는 것보다 훨씬 저렴하다.
         if not needs_search:
-            trial_answer = await complete(FRESHNESS_ESCAPE_HATCH_PROMPT, [], question, llm)
+            trial_answer = await complete(
+                FRESHNESS_ESCAPE_HATCH_PROMPT, [], question, llm
+            )
             needs_search = NEEDS_LIVE_SEARCH_MARKER in trial_answer
 
         if not needs_search:
@@ -368,20 +424,27 @@ async def answer_synthesis(
                 state["tables"] = []
                 return state
         else:
-            state["answer"] = "사내 자료에서 관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+            state["answer"] = (
+                "사내 자료에서 관련된 근거를 찾지 못해 답변을 드리기 어렵습니다. 질문을 조금 더 구체적으로 해주시겠어요?"
+            )
             state["sources"] = []
             state["tables"] = []
             return state
 
     if route != "GENERAL" and evidence_status == "CONTRADICTED":
-        state["answer"] = "서로 모순되는 근거가 확인되어 신뢰할 수 있는 단일 답변을 만들 수 없습니다. 담당자 확인이 필요합니다."
+        state["answer"] = (
+            "서로 모순되는 근거가 확인되어 신뢰할 수 있는 단일 답변을 만들 수 없습니다. 담당자 확인이 필요합니다."
+        )
         state["sources"] = []
         state["tables"] = []
         return state
 
     answer = await complete(ANSWER_PROMPT, evidence, question, llm)
     if evidence_status == "PARTIALLY_SUPPORTED":
-        reason = state.get("evidence_reason") or "일부 근거에 조회 오류가 있어, 확인된 부분만 반영한 답변입니다."
+        reason = (
+            state.get("evidence_reason")
+            or "일부 근거에 조회 오류가 있어, 확인된 부분만 반영한 답변입니다."
+        )
         answer += f"\n\n({reason})"
 
     state["answer"] = answer
@@ -429,7 +492,9 @@ def _build_tables(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 if isinstance(val, (int, float, Decimal)) and not isinstance(val, bool):
                     value_column = col  # 계속 덮어써서 마지막 숫자 컬럼이 남게 합니다.
 
-        chartable = label_column is not None and value_column is not None and len(rows) <= 30
+        chartable = (
+            label_column is not None and value_column is not None and len(rows) <= 30
+        )
 
         tables.append(
             {
@@ -470,7 +535,9 @@ def _build_sources(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "chunks": [],
                     "download_url": f"/api/documents/download?doc_id={quote(document_id, safe='')}",
                     "updated_at": _metadata_value(item, "updated_at"),
-                    "source_version": _metadata_value(item, "source_version", "index_version"),
+                    "source_version": _metadata_value(
+                        item, "source_version", "index_version"
+                    ),
                 }
                 document_sources[document_id] = source
                 sources.append(source)
@@ -521,7 +588,9 @@ def _sort_unique_source_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, A
         page = chunk.get("page")
         normalized_page = page if isinstance(page, int) else None
         text = str(chunk.get("text", ""))
-        unique_chunks.setdefault((normalized_page, text), {"page": normalized_page, "text": text})
+        unique_chunks.setdefault(
+            (normalized_page, text), {"page": normalized_page, "text": text}
+        )
     return sorted(
         unique_chunks.values(),
         key=lambda chunk: (chunk["page"] is None, chunk["page"] or 0, chunk["text"]),
@@ -542,4 +611,6 @@ def _metadata_value(item: dict[str, Any], *keys: str) -> Any:
 
 def _is_sensitive_field_name(field_name: object) -> bool:
     """표 응답에서 제거할 내부 경로·자격증명 계열 필드인지 판정한다."""
-    return isinstance(field_name, str) and any(part in field_name.casefold() for part in SENSITIVE_FIELD_PARTS)
+    return isinstance(field_name, str) and any(
+        part in field_name.casefold() for part in SENSITIVE_FIELD_PARTS
+    )

@@ -35,7 +35,9 @@ def build_index(
     """
 
     if len(chunks) != len(vectors):
-        raise ValueError(f"chunk 수({len(chunks)})와 vector 수({len(vectors)})가 다릅니다.")
+        raise ValueError(
+            f"chunk 수({len(chunks)})와 vector 수({len(vectors)})가 다릅니다."
+        )
 
     if not chunks:
         raise ValueError("빈 chunk 목록으로는 인덱스를 만들 수 없습니다.")
@@ -43,7 +45,9 @@ def build_index(
     dimension = len(vectors[0])
     for i, vector in enumerate(vectors):
         if len(vector) != dimension:
-            raise ValueError(f"{i}번째 vector의 차원({len(vector)})이 첫 vector({dimension})와 다릅니다.")
+            raise ValueError(
+                f"{i}번째 vector의 차원({len(vector)})이 첫 vector({dimension})와 다릅니다."
+            )
 
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -70,7 +74,9 @@ def build_index(
     final_metadata_path = output_path / METADATA_FILENAME
 
     faiss.write_index(index, str(tmp_index_path))
-    tmp_metadata_path.write_text(json.dumps(metadata_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp_metadata_path.write_text(
+        json.dumps(metadata_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     # 두 파일 다 임시로 쓰기 성공한 뒤에만 원자적으로 교체(rename)합니다.
     tmp_index_path.replace(final_index_path)
@@ -91,10 +97,16 @@ def get_index_version(index_path: Path) -> str:
     알리는 오류로 명확히 처리합니다.
     """
 
-    metadata_path = index_path.parent / METADATA_FILENAME if index_path.name == INDEX_FILENAME else index_path
+    metadata_path = (
+        index_path.parent / METADATA_FILENAME
+        if index_path.name == INDEX_FILENAME
+        else index_path
+    )
 
     if not metadata_path.exists():
-        raise FileNotFoundError(f"인덱스 metadata를 찾을 수 없습니다: {metadata_path} (재인덱싱이 필요합니다)")
+        raise FileNotFoundError(
+            f"인덱스 metadata를 찾을 수 없습니다: {metadata_path} (재인덱싱이 필요합니다)"
+        )
 
     try:
         payload = json.loads(metadata_path.read_text(encoding="utf-8"))

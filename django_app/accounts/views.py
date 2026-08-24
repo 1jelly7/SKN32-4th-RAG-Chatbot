@@ -6,7 +6,11 @@ import json
 import secrets
 
 from django.conf import settings
-from django.contrib.auth import authenticate, login as django_login, logout as django_logout
+from django.contrib.auth import (
+    authenticate,
+    login as django_login,
+    logout as django_logout,
+)
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.cache import never_cache
@@ -33,13 +37,17 @@ def csrf_token(request: HttpRequest) -> JsonResponse:
 def login(request: HttpRequest) -> JsonResponse:
     """활성 계정을 검증해 Django 서버 세션을 발급한다."""
     if len(request.body) > 4096:
-        return JsonResponse({"detail": "로그인 요청 형식이 올바르지 않습니다."}, status=400)
+        return JsonResponse(
+            {"detail": "로그인 요청 형식이 올바르지 않습니다."}, status=400
+        )
     try:
         body = json.loads(request.body)
         username = body["username"]
         password = body["password"]
     except (json.JSONDecodeError, KeyError, TypeError, UnicodeDecodeError):
-        return JsonResponse({"detail": "로그인 요청 형식이 올바르지 않습니다."}, status=400)
+        return JsonResponse(
+            {"detail": "로그인 요청 형식이 올바르지 않습니다."}, status=400
+        )
     if (
         not isinstance(username, str)
         or not isinstance(password, str)
@@ -48,15 +56,21 @@ def login(request: HttpRequest) -> JsonResponse:
         or not password
         or len(password) > 256
     ):
-        return JsonResponse({"detail": "로그인 요청 형식이 올바르지 않습니다."}, status=400)
+        return JsonResponse(
+            {"detail": "로그인 요청 형식이 올바르지 않습니다."}, status=400
+        )
 
     user = authenticate(request, username=username, password=password)
     if user is None or not user.is_active:
-        return JsonResponse({"detail": "아이디 또는 비밀번호가 올바르지 않습니다."}, status=401)
+        return JsonResponse(
+            {"detail": "아이디 또는 비밀번호가 올바르지 않습니다."}, status=401
+        )
     try:
         profile = serialize_user(user)
     except ValueError:
-        return JsonResponse({"detail": "아이디 또는 비밀번호가 올바르지 않습니다."}, status=401)
+        return JsonResponse(
+            {"detail": "아이디 또는 비밀번호가 올바르지 않습니다."}, status=401
+        )
     django_login(request, user)
     return JsonResponse({"user": profile})
 
@@ -91,9 +105,15 @@ def introspect(request: HttpRequest) -> JsonResponse:
     """내부 공유 키와 Django 세션을 모두 통과한 사용자 컨텍스트만 반환한다."""
     configured_key = settings.AUTH_INTROSPECTION_KEY
     supplied_header = request.headers.get("Authorization", "")
-    supplied_key = supplied_header.removeprefix("Bearer ") if supplied_header.startswith("Bearer ") else ""
+    supplied_key = (
+        supplied_header.removeprefix("Bearer ")
+        if supplied_header.startswith("Bearer ")
+        else ""
+    )
     if len(configured_key) < 32:
-        return JsonResponse({"detail": "인증 서비스 설정이 준비되지 않았습니다."}, status=503)
+        return JsonResponse(
+            {"detail": "인증 서비스 설정이 준비되지 않았습니다."}, status=503
+        )
     if not supplied_key or not secrets.compare_digest(supplied_key, configured_key):
         return JsonResponse({"detail": "허용되지 않은 내부 요청입니다."}, status=403)
     if not request.user.is_authenticated or not request.user.is_active:

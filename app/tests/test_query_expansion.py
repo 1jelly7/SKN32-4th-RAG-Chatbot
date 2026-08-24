@@ -41,7 +41,9 @@ async def test_document_retrieval_expands_only_when_direct_score_is_low() -> Non
                 "domain": "document",
                 "message": None,
                 "data": [{"content": "카드 관련 문서", "score": 0.1}],
-                "sources": [{"document_id": "policy-card", "title": "법인카드 지침", "page": 2}],
+                "sources": [
+                    {"document_id": "policy-card", "title": "법인카드 지침", "page": 2}
+                ],
                 "metadata": {},
             }
         }
@@ -52,7 +54,10 @@ async def test_document_retrieval_expands_only_when_direct_score_is_low() -> Non
         MCPClient(port),
     )
 
-    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
+    assert [call.tool_name for call in port.calls] == [
+        "search_documents",
+        "search_documents",
+    ]
     assert len(result["document_evidence"]) == 1
 
 
@@ -65,7 +70,9 @@ async def test_document_retrieval_skips_expansion_for_strong_direct_match() -> N
                 "domain": "document",
                 "message": None,
                 "data": [{"content": "카드 발급과 정산 절차", "score": 0.9}],
-                "sources": [{"document_id": "policy-card", "title": "법인카드 지침", "page": 2}],
+                "sources": [
+                    {"document_id": "policy-card", "title": "법인카드 지침", "page": 2}
+                ],
                 "metadata": {},
             }
         }
@@ -88,7 +95,9 @@ async def test_document_retrieval_uses_semantic_document_query() -> None:
                 "domain": "document",
                 "message": None,
                 "data": [{"content": "겸직 승인 절차", "score": 0.9}],
-                "sources": [{"document_id": "policy-job", "title": "취업규칙", "page": 4}],
+                "sources": [
+                    {"document_id": "policy-job", "title": "취업규칙", "page": 4}
+                ],
                 "metadata": {},
             }
         }

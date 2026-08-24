@@ -17,9 +17,13 @@ def _normalized_datetime(value: datetime | None, *, legacy: bool) -> str | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        assumed_zone = ZoneInfo(settings.LEGACY_ACCOUNT_TIME_ZONE if legacy else settings.TIME_ZONE)
+        assumed_zone = ZoneInfo(
+            settings.LEGACY_ACCOUNT_TIME_ZONE if legacy else settings.TIME_ZONE
+        )
         value = value.replace(tzinfo=assumed_zone)
-    return value.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0).isoformat()
+    return (
+        value.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0).isoformat()
+    )
 
 
 class Command(BaseCommand):
@@ -70,5 +74,7 @@ class Command(BaseCommand):
                 f"mismatch_ids={sorted(mismatched_ids)}, extra_migrated_ids={extra_ids}"
             )
         self.stdout.write(
-            self.style.SUCCESS(f"Legacy account audit passed: account_count={len(legacy_rows)}")
+            self.style.SUCCESS(
+                f"Legacy account audit passed: account_count={len(legacy_rows)}"
+            )
         )

@@ -15,8 +15,12 @@ class Settings(BaseSettings):
 
     openai_api_key: str
     openai_model: str
-    tavily_api_key: str = ""  # 실시간 웹 검색(FRESHNESS_SENSITIVE 폴백)용. 없으면 웹 검색 없이 기존 안내문으로 폴백.
-    enable_docling_captioning: bool = False  # PDF 이미지 캡셔닝(Docling+OpenAI 비전). 기본 꺼짐 - 무거운 모델 다운로드 필요.
+    tavily_api_key: str = (
+        ""  # 실시간 웹 검색(FRESHNESS_SENSITIVE 폴백)용. 없으면 웹 검색 없이 기존 안내문으로 폴백.
+    )
+    enable_docling_captioning: bool = (
+        False  # PDF 이미지 캡셔닝(Docling+OpenAI 비전). 기본 꺼짐 - 무거운 모델 다운로드 필요.
+    )
     redis_url: str
     mysql_read_host: str
     mysql_read_user: str
@@ -32,7 +36,9 @@ class Settings(BaseSettings):
     document_db_user: str
     document_db_password: str
     document_db_database: str
-    django_auth_introspection_url: str = "http://127.0.0.1:8001/internal/auth/introspect"
+    django_auth_introspection_url: str = (
+        "http://127.0.0.1:8001/internal/auth/introspect"
+    )
     auth_introspection_key: str = ""
     auth_introspection_timeout_seconds: float = Field(default=2.0, gt=0, le=30.0)
 

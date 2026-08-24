@@ -6,6 +6,7 @@
 - 챗봇 조회 경로(mcp_servers/data_tools/purchase/mysql.py)는 읽기 계정
   (PURCHASE_READ_*)을 별도로 사용하며, 이 모듈이 다루는 범위가 아니다.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,6 +21,7 @@ load_dotenv()
 @dataclass(frozen=True)
 class MySQLWriteConfig:
     """구매 ETL 쓰기 연결에 필요한 최소 설정."""
+
     host: str
     user: str
     password: str

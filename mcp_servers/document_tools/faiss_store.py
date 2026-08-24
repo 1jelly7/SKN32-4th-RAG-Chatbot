@@ -43,14 +43,20 @@ class FaissStore:
         둘 중 하나만 갱신된 불일치나 손상은 검색 결과로 숨기지 말고 안전하게 실패시킵니다.
         """
         if not self._index_path.exists():
-            raise FileNotFoundError(f"FAISS 인덱스가 없습니다: {self._index_path} (재인덱싱이 필요합니다)")
+            raise FileNotFoundError(
+                f"FAISS 인덱스가 없습니다: {self._index_path} (재인덱싱이 필요합니다)"
+            )
         if not self._metadata_path.exists():
-            raise FileNotFoundError(f"인덱스 metadata가 없습니다: {self._metadata_path}")
+            raise FileNotFoundError(
+                f"인덱스 metadata가 없습니다: {self._metadata_path}"
+            )
 
         try:
             payload = json.loads(self._metadata_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            raise ValueError(f"인덱스 metadata가 손상되었습니다: {self._metadata_path}") from exc
+            raise ValueError(
+                f"인덱스 metadata가 손상되었습니다: {self._metadata_path}"
+            ) from exc
 
         index = faiss.read_index(str(self._index_path))
 
@@ -65,9 +71,13 @@ class FaissStore:
                 "재인덱싱이 필요합니다."
             )
         if chunk_count is not None and chunk_count != len(chunks):
-            raise ValueError("metadata의 chunk_count와 실제 chunk 목록 길이가 일치하지 않습니다.")
+            raise ValueError(
+                "metadata의 chunk_count와 실제 chunk 목록 길이가 일치하지 않습니다."
+            )
         if dimension is not None and dimension != index.d:
-            raise ValueError(f"metadata 차원({dimension})과 FAISS 인덱스 차원({index.d})이 일치하지 않습니다.")
+            raise ValueError(
+                f"metadata 차원({dimension})과 FAISS 인덱스 차원({index.d})이 일치하지 않습니다."
+            )
 
         self._index = index
         self._chunks = chunks
@@ -75,7 +85,9 @@ class FaissStore:
         self._document_texts = {}
         for chunk in chunks:
             metadata = chunk.get("metadata", {})
-            text = _normalize_text(f"{metadata.get('title', '')} {chunk.get('content', '')}")
+            text = _normalize_text(
+                f"{metadata.get('title', '')} {chunk.get('content', '')}"
+            )
             self._document_texts.setdefault(chunk["document_id"], []).append(text)
         self._term_weight_cache = {}
 
@@ -95,7 +107,9 @@ class FaissStore:
             raise RuntimeError("FaissStore.load()를 먼저 호출해야 합니다.")
 
         if len(vector) != self._dimension:
-            raise ValueError(f"query vector 차원({len(vector)})이 인덱스 차원({self._dimension})과 다릅니다.")
+            raise ValueError(
+                f"query vector 차원({len(vector)})이 인덱스 차원({self._dimension})과 다릅니다."
+            )
 
         if top_k <= 0:
             raise ValueError("top_k는 1 이상이어야 합니다.")
@@ -143,9 +157,15 @@ class FaissStore:
 
         total_docs = len(self._document_texts) or 1
         matching_docs = sum(
-            1 for texts in self._document_texts.values() if any(term in text for text in texts)
+            1
+            for texts in self._document_texts.values()
+            if any(term in text for text in texts)
         )
-        weight = 1.0 if matching_docs == 0 else max(0.0, 1.0 - (matching_docs - 1) / total_docs)
+        weight = (
+            1.0
+            if matching_docs == 0
+            else max(0.0, 1.0 - (matching_docs - 1) / total_docs)
+        )
         self._term_weight_cache[term] = weight
         return weight
 
@@ -189,7 +209,9 @@ class FaissStore:
         ranked: list[tuple[float, int, DocumentChunk]] = []
         for chunk in self._chunks:
             metadata = chunk.get("metadata", {})
-            searchable = _normalize_text(f"{metadata.get('title', '')} {chunk.get('content', '')}")
+            searchable = _normalize_text(
+                f"{metadata.get('title', '')} {chunk.get('content', '')}"
+            )
             matched_terms = [term for term in terms if term in searchable]
             if not matched_terms:
                 continue

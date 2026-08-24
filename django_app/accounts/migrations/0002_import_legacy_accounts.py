@@ -65,21 +65,42 @@ def import_legacy_accounts(apps, schema_editor) -> None:
         rows = cursor.fetchall()
 
     users = []
-    for account_id, username, password_hash, display_name, role, is_active, last_login, created_at in rows:
+    for (
+        account_id,
+        username,
+        password_hash,
+        display_name,
+        role,
+        is_active,
+        last_login,
+        created_at,
+    ) in rows:
         if type(account_id) is not int or account_id < 1:
             raise RuntimeError("Legacy account id must be a positive integer")
         if not isinstance(username, str) or not username or len(username) > 128:
-            raise RuntimeError(f"Unsupported legacy username for account id {account_id}")
+            raise RuntimeError(
+                f"Unsupported legacy username for account id {account_id}"
+            )
         if not isinstance(display_name, str) or len(display_name) > 128:
-            raise RuntimeError(f"Unsupported legacy display name for account id {account_id}")
+            raise RuntimeError(
+                f"Unsupported legacy display name for account id {account_id}"
+            )
         if role not in {"admin", "hr", "finance"}:
-            raise RuntimeError(f"Unsupported legacy account role for account id {account_id}")
+            raise RuntimeError(
+                f"Unsupported legacy account role for account id {account_id}"
+            )
         if is_active not in (False, True, 0, 1):
-            raise RuntimeError(f"Unsupported legacy active state for account id {account_id}")
+            raise RuntimeError(
+                f"Unsupported legacy active state for account id {account_id}"
+            )
         if last_login is not None and not isinstance(last_login, datetime):
-            raise RuntimeError(f"Unsupported legacy login timestamp for account id {account_id}")
+            raise RuntimeError(
+                f"Unsupported legacy login timestamp for account id {account_id}"
+            )
         if not isinstance(created_at, datetime):
-            raise RuntimeError(f"Unsupported legacy creation timestamp for account id {account_id}")
+            raise RuntimeError(
+                f"Unsupported legacy creation timestamp for account id {account_id}"
+            )
         users.append(
             User(
                 id=account_id,

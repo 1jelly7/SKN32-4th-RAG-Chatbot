@@ -37,7 +37,9 @@ class DocumentPathRepository:
 
         return await asyncio.to_thread(self._find_paths_sync, query)
 
-    async def find_path_by_document_id(self, document_id: str) -> DocumentPathRecord | None:
+    async def find_path_by_document_id(
+        self, document_id: str
+    ) -> DocumentPathRecord | None:
         """활성 문서 ID만으로 다운로드용 화이트리스트 레코드를 찾는다."""
         import asyncio
 
@@ -55,7 +57,9 @@ class DocumentPathRepository:
         finally:
             connection.close()
 
-    def _find_path_by_document_id_sync(self, document_id: str) -> DocumentPathRecord | None:
+    def _find_path_by_document_id_sync(
+        self, document_id: str
+    ) -> DocumentPathRecord | None:
         connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
@@ -75,7 +79,11 @@ class DocumentPathRepository:
             "document_id": row["document_id"],
             "title": row["title"],
             "file_path": row["file_path"],
-            "updated_at": row["updated_at"].isoformat() if hasattr(row["updated_at"], "isoformat") else str(row["updated_at"]),
+            "updated_at": (
+                row["updated_at"].isoformat()
+                if hasattr(row["updated_at"], "isoformat")
+                else str(row["updated_at"])
+            ),
         }
 
     def ensure_schema(self) -> None:
@@ -100,7 +108,9 @@ class DocumentPathRepository:
         finally:
             connection.close()
 
-    def upsert_path(self, document_id: str, title: str, file_path: str, updated_at: str) -> None:
+    def upsert_path(
+        self, document_id: str, title: str, file_path: str, updated_at: str
+    ) -> None:
         """문서 경로 1건을 등록하거나 갱신한다. (ingestion 배치가 사용)"""
         connection = self._pool.connection()
         try:

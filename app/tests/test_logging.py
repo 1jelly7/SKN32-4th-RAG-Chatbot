@@ -32,7 +32,11 @@ def test_configure_logging_uses_file_handler_once(tmp_path: Path) -> None:
         configure_logging(log_path)
         configure_logging(log_path)
 
-        file_handlers = [handler for handler in root_logger.handlers if isinstance(handler, logging.FileHandler)]
+        file_handlers = [
+            handler
+            for handler in root_logger.handlers
+            if isinstance(handler, logging.FileHandler)
+        ]
         assert len(file_handlers) == 1
         assert Path(file_handlers[0].baseFilename) == log_path
     finally:

@@ -41,14 +41,18 @@ def _conversation_context_hash(session_id: str | None) -> str | None:
     return hashlib.sha256(session_id.encode("utf-8")).hexdigest()
 
 
-def _tool_error_response(status_code: int, error_code: str, detail: str) -> JSONResponse:
+def _tool_error_response(
+    status_code: int, error_code: str, detail: str
+) -> JSONResponse:
     """외부 Tool 오류를 계약된 공개 메시지로 변환한다."""
     body = ErrorResponse(error_code=error_code, detail=detail)
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, http_request: Request, user: CurrentUser) -> ChatResponse | JSONResponse:
+async def chat(
+    request: ChatRequest, http_request: Request, user: CurrentUser
+) -> ChatResponse | JSONResponse:
     """캐시 조회, Graph 실행, 검증된 응답 저장 순서로 채팅 요청을 처리한다.
 
     캐시 hit는 즉시 반환해 Graph와 그 하위 LLM/MCP 호출을 모두 차단한다. miss에서만
@@ -95,21 +99,35 @@ async def chat(request: ChatRequest, http_request: Request, user: CurrentUser) -
     except MCPNoResultError:
         return _tool_error_response(404, "NO_RESULT", "조회 가능한 결과가 없습니다.")
     except MCPInvalidInputError:
-        return _tool_error_response(400, "INVALID_INPUT", "조회 요청 형식이 올바르지 않습니다.")
+        return _tool_error_response(
+            400, "INVALID_INPUT", "조회 요청 형식이 올바르지 않습니다."
+        )
     except MCPForbiddenError:
-        return _tool_error_response(403, "FORBIDDEN", "요청한 데이터베이스에 접근할 권한이 없습니다.")
+        return _tool_error_response(
+            403, "FORBIDDEN", "요청한 데이터베이스에 접근할 권한이 없습니다."
+        )
     except MCPEvidenceInsufficientError:
-        return _tool_error_response(422, "EVIDENCE_INSUFFICIENT", "답변에 필요한 근거가 부족합니다.")
+        return _tool_error_response(
+            422, "EVIDENCE_INSUFFICIENT", "답변에 필요한 근거가 부족합니다."
+        )
     except MCPTimeoutError:
         return _tool_error_response(504, "TIMEOUT", "조회 처리 시간이 초과되었습니다.")
     except MCPQueryError:
-        return _tool_error_response(502, "QUERY_ERROR", "조회 서비스에서 오류가 발생했습니다.")
+        return _tool_error_response(
+            502, "QUERY_ERROR", "조회 서비스에서 오류가 발생했습니다."
+        )
     except MCPInternalError:
-        return _tool_error_response(502, "INTERNAL_ERROR", "조회 서비스 내부 오류가 발생했습니다.")
+        return _tool_error_response(
+            502, "INTERNAL_ERROR", "조회 서비스 내부 오류가 발생했습니다."
+        )
     except MCPMalformedPayloadError:
-        return _tool_error_response(502, "INTERNAL_ERROR", "조회 서비스 응답을 처리할 수 없습니다.")
+        return _tool_error_response(
+            502, "INTERNAL_ERROR", "조회 서비스 응답을 처리할 수 없습니다."
+        )
     except Exception:  # noqa: BLE001 - 경계 밖 오류의 상세를 노출하지 않는다.
-        return _tool_error_response(500, "INTERNAL_ERROR", "답변 생성 중 오류가 발생했습니다.")
+        return _tool_error_response(
+            500, "INTERNAL_ERROR", "답변 생성 중 오류가 발생했습니다."
+        )
     finally:
         if "graph_started_ns" in locals():
             record_timing(timings, "graph_total", graph_started_ns)
@@ -124,8 +142,12 @@ async def chat(request: ChatRequest, http_request: Request, user: CurrentUser) -
     )
 
     index_version = result_state.get("document_index_version")
-    if index_version and index_version != http_request.app.state.cache_key_context.get("document_index_version"):
-        http_request.app.state.cache_key_context["document_index_version"] = index_version
+    if index_version and index_version != http_request.app.state.cache_key_context.get(
+        "document_index_version"
+    ):
+        http_request.app.state.cache_key_context["document_index_version"] = (
+            index_version
+        )
         result_state["cache_key"] = make_cache_key(result_state)
     cache_write_started_ns = start_timer()
     write_answer_cache(result_state, cache_repository)

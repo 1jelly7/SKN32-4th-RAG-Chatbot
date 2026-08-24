@@ -1,6 +1,6 @@
-'''
+"""
 Tool, Resource, Prompt를 등록해서 제공하는 독립 MCP 서버
-'''
+"""
 
 # MCP 객체 생성용
 from mcp.server.fastmcp import FastMCP
@@ -17,7 +17,7 @@ from mcp_server.tools import (
     list_mysql_knowledge,
     read_file,
     rebuild_index,
-    search_documents
+    search_documents,
 )
 
 # 서버 객체 생성 =====================================
@@ -26,13 +26,14 @@ mcp = FastMCP("MCP RAG Assistant")
 # Tool 등록================================================
 # 별도로 작성해서 임포트한 함수를 Tool로 등록하는 방법
 
+
 # 계산 Tool을 MCP에 등록
 @mcp.tool()
-def add(a:float, b:float) -> float:
-    '''두 숫자를 더합니다.'''
+def add(a: float, b: float) -> float:
+    """두 숫자를 더합니다."""
 
     # 준비된 함수에 처리를 위임(weaving)함
-    return add_numbers(a,b)
+    return add_numbers(a, b)
 
 
 @mcp.tool()
@@ -83,21 +84,25 @@ def get_mysql_knowledge() -> list[dict]:
     # 준비된 함수에 처리를 위임(weaving)함
     return list_mysql_knowledge()
 
+
 # 별도로 작성해서 임포트한 리소스 등록 ====================================
+
 
 # 현재 실행 설정 Resource 등록
 @mcp.resource("config://runtime")
 def config_resource() -> str:
-    '''민감 정보 제외한 실행 설정 정보 제공'''
+    """민감 정보 제외한 실행 설정 정보 제공"""
     # Resource 구현 함수를 호출함
     return runtime_config()
+
 
 # 문서 카탈로그 Resource 등록
 @mcp.tool("docs://catalog")
 def docs_catalog() -> str:
-    '''docs 폴더의 파일 목록을 제공'''
+    """docs 폴더의 파일 목록을 제공"""
     # Resource 구현 함수를 호출
     return document_catalog()
+
 
 @mcp.prompt()
 def ground_rag_prompt(question: str) -> str:
@@ -107,6 +112,7 @@ def ground_rag_prompt(question: str) -> str:
         "확인할 수 없는 내용은 추측하지 마세요.\n\n"
         f"사용자 질문:{question}"
     )
+
 
 # 서버 파일을 직접 실행했을 때 stdio 전송 방식으로 MCP 서버를 시작합니다.
 if __name__ == "__main__":

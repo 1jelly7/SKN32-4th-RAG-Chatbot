@@ -31,12 +31,16 @@ async def search_documents(
     try:
         path_records = await lookup_document_paths(query)
     except pymysql.MySQLError as exc:
-        error_number = exc.args[0] if exc.args and isinstance(exc.args[0], int) else None
+        error_number = (
+            exc.args[0] if exc.args and isinstance(exc.args[0], int) else None
+        )
         logger.warning(
             "document_path_lookup_failed error_type=%s error_number=%s",
             type(exc).__name__,
             error_number,
             extra={"event": "document_path_lookup_failed"},
         )
-        raise DocumentSearchUnavailableError("Document path lookup is unavailable.") from exc
+        raise DocumentSearchUnavailableError(
+            "Document path lookup is unavailable."
+        ) from exc
     return await retrieve(query, path_records, top_k)

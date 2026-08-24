@@ -120,7 +120,9 @@ def _login(client: TestClient, username: str) -> None:
     client.cookies.set("chatbot_session", f"benchmark-{username}")
 
 
-def run_scenario(client: TestClient, scenario: Scenario, iterations: int) -> dict[str, Any]:
+def run_scenario(
+    client: TestClient, scenario: Scenario, iterations: int
+) -> dict[str, Any]:
     """고유 conversation miss와 동일 conversation hit를 각각 반복 측정한다."""
     _login(client, scenario.username)
     misses: list[dict[str, Any]] = []
@@ -128,7 +130,10 @@ def run_scenario(client: TestClient, scenario: Scenario, iterations: int) -> dic
         started_ns = time.perf_counter_ns()
         response = client.post(
             "/api/chat",
-            json={"question": scenario.question, "session_id": f"{scenario.name}-miss-{index}"},
+            json={
+                "question": scenario.question,
+                "session_id": f"{scenario.name}-miss-{index}",
+            },
         )
         e2e_ms = (time.perf_counter_ns() - started_ns) / 1_000_000
         body = response.json()
@@ -139,7 +144,9 @@ def run_scenario(client: TestClient, scenario: Scenario, iterations: int) -> dic
                 "route": body.get("route"),
                 "evidence_status": body.get("evidence_status"),
                 "e2e_ms": round(e2e_ms, 3),
-                "server": parse_server_timing(response.headers.get("server-timing", "")),
+                "server": parse_server_timing(
+                    response.headers.get("server-timing", "")
+                ),
             }
         )
 
@@ -158,7 +165,9 @@ def run_scenario(client: TestClient, scenario: Scenario, iterations: int) -> dic
                 "route": body.get("route"),
                 "evidence_status": body.get("evidence_status"),
                 "e2e_ms": round(e2e_ms, 3),
-                "server": parse_server_timing(response.headers.get("server-timing", "")),
+                "server": parse_server_timing(
+                    response.headers.get("server-timing", "")
+                ),
             }
         )
 
@@ -187,7 +196,9 @@ def _summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "e2e_ms": summarize([run["e2e_ms"] for run in runs]),
         "server_ms": summarize([run["server"].get("app_total", 0.0) for run in runs]),
         "stages_avg_ms": {
-            stage: round(statistics.fmean(run["server"].get(stage, 0.0) for run in runs), 3)
+            stage: round(
+                statistics.fmean(run["server"].get(stage, 0.0) for run in runs), 3
+            )
             for stage in stages
             if stage != "app_total"
         },
@@ -198,13 +209,17 @@ def main() -> None:
     """선택한 실제 경로를 5회 이상 실행하고 JSON 통계를 표준 출력한다."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--iterations", type=int, default=5)
-    parser.add_argument("--scenario", choices=[item.name for item in SCENARIOS] + ["all"], default="all")
+    parser.add_argument(
+        "--scenario", choices=[item.name for item in SCENARIOS] + ["all"], default="all"
+    )
     args = parser.parse_args()
     if args.iterations < 5:
         parser.error("--iterations는 5 이상이어야 합니다.")
 
-    selected = SCENARIOS if args.scenario == "all" else tuple(
-        item for item in SCENARIOS if item.name == args.scenario
+    selected = (
+        SCENARIOS
+        if args.scenario == "all"
+        else tuple(item for item in SCENARIOS if item.name == args.scenario)
     )
     results: list[dict[str, Any]] = []
     startup_started_ns = time.perf_counter_ns()

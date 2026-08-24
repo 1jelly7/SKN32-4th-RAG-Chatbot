@@ -61,7 +61,6 @@ VIEWS = {
         FROM purchase_orders
         WHERE Status != 'Cancelled'
     """,
-
     "v_purchase_order_line": """
         CREATE OR REPLACE VIEW v_purchase_order_line AS
         SELECT 
@@ -82,7 +81,6 @@ VIEWS = {
         INNER JOIN purchase_orders po ON pol.PO_ID = po.PO_ID
         WHERE po.Status != 'Cancelled'
     """,
-
     "v_vendor": """
         CREATE OR REPLACE VIEW v_vendor AS
         SELECT 
@@ -97,7 +95,6 @@ VIEWS = {
           Active
         FROM vendors
     """,
-
     "v_vendor_invoice": """
         CREATE OR REPLACE VIEW v_vendor_invoice AS
         SELECT 
@@ -117,7 +114,6 @@ VIEWS = {
           Payment_Status
         FROM invoices
     """,
-
     "v_goods_receipt": """
         CREATE OR REPLACE VIEW v_goods_receipt AS
         SELECT 

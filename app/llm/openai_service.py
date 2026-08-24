@@ -22,7 +22,9 @@ class OpenAIService:
         self.settings = settings
 
         # API 키가 있을 때만 OpenAI 클라이언트를 생성합니다.
-        self.client = OpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+        self.client = (
+            OpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+        )
 
     # 일반 질문에 대한 답변을 생성합니다.
     def answer(self, question: str, system_prompt: str) -> str:
@@ -47,7 +49,9 @@ class OpenAIService:
         return response.output_text
 
     # 검색 문맥을 근거로 RAG 답변을 생성합니다.
-    def answer_with_context(self, question: str, context: str, prompt_template: str) -> str:
+    def answer_with_context(
+        self, question: str, context: str, prompt_template: str
+    ) -> str:
         """검색된 문서를 근거로 답변을 생성합니다."""
 
         # Prompt 템플릿에 검색 문맥과 사용자 질문을 삽입합니다.

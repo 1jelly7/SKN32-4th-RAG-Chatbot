@@ -35,6 +35,8 @@ class ContentSecurityPolicyMiddleware:
         response = self.get_response(request)
         resolver_match = getattr(request, "resolver_match", None)
         content_type = response.headers.get("Content-Type", "")
-        if getattr(resolver_match, "namespace", None) == "web" and content_type.startswith("text/html"):
+        if getattr(
+            resolver_match, "namespace", None
+        ) == "web" and content_type.startswith("text/html"):
             response.headers["Content-Security-Policy"] = self.policy
         return response

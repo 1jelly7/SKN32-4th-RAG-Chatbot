@@ -16,7 +16,9 @@ class _FakeTavilyClient:
     def __init__(self, results: list[dict]) -> None:
         self._results = results
 
-    async def search(self, query: str, max_results: int = 5, search_depth: str = "basic") -> dict:
+    async def search(
+        self, query: str, max_results: int = 5, search_depth: str = "basic"
+    ) -> dict:
         return {"results": self._results}
 
 
@@ -29,18 +31,42 @@ def _reset_client_cache():
 
 
 @pytest.mark.asyncio
-async def test_search_web_converts_tavily_results_to_standard_evidence(monkeypatch) -> None:
+async def test_search_web_converts_tavily_results_to_standard_evidence(
+    monkeypatch,
+) -> None:
     fake_results = [
-        {"title": "제목1", "url": "https://a.example.com", "content": "본문1", "score": 0.8},
-        {"title": "제목2", "url": "https://b.example.com", "content": "본문2", "score": 0.6},
+        {
+            "title": "제목1",
+            "url": "https://a.example.com",
+            "content": "본문1",
+            "score": 0.8,
+        },
+        {
+            "title": "제목2",
+            "url": "https://b.example.com",
+            "content": "본문2",
+            "score": 0.6,
+        },
     ]
     search_module._client = _FakeTavilyClient(fake_results)
 
     evidence = await search_module.search_web("아무 질문")
 
     assert evidence == [
-        {"type": "web", "title": "제목1", "url": "https://a.example.com", "content": "본문1", "score": 0.8},
-        {"type": "web", "title": "제목2", "url": "https://b.example.com", "content": "본문2", "score": 0.6},
+        {
+            "type": "web",
+            "title": "제목1",
+            "url": "https://a.example.com",
+            "content": "본문1",
+            "score": 0.8,
+        },
+        {
+            "type": "web",
+            "title": "제목2",
+            "url": "https://b.example.com",
+            "content": "본문2",
+            "score": 0.6,
+        },
     ]
 
 
@@ -57,7 +83,9 @@ def test_get_client_raises_clear_error_without_api_key(monkeypatch) -> None:
     """TAVILY_API_KEY가 없으면, 네트워크를 타기 전에 명확한 에러로 즉시 실패한다."""
     from app.core import config
 
-    monkeypatch.setattr(config, "get_settings", lambda: type("S", (), {"tavily_api_key": ""})())
+    monkeypatch.setattr(
+        config, "get_settings", lambda: type("S", (), {"tavily_api_key": ""})()
+    )
     monkeypatch.setattr(search_module, "get_settings", config.get_settings)
 
     with pytest.raises(RuntimeError, match="TAVILY_API_KEY"):

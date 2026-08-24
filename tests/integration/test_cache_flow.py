@@ -4,7 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.mcp.client import MCPNoResultError, MCPQueryError
-from tests.integration.chat_fakes import build_fake_application, database_success, document_success
+from tests.integration.chat_fakes import (
+    build_fake_application,
+    database_success,
+    document_success,
+)
 from tests.auth_helpers import login
 
 
@@ -28,13 +32,21 @@ def test_both_success_is_cached_without_additional_port_or_llm_calls() -> None:
 
     assert first.status_code == 200
     assert first.json()["route"] == "BOTH"
-    assert {source["source_type"] for source in first.json()["sources"]} == {"document", "database"}
-    assert sorted(call.tool_name for call in calls_after_miss) == sorted(["search_documents", "query_sales"])
+    assert {source["source_type"] for source in first.json()["sources"]} == {
+        "document",
+        "database",
+    }
+    assert sorted(call.tool_name for call in calls_after_miss) == sorted(
+        ["search_documents", "query_sales"]
+    )
     assert second.status_code == 200
     assert second.json()["cached"] is True
     assert port.calls == calls_after_miss
     assert llm.calls == llm_calls_after_miss
-    assert application.state.cache_key_context["document_index_version"] == "fixture-index-v1"
+    assert (
+        application.state.cache_key_context["document_index_version"]
+        == "fixture-index-v1"
+    )
 
 
 @pytest.mark.integration
@@ -50,14 +62,18 @@ def test_both_keeps_document_result_when_database_tool_fails() -> None:
 
     with TestClient(application) as client:
         login(client)
-        response = client.post("/api/chat", json={"question": "휴가 규정과 매출 알려줘"})
+        response = client.post(
+            "/api/chat", json={"question": "휴가 규정과 매출 알려줘"}
+        )
 
     body = response.json()
     assert response.status_code == 200
     assert body["cached"] is False
     assert [source["source_type"] for source in body["sources"]] == ["document"]
     assert "일부 근거" in body["answer"]
-    assert sorted(call.tool_name for call in port.calls) == sorted(["search_documents", "query_sales"])
+    assert sorted(call.tool_name for call in port.calls) == sorted(
+        ["search_documents", "query_sales"]
+    )
     assert len(llm.calls) == 1
 
 
@@ -74,10 +90,14 @@ def test_both_returns_insufficient_response_when_all_tools_fail() -> None:
 
     with TestClient(application) as client:
         login(client)
-        response = client.post("/api/chat", json={"question": "휴가 규정과 매출 알려줘"})
+        response = client.post(
+            "/api/chat", json={"question": "휴가 규정과 매출 알려줘"}
+        )
 
     body = response.json()
     assert response.status_code == 502
     assert body["error_code"] == "QUERY_ERROR"
-    assert sorted(call.tool_name for call in port.calls) == sorted(["search_documents", "query_sales"])
+    assert sorted(call.tool_name for call in port.calls) == sorted(
+        ["search_documents", "query_sales"]
+    )
     assert llm.calls == []

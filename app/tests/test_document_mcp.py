@@ -53,12 +53,18 @@ def test_document_path_lookup_does_not_exclude_semantically_related_titles(
         def close(self) -> None:
             return None
 
-    monkeypatch.setattr("mcp_servers.document_tools.document_db.pymysql.connect", lambda **_: FakeConnection())
+    monkeypatch.setattr(
+        "mcp_servers.document_tools.document_db.pymysql.connect",
+        lambda **_: FakeConnection(),
+    )
     repository = DocumentPathRepository("host", "user", "password", "document_db")
 
     result = repository._find_paths_sync("겸직 규정")
 
-    assert [record["document_id"] for record in result] == ["doc-work-rule", "doc-accounting"]
+    assert [record["document_id"] for record in result] == [
+        "doc-work-rule",
+        "doc-accounting",
+    ]
     assert len(executed_sql) == 1
     assert "LIKE" not in executed_sql[0]
 
@@ -98,7 +104,10 @@ def test_document_download_lookup_uses_active_document_pool_mapping(
         def connection(self) -> FakeConnection:
             return FakeConnection()
 
-    monkeypatch.setattr("mcp_servers.document_tools.document_db.get_pool", lambda *_args, **_kwargs: FakePool())
+    monkeypatch.setattr(
+        "mcp_servers.document_tools.document_db.get_pool",
+        lambda *_args, **_kwargs: FakePool(),
+    )
     repository = DocumentPathRepository("host", "user", "password", "document_db")
 
     result = repository._find_path_by_document_id_sync("policy-welfare")
@@ -151,6 +160,7 @@ def test_document_database_error_is_classified_as_search_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """DB authentication or connection failures must not be reported as RAG internals."""
+
     async def failed_lookup(_: str) -> list[dict[str, str]]:
         raise pymysql.err.OperationalError(1045, "credential detail must not escape")
 
@@ -172,7 +182,11 @@ def test_in_process_mcp_maps_document_database_error_to_query_error(
     monkeypatch.setattr(search_module, "search_documents", unavailable_search)
 
     with pytest.raises(MCPQueryError):
-        asyncio.run(MCPClient(InProcessMCPPort()).document_search("policy", top_k=3, user_context=TEST_ADMIN_CONTEXT))
+        asyncio.run(
+            MCPClient(InProcessMCPPort()).document_search(
+                "policy", top_k=3, user_context=TEST_ADMIN_CONTEXT
+            )
+        )
 
 
 def test_document_file_cache_uses_path_and_updated_at(

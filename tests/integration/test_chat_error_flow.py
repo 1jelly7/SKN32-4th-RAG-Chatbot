@@ -7,7 +7,11 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.integration.chat_fakes import build_fake_application, database_success, document_success
+from tests.integration.chat_fakes import (
+    build_fake_application,
+    database_success,
+    document_success,
+)
 from tests.auth_helpers import login
 
 
@@ -17,14 +21,26 @@ from tests.auth_helpers import login
     [
         (
             "휴가 규정 알려줘",
-            {"status": "success", "domain": "document", "message": None, "data": [], "sources": [], "metadata": {}},
+            {
+                "status": "success",
+                "domain": "document",
+                "message": None,
+                "data": [],
+                "sources": [],
+                "metadata": {},
+            },
             200,
             None,
             "search_documents",
         ),
         (
             "고객별 매출 알려줘",
-            {"status": "error", "domain": "sales", "message": "query failed", "error_code": "QUERY_ERROR"},
+            {
+                "status": "error",
+                "domain": "sales",
+                "message": "query failed",
+                "error_code": "QUERY_ERROR",
+            },
             502,
             "QUERY_ERROR",
             "query_sales",
@@ -75,7 +91,9 @@ def test_graph_mcp_errors_use_http_contract(
     # 문서 검색 결과)는 도구가 2번 불리고, 그 외 명시적 오류 케이스는 evidence_eval까지
     # 못 가고 바로 예외로 끝나므로 1번만 불린다.
     expected_call_count = 2 if expected_code is None else 1
-    assert [call.tool_name for call in port.calls] == [expected_tool] * expected_call_count
+    assert [call.tool_name for call in port.calls] == [
+        expected_tool
+    ] * expected_call_count
     assert llm.calls == []
 
 
@@ -112,5 +130,8 @@ def test_insufficient_evidence_retries_once_then_returns_safe_response() -> None
     assert response.json()["sources"] == []
     # 원래 검색어가 동의어 확장 트리거에 안 걸리는 질문이라(query_expansion 없음),
     # 재시도 1회 = document_search가 정확히 2번 불린다.
-    assert [call.tool_name for call in port.calls] == ["search_documents", "search_documents"]
+    assert [call.tool_name for call in port.calls] == [
+        "search_documents",
+        "search_documents",
+    ]
     assert llm.calls == []

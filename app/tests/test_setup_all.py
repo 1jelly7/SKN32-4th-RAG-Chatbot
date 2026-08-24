@@ -52,7 +52,9 @@ def test_build_steps_respects_domain_skips_and_superuser_option() -> None:
     ]
 
 
-def test_apply_preconditions_require_env_and_selected_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_apply_preconditions_require_env_and_selected_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(setup_all, "PROJECT_ROOT", tmp_path)
     arguments = _arguments(skip_purchase=True, skip_sales=True)
 

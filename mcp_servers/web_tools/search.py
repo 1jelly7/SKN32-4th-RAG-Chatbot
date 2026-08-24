@@ -20,7 +20,9 @@ def _get_client():
     if _client is None:
         settings = get_settings()
         if not settings.tavily_api_key:
-            raise RuntimeError("TAVILY_API_KEY가 설정되지 않아 웹 검색을 쓸 수 없습니다.")
+            raise RuntimeError(
+                "TAVILY_API_KEY가 설정되지 않아 웹 검색을 쓸 수 없습니다."
+            )
         from tavily import AsyncTavilyClient
 
         _client = AsyncTavilyClient(api_key=settings.tavily_api_key)

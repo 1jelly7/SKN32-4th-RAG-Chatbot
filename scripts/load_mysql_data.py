@@ -1,5 +1,6 @@
 """도메인 ETL pipeline을 선택해 실행할 미구현 통합 CLI."""
 
+
 def main() -> None:
     """검증된 입력으로 purchase 또는 sales 배치만 선택해 실행한다."""
     # TODO(implementation): 도메인, 원천 경로, allowlisted table을 CLI에서 검증한 뒤 해당

@@ -41,7 +41,9 @@ def create_server() -> Any:
 
         try:
             chunks = await search_documents(query, top_k=top_k)
-        except Exception as exc:  # noqa: BLE001 - 사용자에게는 일반화된 오류만 노출합니다.
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - 사용자에게는 일반화된 오류만 노출합니다.
             # 원본 예외는 서버 내부 로그로만 남기고, 외부 응답에는 절대 포함하지 않습니다.
             # (내부 file_path, DB 드라이버 메시지 등 민감정보가 노출될 수 있기 때문)
             logger.error("document_search 내부 오류: %s", exc, exc_info=True)
@@ -80,7 +82,10 @@ def create_server() -> Any:
                 }
                 for c in chunks
             ],
-            "metadata": {"result_count": len(chunks), "index_version": get_last_index_version()},
+            "metadata": {
+                "result_count": len(chunks),
+                "index_version": get_last_index_version(),
+            },
         }
 
     return server

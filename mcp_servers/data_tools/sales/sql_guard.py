@@ -20,8 +20,18 @@ ALLOWED_VIEWS = frozenset(
 )
 
 _FORBIDDEN_KEYWORDS = (
-    "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE",
-    "TRUNCATE", "GRANT", "REVOKE", "REPLACE", "MERGE", "INTO",
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "DROP",
+    "ALTER",
+    "CREATE",
+    "TRUNCATE",
+    "GRANT",
+    "REVOKE",
+    "REPLACE",
+    "MERGE",
+    "INTO",
 )
 
 _TABLE_REF_PATTERN = re.compile(r"\b(?:FROM|JOIN)\s+`?(\w+)`?", re.IGNORECASE)
@@ -46,9 +56,16 @@ def validate_and_normalize(sql: str) -> str:
     stripped = sql.strip()
     normalized = stripped.rstrip(";")
 
-    if ";" in normalized or "--" in normalized or "/*" in normalized or "#" in normalized:
+    if (
+        ";" in normalized
+        or "--" in normalized
+        or "/*" in normalized
+        or "#" in normalized
+    ):
         raise ValueError("단일 SELECT 문만 실행할 수 있습니다.")
-    if not (normalized.upper().startswith("SELECT") or normalized.upper().startswith("WITH")):
+    if not (
+        normalized.upper().startswith("SELECT") or normalized.upper().startswith("WITH")
+    ):
         raise ValueError("SELECT 문만 실행할 수 있습니다.")
 
     for keyword in _FORBIDDEN_KEYWORDS:
@@ -58,7 +75,9 @@ def validate_and_normalize(sql: str) -> str:
     tables = referenced_tables(normalized)
     unknown = tables - ALLOWED_VIEWS
     if unknown:
-        raise ValueError(f"허용되지 않은 테이블/뷰를 참조합니다: {', '.join(sorted(unknown))}")
+        raise ValueError(
+            f"허용되지 않은 테이블/뷰를 참조합니다: {', '.join(sorted(unknown))}"
+        )
     if not tables:
         raise ValueError("FROM 절에서 참조하는 뷰를 찾을 수 없습니다.")
 

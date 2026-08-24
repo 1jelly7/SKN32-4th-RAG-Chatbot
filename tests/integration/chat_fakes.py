@@ -57,7 +57,9 @@ def document_success() -> dict[str, Any]:
     )
 
 
-def build_fake_application(responses: dict[str, object]) -> tuple[FastAPI, FakeMCPPort, FakeLLMPort]:
+def build_fake_application(
+    responses: dict[str, object],
+) -> tuple[FastAPI, FakeMCPPort, FakeLLMPort]:
     """호출 기록 가능한 fake provider와 독립 cache를 앱 factory에 주입한다."""
     port = FakeMCPPort(responses)
     llm = FakeLLMPort("fake answer")

@@ -19,8 +19,20 @@ from pathlib import Path
 import openpyxl
 import pymysql
 
-SALES_DB = dict(host="127.0.0.1", user="JangGGo", password="1234", database="sales", charset="utf8mb4")
-PURCHASE_DB = dict(host="127.0.0.1", user="JangGGo", password="1234", database="purchase", charset="utf8mb4")
+SALES_DB = dict(
+    host="127.0.0.1",
+    user="JangGGo",
+    password="1234",
+    database="sales",
+    charset="utf8mb4",
+)
+PURCHASE_DB = dict(
+    host="127.0.0.1",
+    user="JangGGo",
+    password="1234",
+    database="purchase",
+    charset="utf8mb4",
+)
 
 # sales DB로 갈 시트 -> 테이블, 부모 -> 자식 순서
 SALES_ORDER = [
@@ -119,7 +131,9 @@ def load_into(db_config: dict, workbook, sheet_order: list[str]) -> None:
             total = 0
             for sheet_name in sheet_order:
                 count = load_sheet(cursor, workbook, sheet_name)
-                print(f"[{db_config['database']}] {sheet_name} -> {SHEET_TO_TABLE[sheet_name]}: {count}행")
+                print(
+                    f"[{db_config['database']}] {sheet_name} -> {SHEET_TO_TABLE[sheet_name]}: {count}행"
+                )
                 total += count
         connection.commit()
         print(f"[{db_config['database']}] 총 {total}행 적재 완료.\n")

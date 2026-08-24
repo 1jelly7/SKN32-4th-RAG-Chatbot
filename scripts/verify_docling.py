@@ -43,7 +43,9 @@ def main() -> None:
     print(f"OPENAI_API_KEY 설정됨     = {bool(settings.openai_api_key)}")
     print(f"OPENAI_MODEL              = {settings.openai_model}")
     if not settings.enable_docling_captioning:
-        print("\n주의: ENABLE_DOCLING_CAPTIONING=false라 실제로는 pypdf 경로로만 동작합니다.")
+        print(
+            "\n주의: ENABLE_DOCLING_CAPTIONING=false라 실제로는 pypdf 경로로만 동작합니다."
+        )
         print(".env에서 true로 켜고 다시 실행하세요.")
 
     print("\n" + "=" * 70)

@@ -15,7 +15,11 @@ from typing import Any
 
 from mcp_servers.data_tools.sales.mysql import explain_readonly, query_readonly
 from mcp_servers.data_tools.sales.schema import get_schema_resource
-from mcp_servers.data_tools.sales.sql_guard import ALLOWED_VIEWS, referenced_tables, validate_and_normalize
+from mcp_servers.data_tools.sales.sql_guard import (
+    ALLOWED_VIEWS,
+    referenced_tables,
+    validate_and_normalize,
+)
 from mcp_servers.data_tools.sales.text2sql import generate_sql, generate_sql_with_error
 
 MAX_QUESTION_LENGTH = 500
@@ -73,7 +77,9 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
 
     if not question or len(question) > MAX_QUESTION_LENGTH:
         return _empty_evidence(
-            "", round((time.monotonic() - started_at) * 1000, 1), retry_count=0,
+            "",
+            round((time.monotonic() - started_at) * 1000, 1),
+            retry_count=0,
             message="질문 형식이 올바르지 않습니다. 판매 데이터 범위에서 다시 질문해 주세요.",
         )
 
@@ -87,7 +93,9 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
         # LLM이 뷰·지표로 답할 수 없다고 판단했다(NO_SQL) — 범위 밖/모호한 질문.
         elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
         return _empty_evidence(
-            "", elapsed_ms, retry_count=0,
+            "",
+            elapsed_ms,
+            retry_count=0,
             message="요청한 지표는 판매 데이터로 계산할 수 없습니다. 매출·미수금·주문 기준으로 질문해 주세요.",
         )
 
@@ -101,7 +109,9 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
         if not retried_sql:
             elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
             return _empty_evidence(
-                sql, elapsed_ms, retry_count=retry_count,
+                sql,
+                elapsed_ms,
+                retry_count=retry_count,
                 message="요청 조건을 판매 데이터 조회로 해석할 수 없습니다. 기간·고객·매출 기준을 구체적으로 알려 주세요.",
             )
         # 재시도 결과도 검증한다. 여기서 또 실패하면 예외를 그대로 올려
@@ -117,7 +127,9 @@ async def query_sales(question: str) -> list[dict[str, Any]]:
 
     if not rows:
         return _empty_evidence(
-            normalized, elapsed_ms, retry_count=retry_count,
+            normalized,
+            elapsed_ms,
+            retry_count=retry_count,
             message="해당 조건의 판매 데이터가 없습니다. 보유 기간과 조건을 확인해 다시 질문해 주세요.",
         )
 

@@ -5,6 +5,7 @@
 
     python -m etl.purchase.run_all [xlsx_path]
 """
+
 from __future__ import annotations
 
 import sys

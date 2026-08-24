@@ -15,5 +15,7 @@ def require_database_access(context: dict[str, object] | None, database: str) ->
     if context is None or not isinstance(context.get("role"), str):
         raise PermissionError("인증된 사용자 컨텍스트가 필요합니다.")
     role = context["role"]
-    if role not in ("admin", "hr", "finance") or not can_access_database(role, database):
+    if role not in ("admin", "hr", "finance") or not can_access_database(
+        role, database
+    ):
         raise PermissionError("요청한 데이터베이스에 접근할 권한이 없습니다.")

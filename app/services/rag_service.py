@@ -94,7 +94,9 @@ class RagService:
         return {"indexed_chunks": count, "document_source": self.document_source}
 
     # 질문과 유사한 문서를 검색합니다.
-    def search(self, query: str, top_k: int, requester_department: str | None = None) -> list[dict]:
+    def search(
+        self, query: str, top_k: int, requester_department: str | None = None
+    ) -> list[dict]:
         """Vector Search 결과를 반환합니다.
 
         requester_department가 주어지면 접근 권한이 없는 문서(청크)는 결과에서 제외합니다.
@@ -112,7 +114,9 @@ class RagService:
         candidates = self.vector_store.search(query_vector, top_k * 4)
 
         # 권한이 있는 청크만 남기고 top_k개로 자릅니다.
-        allowed = [item for item in candidates if self._can_access(item, requester_department)]
+        allowed = [
+            item for item in candidates if self._can_access(item, requester_department)
+        ]
         return allowed[:top_k]
 
     # 청크 하나에 대해 요청 부서가 접근 가능한지 판단합니다.
@@ -131,11 +135,15 @@ class RagService:
         return requester_department in allowed_list
 
     # RAG 답변과 출처를 생성합니다.
-    def ask(self, question: str, top_k: int, requester_department: str | None = None) -> dict:
+    def ask(
+        self, question: str, top_k: int, requester_department: str | None = None
+    ) -> dict:
         """검색 문맥을 근거로 답변을 생성합니다."""
 
         # 질문과 유사한 문서를 검색합니다. (부서 접근 제어 적용)
-        results = self.search(question, top_k, requester_department=requester_department)
+        results = self.search(
+            question, top_k, requester_department=requester_department
+        )
 
         # 검색 결과가 없으면 먼저 인덱스를 만들라는 메시지를 반환합니다.
         if not results:
@@ -206,7 +214,11 @@ class RagService:
         full_text = self.document_service._read_file(path)
 
         if not full_text.strip():
-            return {"filename": filename, "summary": "문서에서 추출된 텍스트가 없습니다.", "method": "empty"}
+            return {
+                "filename": filename,
+                "summary": "문서에서 추출된 텍스트가 없습니다.",
+                "method": "empty",
+            }
 
         # 아주 짧은 문서는 굳이 map-reduce할 필요 없이 바로 요약합니다.
         chunks = self.document_service._split_text(full_text)
@@ -259,5 +271,7 @@ class RagService:
             "method": method,
             "department": meta.get("department"),
             "category": meta.get("category"),
-            "version_date": str(meta.get("version_date")) if meta.get("version_date") else None,
+            "version_date": (
+                str(meta.get("version_date")) if meta.get("version_date") else None
+            ),
         }

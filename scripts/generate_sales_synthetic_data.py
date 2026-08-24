@@ -113,9 +113,11 @@ def random_date(start: date, end: date, weight_fn=None) -> date:
 # 먼저 만들고(건수 가중치는 과거->현재로 증가, 매출 단가 가중치는 감소),
 # 그걸 캘린더 연도별로 합산해 연도별 목표 건수·목표 매출을 역산한다.
 # 이렇게 하면 800건/목표 매출 합계가 반올림 오차 외엔 정확히 맞아떨어진다.
-COUNT_DENSITY_END_START_RATIO = 3.0    # 가장 최근 날짜의 "건수 밀도"가 가장 과거의 약 3배
-REVENUE_RATE_END_START_RATIO = 1 / 3.5  # 가장 최근 날짜의 "건당 단가 밀도"가 가장 과거의 약 1/3.5
-TARGET_TOTAL_REVENUE_ALL = 26_000_000   # 5년 합계 매출 목표(전체 주문 금액 기준, 근사치)
+COUNT_DENSITY_END_START_RATIO = 3.0  # 가장 최근 날짜의 "건수 밀도"가 가장 과거의 약 3배
+REVENUE_RATE_END_START_RATIO = (
+    1 / 3.5
+)  # 가장 최근 날짜의 "건당 단가 밀도"가 가장 과거의 약 1/3.5
+TARGET_TOTAL_REVENUE_ALL = 26_000_000  # 5년 합계 매출 목표(전체 주문 금액 기준, 근사치)
 
 _all_days = [DATE_START + timedelta(days=i) for i in range(TOTAL_SPAN_DAYS + 1)]
 _day_frac = np.array([days_between(DATE_START, d) / TOTAL_SPAN_DAYS for d in _all_days])
@@ -131,8 +133,12 @@ for _y, _idxs in sorted(_year_day_idx.items()):
     YEAR_TARGETS[_y] = {
         "start": _all_days[_idxs[0]],
         "end": _all_days[_idxs[-1]],
-        "target_count": int(round(TOTAL_ORDERS * _count_w[_idxs].sum() / _count_w.sum())),
-        "target_revenue": TARGET_TOTAL_REVENUE_ALL * _revenue_w[_idxs].sum() / _revenue_w.sum(),
+        "target_count": int(
+            round(TOTAL_ORDERS * _count_w[_idxs].sum() / _count_w.sum())
+        ),
+        "target_revenue": TARGET_TOTAL_REVENUE_ALL
+        * _revenue_w[_idxs].sum()
+        / _revenue_w.sum(),
     }
 # 반올림 오차를 마지막 연도에서 흡수해 총합을 정확히 TOTAL_ORDERS로 맞춘다.
 _diff = TOTAL_ORDERS - sum(v["target_count"] for v in YEAR_TARGETS.values())
@@ -142,7 +148,9 @@ print("=" * 70)
 print("1. 원본 파일 로드")
 print("=" * 70)
 src = pd.ExcelFile(SRC_PATH)
-sheets: dict[str, pd.DataFrame] = {name: src.parse(name) for name in src.sheet_names if name != "Index"}
+sheets: dict[str, pd.DataFrame] = {
+    name: src.parse(name) for name in src.sheet_names if name != "Index"
+}
 for name, df in sheets.items():
     print(f"  {name}: {len(df)}행")
 
@@ -162,8 +170,12 @@ reports0 = sheets["Sales Reports"]
 forecasts0 = sheets["Sales Forecasts"]
 
 NEW_ORDERS = TOTAL_ORDERS - len(orders0)
-BASELINE_AVG_ORDER_VALUE = float(orders0["Total_Amount"].sum() / len(orders0))  # 원본 전체 평균(모든 상태 포함)
-print(f"\n신규 생성 주문 수: {NEW_ORDERS} (기존 {len(orders0)}건 보존, 목표 총 {TOTAL_ORDERS}건)")
+BASELINE_AVG_ORDER_VALUE = float(
+    orders0["Total_Amount"].sum() / len(orders0)
+)  # 원본 전체 평균(모든 상태 포함)
+print(
+    f"\n신규 생성 주문 수: {NEW_ORDERS} (기존 {len(orders0)}건 보존, 목표 총 {TOTAL_ORDERS}건)"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +184,11 @@ print(f"\n신규 생성 주문 수: {NEW_ORDERS} (기존 {len(orders0)}건 보�
 
 item_stats = (
     lines0.groupby("Item_ID")
-    .agg(description=("Description", "first"), mean_price=("Unit_Price", "mean"), std_price=("Unit_Price", "std"))
+    .agg(
+        description=("Description", "first"),
+        mean_price=("Unit_Price", "mean"),
+        std_price=("Unit_Price", "std"),
+    )
     .reset_index()
 )
 item_stats["std_price"] = item_stats["std_price"].fillna(item_stats["mean_price"] * 0.1)
@@ -187,16 +203,25 @@ ITEM_WEIGHTS = ITEM_WEIGHTS / ITEM_WEIGHTS.sum()
 UOM_IDS = sorted(lines0["UOM_ID"].dropna().unique().tolist())
 UOM_WEIGHTS = lines0["UOM_ID"].value_counts(normalize=True).reindex(UOM_IDS).values
 WAREHOUSE_IDS = sorted(lines0["Warehouse_ID"].dropna().unique().tolist())
-WAREHOUSE_WEIGHTS = lines0["Warehouse_ID"].value_counts(normalize=True).reindex(WAREHOUSE_IDS).values
+WAREHOUSE_WEIGHTS = (
+    lines0["Warehouse_ID"].value_counts(normalize=True).reindex(WAREHOUSE_IDS).values
+)
 DISCOUNT_PCT_CHOICES = sorted(lines0["Discount_Percent"].dropna().unique().tolist())
-DISCOUNT_PCT_WEIGHTS = lines0["Discount_Percent"].value_counts(normalize=True).reindex(DISCOUNT_PCT_CHOICES).values
+DISCOUNT_PCT_WEIGHTS = (
+    lines0["Discount_Percent"]
+    .value_counts(normalize=True)
+    .reindex(DISCOUNT_PCT_CHOICES)
+    .values
+)
 QTY_LOG_MEAN = np.log(lines0["Quantity"].clip(lower=1)).mean()
 QTY_LOG_STD = np.log(lines0["Quantity"].clip(lower=1)).std()
 
 print("\n" + "=" * 70)
 print("2. 품목 카탈로그")
 print("=" * 70)
-print(f"  품목 {len(ITEM_IDS)}개, UOM {UOM_IDS}, 창고 {WAREHOUSE_IDS}, 할인율 후보 {DISCOUNT_PCT_CHOICES}")
+print(
+    f"  품목 {len(ITEM_IDS)}개, UOM {UOM_IDS}, 창고 {WAREHOUSE_IDS}, 할인율 후보 {DISCOUNT_PCT_CHOICES}"
+)
 
 
 def sample_item() -> int:
@@ -235,9 +260,52 @@ print("\n" + "=" * 70)
 print("3. 신규 고객 생성")
 print("=" * 70)
 
-CITY_POOL = ["Amman", "Zarqa", "Irbid", "Aqaba", "Mafraq", "Karak", "Jerash", "Salt", "Madaba", "Dubai", "Doha", "Riyadh"]
-STREET_POOL = ["University St", "Zahran St", "Mecca St", "King Abdullah II St", "Rainbow St", "Wasfi Al-Tal St", "Istiqlal St", "Prince Mohammed St", "Al-Madina St", "Airport Rd"]
-NAME_PREFIX = ["Jordan", "Petra", "Aqaba", "Amman", "Al-Ittihad", "Zad", "Golden", "Royal", "National", "United", "Nile", "Desert Rose", "Cedar", "Gulf", "Levant", "Nour", "Al-Rawabi", "Sahara"]
+CITY_POOL = [
+    "Amman",
+    "Zarqa",
+    "Irbid",
+    "Aqaba",
+    "Mafraq",
+    "Karak",
+    "Jerash",
+    "Salt",
+    "Madaba",
+    "Dubai",
+    "Doha",
+    "Riyadh",
+]
+STREET_POOL = [
+    "University St",
+    "Zahran St",
+    "Mecca St",
+    "King Abdullah II St",
+    "Rainbow St",
+    "Wasfi Al-Tal St",
+    "Istiqlal St",
+    "Prince Mohammed St",
+    "Al-Madina St",
+    "Airport Rd",
+]
+NAME_PREFIX = [
+    "Jordan",
+    "Petra",
+    "Aqaba",
+    "Amman",
+    "Al-Ittihad",
+    "Zad",
+    "Golden",
+    "Royal",
+    "National",
+    "United",
+    "Nile",
+    "Desert Rose",
+    "Cedar",
+    "Gulf",
+    "Levant",
+    "Nour",
+    "Al-Rawabi",
+    "Sahara",
+]
 NAME_CORE = {
     "Banking": ["Bank", "Financial Group", "Capital"],
     "Energy": ["Energy", "Power", "Petroleum", "Gas"],
@@ -286,7 +354,9 @@ new_customers = []
 next_customer_id = int(customers0["Customer_ID"].max()) + 1
 for i in range(NEW_CUSTOMERS):
     acquire_frac = i / max(NEW_CUSTOMERS - 1, 1)  # 0=가장 먼저 생김(과거), 1=가장 최근
-    acquire_date = DATE_START + timedelta(days=int(acquire_frac * days_between(DATE_START, DATE_END - timedelta(days=30))))
+    acquire_date = DATE_START + timedelta(
+        days=int(acquire_frac * days_between(DATE_START, DATE_END - timedelta(days=30)))
+    )
     industry = str(RNG.choice(INDUSTRY_CHOICES.index, p=INDUSTRY_CHOICES.values))
     country = str(RNG.choice(COUNTRY_CHOICES.index, p=COUNTRY_CHOICES.values))
     ctype = str(RNG.choice(CUST_TYPE_CHOICES.index, p=CUST_TYPE_CHOICES.values))
@@ -298,7 +368,9 @@ for i in range(NEW_CUSTOMERS):
     is_active = bool(RNG.random() > inactive_prob)
 
     created_dt = combine(acquire_date)
-    updated_dt = combine(min(DATE_END, acquire_date + timedelta(days=int(RNG.integers(0, 400)))))
+    updated_dt = combine(
+        min(DATE_END, acquire_date + timedelta(days=int(RNG.integers(0, 400))))
+    )
 
     new_customers.append(
         {
@@ -327,14 +399,30 @@ for i in range(NEW_CUSTOMERS):
     )
 
 new_customers_df = pd.DataFrame(new_customers)
-customers_all = pd.concat([customers0.assign(_acquire_date=pd.to_datetime(customers0["Created_At"]).dt.date), new_customers_df], ignore_index=True)
+customers_all = pd.concat(
+    [
+        customers0.assign(
+            _acquire_date=pd.to_datetime(customers0["Created_At"]).dt.date
+        ),
+        new_customers_df,
+    ],
+    ignore_index=True,
+)
 print(f"  신규 고객 {len(new_customers_df)}명 생성 (총 {len(customers_all)}명)")
-print(f"  비활성 고객: {(~customers_all['Is_Active']).sum()}명 / {len(customers_all)}명")
+print(
+    f"  비활성 고객: {(~customers_all['Is_Active']).sum()}명 / {len(customers_all)}명"
+)
 
-CUSTOMER_SHIP_ADDR = dict(zip(customers_all["Customer_ID"], customers_all["Shipping_Address"]))
-CUSTOMER_PAYMENT_TERMS = dict(zip(customers_all["Customer_ID"], customers_all["Payment_Terms"]))
+CUSTOMER_SHIP_ADDR = dict(
+    zip(customers_all["Customer_ID"], customers_all["Shipping_Address"])
+)
+CUSTOMER_PAYMENT_TERMS = dict(
+    zip(customers_all["Customer_ID"], customers_all["Payment_Terms"])
+)
 CUSTOMER_TYPE = dict(zip(customers_all["Customer_ID"], customers_all["Customer_Type"]))
-CUSTOMER_ACQUIRE = dict(zip(customers_all["Customer_ID"], customers_all["_acquire_date"]))
+CUSTOMER_ACQUIRE = dict(
+    zip(customers_all["Customer_ID"], customers_all["_acquire_date"])
+)
 
 
 def eligible_customers(order_date: date) -> list[int]:
@@ -343,7 +431,9 @@ def eligible_customers(order_date: date) -> list[int]:
 
 def pick_customer(order_date: date) -> int:
     pool = eligible_customers(order_date)
-    weights = np.array([1.5 if CUSTOMER_TYPE[c] in ("Corporate", "Government") else 1.0 for c in pool])
+    weights = np.array(
+        [1.5 if CUSTOMER_TYPE[c] in ("Corporate", "Government") else 1.0 for c in pool]
+    )
     weights = weights / weights.sum()
     return int(RNG.choice(pool, p=weights))
 
@@ -357,7 +447,9 @@ print("4. 신규 주문 생성")
 print("=" * 70)
 
 ORDER_STATUS_CHOICES = orders0["Status"].value_counts(normalize=True)
-LINES_PER_ORDER = lines0.groupby("Sales_Order_ID").size().value_counts(normalize=True).sort_index()
+LINES_PER_ORDER = (
+    lines0.groupby("Sales_Order_ID").size().value_counts(normalize=True).sort_index()
+)
 QUOTE_LINK_RATE = orders0["Quote_ID"].notna().mean()
 APPROVAL_RATE = orders0["Approval_Request_ID"].notna().mean()
 
@@ -371,20 +463,38 @@ next_approval_id = int(orders0["Approval_Request_ID"].dropna().max()) + 1
 orders0_dated = orders0.assign(_d=pd.to_datetime(orders0["Order_Date"]).dt.date)
 band_plan = []
 for y, b in sorted(YEAR_TARGETS.items()):
-    in_year = orders0_dated[(orders0_dated["_d"] >= b["start"]) & (orders0_dated["_d"] <= b["end"])]
+    in_year = orders0_dated[
+        (orders0_dated["_d"] >= b["start"]) & (orders0_dated["_d"] <= b["end"])
+    ]
     orig_count = len(in_year)
     orig_revenue = float(in_year["Total_Amount"].sum())
     new_count = b["target_count"] - orig_count
-    new_revenue = max(b["target_revenue"] - orig_revenue, new_count * BASELINE_AVG_ORDER_VALUE * 0.02)
+    new_revenue = max(
+        b["target_revenue"] - orig_revenue, new_count * BASELINE_AVG_ORDER_VALUE * 0.02
+    )
     avg_value = new_revenue / new_count if new_count > 0 else 0.0
     scale = float(np.clip(np.sqrt(avg_value / BASELINE_AVG_ORDER_VALUE), 0.05, 3.0))
-    band_plan.append({"year": y, **b, "orig_count": orig_count, "orig_revenue": orig_revenue, "new_count": new_count, "new_avg_value": avg_value, "scale": scale})
+    band_plan.append(
+        {
+            "year": y,
+            **b,
+            "orig_count": orig_count,
+            "orig_revenue": orig_revenue,
+            "new_count": new_count,
+            "new_avg_value": avg_value,
+            "scale": scale,
+        }
+    )
 
 print("\n  연도별 계획 (기간 / 원본건수·금액 / 신규건수 / 신규평균값 / 스케일):")
 for bp in band_plan:
-    print(f"    {bp['year']} ({bp['start']}~{bp['end']})  원본 {bp['orig_count']}건/{bp['orig_revenue']:,.0f}  ->  신규 {bp['new_count']}건, 평균 {bp['new_avg_value']:,.0f}, scale={bp['scale']:.3f}")
+    print(
+        f"    {bp['year']} ({bp['start']}~{bp['end']})  원본 {bp['orig_count']}건/{bp['orig_revenue']:,.0f}  ->  신규 {bp['new_count']}건, 평균 {bp['new_avg_value']:,.0f}, scale={bp['scale']:.3f}"
+    )
 
-assert sum(bp["new_count"] for bp in band_plan) == NEW_ORDERS, "연도별 신규 건수 합이 NEW_ORDERS와 안 맞음"
+assert (
+    sum(bp["new_count"] for bp in band_plan) == NEW_ORDERS
+), "연도별 신규 건수 합이 NEW_ORDERS와 안 맞음"
 
 # (order_date를 뽑을 연도, 그 해의 price/qty scale)의 목록으로 미리 펼쳐둔다.
 order_plan = []
@@ -447,7 +557,9 @@ for k, (order_date, scale) in enumerate(order_plan):
                 "Quantity_Delivered": qty_delivered,
                 "Warehouse_ID": sample_warehouse(),
                 "Created_At": order_created,
-                "Updated_At": combine(min(DATE_END, order_date + timedelta(days=int(RNG.integers(0, 8))))),
+                "Updated_At": combine(
+                    min(DATE_END, order_date + timedelta(days=int(RNG.integers(0, 8))))
+                ),
                 "Created_By_User_ID": rep_id,
             }
         )
@@ -455,7 +567,9 @@ for k, (order_date, scale) in enumerate(order_plan):
 
     subtotal = round(sum(r["Line_Total"] for r in line_rows), 2)
     tax_amount = round(sum(r["Tax_Amount"] for r in line_rows), 2)
-    total_amount = round(subtotal + tax_amount, 2)  # D-2: 할인은 총액에 반영 안 함(원본 재현)
+    total_amount = round(
+        subtotal + tax_amount, 2
+    )  # D-2: 할인은 총액에 반영 안 함(원본 재현)
     disc_pct_header = float(np.clip(RNG.normal(2.78, 3.59), 0, 15))
     discount_amount = round(subtotal * disc_pct_header / 100, 2)
 
@@ -478,10 +592,21 @@ for k, (order_date, scale) in enumerate(order_plan):
                     "Tax_Amount": tax_amount,
                     "Total_Amount": total_amount,
                     "Currency": "JOD",
-                    "Notes": str(RNG.choice(["Delivery ex-works Amman.", "Lead time subject to stock availability.", "Volume discount applied.", "Standard commercial terms apply."])),
+                    "Notes": str(
+                        RNG.choice(
+                            [
+                                "Delivery ex-works Amman.",
+                                "Lead time subject to stock availability.",
+                                "Volume discount applied.",
+                                "Standard commercial terms apply.",
+                            ]
+                        )
+                    ),
                     "Status": "Accepted",
                     "Created_At": combine(quote_date),
-                    "Updated_At": combine(quote_date + timedelta(days=int(RNG.integers(1, 6)))),
+                    "Updated_At": combine(
+                        quote_date + timedelta(days=int(RNG.integers(1, 6)))
+                    ),
                     "Created_By_User_ID": rep_id,
                 }
             )
@@ -502,7 +627,9 @@ for k, (order_date, scale) in enumerate(order_plan):
                         "Tax_Amount": qr["Tax_Amount"],
                         "Line_Total": qr["Line_Total"],
                         "Created_At": combine(quote_date),
-                        "Updated_At": combine(quote_date + timedelta(days=int(RNG.integers(1, 6)))),
+                        "Updated_At": combine(
+                            quote_date + timedelta(days=int(RNG.integers(1, 6)))
+                        ),
                         "Created_By_User_ID": rep_id,
                     }
                 )
@@ -522,7 +649,8 @@ for k, (order_date, scale) in enumerate(order_plan):
             "Quote_ID": quote_id,
             "Order_Number": f"SO-{order_date.year}-{order_id:05d}",
             "Order_Date": order_date,
-            "Required_Delivery_Date": order_date + timedelta(days=int(RNG.choice([7, 14, 21], p=[0.25, 0.5, 0.25]))),
+            "Required_Delivery_Date": order_date
+            + timedelta(days=int(RNG.choice([7, 14, 21], p=[0.25, 0.5, 0.25]))),
             "Delivery_Address": CUSTOMER_SHIP_ADDR[customer_id],
             "Sales_Rep_ID": rep_id,
             "Subtotal": subtotal,
@@ -534,7 +662,9 @@ for k, (order_date, scale) in enumerate(order_plan):
             "Status": status,
             "Approval_Request_ID": approval_id,
             "Created_At": order_created,
-            "Updated_At": combine(min(DATE_END, order_date + timedelta(days=int(RNG.integers(0, 10))))),
+            "Updated_At": combine(
+                min(DATE_END, order_date + timedelta(days=int(RNG.integers(0, 10))))
+            ),
             "Created_By_User_ID": rep_id,
             "_disc_pct_header": disc_pct_header,
             "_year": order_date.year,
@@ -545,7 +675,9 @@ for k, (order_date, scale) in enumerate(order_plan):
 new_orders_df = pd.DataFrame(new_orders)
 new_lines_df = pd.DataFrame(new_lines)
 print(f"  신규 주문(보정 전) {len(new_orders_df)}건, 신규 라인 {len(new_lines_df)}건")
-print(f"  견적 연동 주문 {len(new_quotes_linked)}건 (연동률 목표 {QUOTE_LINK_RATE:.2%})")
+print(
+    f"  견적 연동 주문 {len(new_quotes_linked)}건 (연동률 목표 {QUOTE_LINK_RATE:.2%})"
+)
 
 # ---------------------------------------------------------------------------
 # 4-보정. 표본 변동으로 연도별 실제 매출이 목표와 어긋나는 만큼 단가에
@@ -553,7 +685,9 @@ print(f"  견적 연동 주문 {len(new_quotes_linked)}건 (연동률 목표 {QU
 # 총액=소계+세금)은 그대로 유지한 채 "크기"만 보정한다.
 # ---------------------------------------------------------------------------
 
-new_lines_df = new_lines_df.merge(new_orders_df[["Sales_Order_ID", "_year"]], on="Sales_Order_ID", how="left")
+new_lines_df = new_lines_df.merge(
+    new_orders_df[["Sales_Order_ID", "_year"]], on="Sales_Order_ID", how="left"
+)
 year_correction: dict[int, float] = {}
 for bp in band_plan:
     y = bp["year"]
@@ -568,33 +702,75 @@ for bp in band_plan:
         continue
     correction = float(np.clip(target_new_revenue / actual_new_revenue, 0.2, 4.0))
     year_correction[y] = correction
-    new_lines_df.loc[mask, "Unit_Price"] = (new_lines_df.loc[mask, "Unit_Price"] * correction).round(4)
+    new_lines_df.loc[mask, "Unit_Price"] = (
+        new_lines_df.loc[mask, "Unit_Price"] * correction
+    ).round(4)
 
 print("\n  연도별 보정 배율:", {y: round(c, 3) for y, c in year_correction.items()})
 
 # 보정된 단가로 라인합계·세금을 다시 계산한다(공식은 위와 동일).
-new_lines_df["Line_Total"] = (new_lines_df["Quantity"] * new_lines_df["Unit_Price"] * (1 - new_lines_df["Discount_Percent"] / 100)).round(2)
+new_lines_df["Line_Total"] = (
+    new_lines_df["Quantity"]
+    * new_lines_df["Unit_Price"]
+    * (1 - new_lines_df["Discount_Percent"] / 100)
+).round(2)
 new_lines_df["Tax_Amount"] = (new_lines_df["Line_Total"] * TAX_RATE).round(2)
 
 # 헤더(Subtotal/Tax_Amount/Total_Amount/Discount_Amount)를 보정된 라인으로 재집계한다.
-header_agg = new_lines_df.groupby("Sales_Order_ID").agg(Subtotal=("Line_Total", "sum"), Tax_Amount=("Tax_Amount", "sum")).round(2)
-new_orders_df = new_orders_df.drop(columns=["Subtotal", "Tax_Amount", "Total_Amount", "Discount_Amount"]).merge(header_agg, on="Sales_Order_ID", how="left")
-new_orders_df["Total_Amount"] = (new_orders_df["Subtotal"] + new_orders_df["Tax_Amount"]).round(2)
-new_orders_df["Discount_Amount"] = (new_orders_df["Subtotal"] * new_orders_df["_disc_pct_header"] / 100).round(2)
+header_agg = (
+    new_lines_df.groupby("Sales_Order_ID")
+    .agg(Subtotal=("Line_Total", "sum"), Tax_Amount=("Tax_Amount", "sum"))
+    .round(2)
+)
+new_orders_df = new_orders_df.drop(
+    columns=["Subtotal", "Tax_Amount", "Total_Amount", "Discount_Amount"]
+).merge(header_agg, on="Sales_Order_ID", how="left")
+new_orders_df["Total_Amount"] = (
+    new_orders_df["Subtotal"] + new_orders_df["Tax_Amount"]
+).round(2)
+new_orders_df["Discount_Amount"] = (
+    new_orders_df["Subtotal"] * new_orders_df["_disc_pct_header"] / 100
+).round(2)
 
 # 연동된 견적(및 견적상세)도 같은 연도 보정 배율을 적용해 주문과 금액이 계속 일치하게 한다.
 if new_quotes_linked:
     quotes_linked_df = pd.DataFrame(new_quotes_linked)
     qlines_linked_df = pd.DataFrame(new_qlines_linked)
-    quote_year = dict(zip(new_orders_df["Quote_ID"].dropna(), new_orders_df.loc[new_orders_df["Quote_ID"].notna(), "_year"]))
-    qlines_linked_df["_corr"] = qlines_linked_df["Sales_Quote_ID"].map(quote_year).map(year_correction).fillna(1.0)
-    qlines_linked_df["Unit_Price"] = (qlines_linked_df["Unit_Price"] * qlines_linked_df["_corr"]).round(4)
-    qlines_linked_df["Line_Total"] = (qlines_linked_df["Quantity"] * qlines_linked_df["Unit_Price"] * (1 - qlines_linked_df["Discount_Percent"] / 100)).round(2)
-    qlines_linked_df["Tax_Amount"] = (qlines_linked_df["Line_Total"] * TAX_RATE).round(2)
+    quote_year = dict(
+        zip(
+            new_orders_df["Quote_ID"].dropna(),
+            new_orders_df.loc[new_orders_df["Quote_ID"].notna(), "_year"],
+        )
+    )
+    qlines_linked_df["_corr"] = (
+        qlines_linked_df["Sales_Quote_ID"]
+        .map(quote_year)
+        .map(year_correction)
+        .fillna(1.0)
+    )
+    qlines_linked_df["Unit_Price"] = (
+        qlines_linked_df["Unit_Price"] * qlines_linked_df["_corr"]
+    ).round(4)
+    qlines_linked_df["Line_Total"] = (
+        qlines_linked_df["Quantity"]
+        * qlines_linked_df["Unit_Price"]
+        * (1 - qlines_linked_df["Discount_Percent"] / 100)
+    ).round(2)
+    qlines_linked_df["Tax_Amount"] = (qlines_linked_df["Line_Total"] * TAX_RATE).round(
+        2
+    )
     qlines_linked_df = qlines_linked_df.drop(columns=["_corr"])
-    q_header_agg = qlines_linked_df.groupby("Sales_Quote_ID").agg(Subtotal=("Line_Total", "sum"), Tax_Amount=("Tax_Amount", "sum")).round(2)
-    quotes_linked_df = quotes_linked_df.drop(columns=["Subtotal", "Tax_Amount", "Total_Amount"]).merge(q_header_agg, on="Sales_Quote_ID", how="left")
-    quotes_linked_df["Total_Amount"] = (quotes_linked_df["Subtotal"] + quotes_linked_df["Tax_Amount"]).round(2)
+    q_header_agg = (
+        qlines_linked_df.groupby("Sales_Quote_ID")
+        .agg(Subtotal=("Line_Total", "sum"), Tax_Amount=("Tax_Amount", "sum"))
+        .round(2)
+    )
+    quotes_linked_df = quotes_linked_df.drop(
+        columns=["Subtotal", "Tax_Amount", "Total_Amount"]
+    ).merge(q_header_agg, on="Sales_Quote_ID", how="left")
+    quotes_linked_df["Total_Amount"] = (
+        quotes_linked_df["Subtotal"] + quotes_linked_df["Tax_Amount"]
+    ).round(2)
     quotes_linked_df["Discount_Amount"] = 0.0
 else:
     quotes_linked_df = pd.DataFrame(columns=quotes0.columns)
@@ -603,13 +779,19 @@ else:
 new_lines_df = new_lines_df.drop(columns=["_year"])
 new_orders_df = new_orders_df.drop(columns=["_disc_pct_header"])
 
-orders_all = pd.concat([orders0, new_orders_df.drop(columns=["_year"])], ignore_index=True)
+orders_all = pd.concat(
+    [orders0, new_orders_df.drop(columns=["_year"])], ignore_index=True
+)
 lines_all = pd.concat([lines0, new_lines_df], ignore_index=True)
 
 # 연도별 집계로 "건수 증가 / 매출 감소" 추세가 실제로 나오는지 확인
 orders_all["_year"] = pd.to_datetime(orders_all["Order_Date"]).dt.year
 valid_mask = ~orders_all["Status"].isin(["Cancelled", "Draft"])
-yearly = orders_all[valid_mask].groupby("_year").agg(order_count=("Sales_Order_ID", "count"), total_revenue=("Total_Amount", "sum"))
+yearly = (
+    orders_all[valid_mask]
+    .groupby("_year")
+    .agg(order_count=("Sales_Order_ID", "count"), total_revenue=("Total_Amount", "sum"))
+)
 print("\n  연도별 집계 (취소/초안 제외):")
 print(yearly.to_string())
 
@@ -660,7 +842,11 @@ for _, o in new_orders_df.iterrows():
             "Packed_By_User_ID": int(RNG.integers(1, rep_pool_max(order_date) + 1)),
             "Shipped_By_User_ID": int(RNG.integers(1, rep_pool_max(order_date) + 1)),
             "Status": "Delivered" if is_delivered else "In Transit",
-            "Notes": "Signed POD on file." if is_delivered else "Awaiting delivery confirmation.",
+            "Notes": (
+                "Signed POD on file."
+                if is_delivered
+                else "Awaiting delivery confirmation."
+            ),
             "Created_At": combine(ship_date),
             "Updated_At": combine(delivery_date),
             "Created_By_User_ID": rep_id,
@@ -699,7 +885,9 @@ for _, o in new_orders_df.iterrows():
 
 new_fulfill_df = pd.DataFrame(new_fulfill)
 new_flines_df = pd.DataFrame(new_flines)
-print(f"  신규 배송 {len(new_fulfill_df)}건, 배송상세 {len(new_flines_df)}건 (자격 주문 {new_orders_df['Status'].isin(FULFILLABLE_STATUS).sum()}건 중)")
+print(
+    f"  신규 배송 {len(new_fulfill_df)}건, 배송상세 {len(new_flines_df)}건 (자격 주문 {new_orders_df['Status'].isin(FULFILLABLE_STATUS).sum()}건 중)"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -732,7 +920,9 @@ for _, o in new_orders_df.iterrows():
     terms = o["Payment_Terms"]
     due_date = invoice_date + timedelta(days=PAYMENT_TERMS_DAYS.get(terms, 30))
 
-    status = str(RNG.choice(INVOICE_STATUS_CHOICES.index, p=INVOICE_STATUS_CHOICES.values))
+    status = str(
+        RNG.choice(INVOICE_STATUS_CHOICES.index, p=INVOICE_STATUS_CHOICES.values)
+    )
     total = float(o["Total_Amount"])
     if status == "Paid":
         amount_paid, outstanding = total, 0.0
@@ -763,7 +953,9 @@ for _, o in new_orders_df.iterrows():
             "Status": status,
             "Customer_Invoice_ID": iid,
             "Created_At": combine(invoice_date),
-            "Updated_At": combine(min(DATE_END, invoice_date + timedelta(days=int(RNG.integers(0, 5))))),
+            "Updated_At": combine(
+                min(DATE_END, invoice_date + timedelta(days=int(RNG.integers(0, 5))))
+            ),
             "Created_By_User_ID": int(o["Sales_Rep_ID"]),
         }
     )
@@ -782,12 +974,16 @@ print("\n" + "=" * 70)
 print("7. 단독 견적 생성")
 print("=" * 70)
 
-QUOTE_TOTAL_TARGET = int(round(TOTAL_ORDERS * len(quotes0) / len(orders0)))  # 800 * 60/70
+QUOTE_TOTAL_TARGET = int(
+    round(TOTAL_ORDERS * len(quotes0) / len(orders0))
+)  # 800 * 60/70
 linked_new_quote_count = len(quotes_linked_df)
 standalone_target = QUOTE_TOTAL_TARGET - len(quotes0) - linked_new_quote_count
 standalone_target = max(standalone_target, 0)
 
-STANDALONE_QUOTE_STATUS = quotes0[quotes0["Status"] != "Accepted"]["Status"].value_counts(normalize=True)
+STANDALONE_QUOTE_STATUS = quotes0[quotes0["Status"] != "Accepted"][
+    "Status"
+].value_counts(normalize=True)
 QUOTE_NOTES_POOL = quotes0["Notes"].dropna().unique().tolist()
 
 new_quotes_standalone = []
@@ -796,10 +992,14 @@ new_qlines_standalone = []
 for _ in range(standalone_target):
     quote_id = next_quote_id
     quote_date = random_date(DATE_START, DATE_END)
-    scale = next((bp["scale"] for bp in band_plan if bp["year"] == quote_date.year), 1.0)
+    scale = next(
+        (bp["scale"] for bp in band_plan if bp["year"] == quote_date.year), 1.0
+    )
     customer_id = pick_customer(quote_date)
     rep_id = int(RNG.integers(1, rep_pool_max(quote_date) + 1))
-    status = str(RNG.choice(STANDALONE_QUOTE_STATUS.index, p=STANDALONE_QUOTE_STATUS.values))
+    status = str(
+        RNG.choice(STANDALONE_QUOTE_STATUS.index, p=STANDALONE_QUOTE_STATUS.values)
+    )
 
     n_lines = int(RNG.choice(LINES_PER_ORDER.index, p=LINES_PER_ORDER.values))
     q_lines = []
@@ -826,7 +1026,9 @@ for _ in range(standalone_target):
                 "Tax_Amount": tax_amt,
                 "Line_Total": line_total,
                 "Created_At": combine(quote_date),
-                "Updated_At": combine(min(DATE_END, quote_date + timedelta(days=int(RNG.integers(0, 6))))),
+                "Updated_At": combine(
+                    min(DATE_END, quote_date + timedelta(days=int(RNG.integers(0, 6))))
+                ),
                 "Created_By_User_ID": rep_id,
             }
         )
@@ -854,7 +1056,9 @@ for _ in range(standalone_target):
             "Notes": str(RNG.choice(QUOTE_NOTES_POOL)) if QUOTE_NOTES_POOL else "",
             "Status": status,
             "Created_At": combine(quote_date),
-            "Updated_At": combine(min(DATE_END, quote_date + timedelta(days=int(RNG.integers(1, 20))))),
+            "Updated_At": combine(
+                min(DATE_END, quote_date + timedelta(days=int(RNG.integers(1, 20))))
+            ),
             "Created_By_User_ID": rep_id,
         }
     )
@@ -863,9 +1067,15 @@ for _ in range(standalone_target):
 
 new_quotes_standalone_df = pd.DataFrame(new_quotes_standalone)
 new_qlines_standalone_df = pd.DataFrame(new_qlines_standalone)
-quotes_all_new = pd.concat([quotes_linked_df, new_quotes_standalone_df], ignore_index=True)
-qlines_all_new = pd.concat([qlines_linked_df, new_qlines_standalone_df], ignore_index=True)
-print(f"  단독 견적 {len(new_quotes_standalone_df)}건 (연동 {linked_new_quote_count}건 + 단독 {len(new_quotes_standalone_df)}건 = 총 신규 {len(quotes_all_new)}건, 목표 {QUOTE_TOTAL_TARGET - len(quotes0)}건)")
+quotes_all_new = pd.concat(
+    [quotes_linked_df, new_quotes_standalone_df], ignore_index=True
+)
+qlines_all_new = pd.concat(
+    [qlines_linked_df, new_qlines_standalone_df], ignore_index=True
+)
+print(
+    f"  단독 견적 {len(new_quotes_standalone_df)}건 (연동 {linked_new_quote_count}건 + 단독 {len(new_quotes_standalone_df)}건 = 총 신규 {len(quotes_all_new)}건, 목표 {QUOTE_TOTAL_TARGET - len(quotes0)}건)"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -898,11 +1108,15 @@ for cid in new_customer_ids:
             "Currency": "JOD",
             "Current_Exposure": exposure,
             "Available_Credit": round(limit_amt - exposure, 2),
-            "Credit_Rating": str(RNG.choice(CREDIT_RATING_CHOICES.index, p=CREDIT_RATING_CHOICES.values)),
+            "Credit_Rating": str(
+                RNG.choice(CREDIT_RATING_CHOICES.index, p=CREDIT_RATING_CHOICES.values)
+            ),
             "Review_Date": acquire_d + timedelta(days=int(RNG.integers(30, 400))),
             "Approved_By_User_ID": int(RNG.integers(1, rep_pool_max(acquire_d) + 1)),
             "Is_On_Hold": bool(RNG.random() < 0.15),
-            "Updated_At": combine(min(DATE_END, acquire_d + timedelta(days=int(RNG.integers(30, 500))))),
+            "Updated_At": combine(
+                min(DATE_END, acquire_d + timedelta(days=int(RNG.integers(30, 500))))
+            ),
         }
     )
     next_credit_id += 1
@@ -918,7 +1132,9 @@ for cid in new_customer_ids:
     acquire_d = CUSTOMER_ACQUIRE[cid]
     start_d = acquire_d + timedelta(days=int(RNG.integers(0, 60)))
     end_d = start_d + timedelta(days=int(RNG.integers(180, 720)))
-    cust_name = next((c["Customer_Name"] for c in new_customers if c["Customer_ID"] == cid), "")
+    cust_name = next(
+        (c["Customer_Name"] for c in new_customers if c["Customer_ID"] == cid), ""
+    )
     new_contracts.append(
         {
             "Customer_Contract_ID": next_contract_id,
@@ -932,7 +1148,11 @@ for cid in new_customer_ids:
             "Payment_Terms": f"Customer_Contracts_{next_contract_id}",
             "Auto_Renew": bool(RNG.random() < 0.5),
             "Document_URL": f"https://portal.example-erp.jo/customer-contracts/{next_contract_id}",
-            "Status": str(RNG.choice(CONTRACT_STATUS_CHOICES.index, p=CONTRACT_STATUS_CHOICES.values)),
+            "Status": str(
+                RNG.choice(
+                    CONTRACT_STATUS_CHOICES.index, p=CONTRACT_STATUS_CHOICES.values
+                )
+            ),
         }
     )
     next_contract_id += 1
@@ -955,7 +1175,9 @@ for _ in range(PRICE_LIST_TARGET_NEW):
             "Currency": "JOD",
             "Effective_Date": eff_d,
             "Expiry_Date": eff_d + timedelta(days=int(RNG.integers(90, 720))),
-            "Customer_Segment": str(RNG.choice(SEGMENT_CHOICES.index, p=SEGMENT_CHOICES.values)),
+            "Customer_Segment": str(
+                RNG.choice(SEGMENT_CHOICES.index, p=SEGMENT_CHOICES.values)
+            ),
             "Is_Active": bool(RNG.random() < 0.75),
         }
     )
@@ -967,7 +1189,9 @@ DISCOUNT_TYPE_CHOICES = discounts0["Discount_Type"].value_counts(normalize=True)
 APPLICABLE_TO_CHOICES = discounts0["Applicable_To"].value_counts(normalize=True)
 next_discount_id = int(discounts0["Discount_ID"].max()) + 1
 DISCOUNT_TARGET_NEW = int(round(len(discounts0) * NEW_CUSTOMERS / len(customers0)))
-pricelist_ids_all = pricelists0["Price_List_ID"].tolist() + new_pricelists_df["Price_List_ID"].tolist()
+pricelist_ids_all = (
+    pricelists0["Price_List_ID"].tolist() + new_pricelists_df["Price_List_ID"].tolist()
+)
 new_discounts = []
 for _ in range(DISCOUNT_TARGET_NEW):
     valid_from = random_date(DATE_START, DATE_END)
@@ -978,20 +1202,26 @@ for _ in range(DISCOUNT_TARGET_NEW):
             "Customer_ID": float(RNG.choice(new_customer_ids)),
             "Discount_Code": f"D-{next_discount_id:04d}",
             "Discount_Name": f"Discount {next_discount_id}",
-            "Discount_Type": str(RNG.choice(DISCOUNT_TYPE_CHOICES.index, p=DISCOUNT_TYPE_CHOICES.values)),
+            "Discount_Type": str(
+                RNG.choice(DISCOUNT_TYPE_CHOICES.index, p=DISCOUNT_TYPE_CHOICES.values)
+            ),
             "Discount_Value": round(float(RNG.uniform(500, 40000)), 2),
             "Min_Order_Amount": round(float(RNG.uniform(1000, 45000)), 2),
             "Max_Discount_Amount": round(float(RNG.uniform(1000, 25000)), 2),
             "Valid_From": valid_from,
             "Valid_To": valid_from + timedelta(days=int(RNG.integers(30, 400))),
-            "Applicable_To": str(RNG.choice(APPLICABLE_TO_CHOICES.index, p=APPLICABLE_TO_CHOICES.values)),
+            "Applicable_To": str(
+                RNG.choice(APPLICABLE_TO_CHOICES.index, p=APPLICABLE_TO_CHOICES.values)
+            ),
             "Is_Active": bool(RNG.random() < 0.6),
         }
     )
     next_discount_id += 1
 new_discounts_df = pd.DataFrame(new_discounts)
 
-print(f"  여신한도 {len(new_credit_df)}건, 고객계약 {len(new_contracts_df)}건, 가격표 {len(new_pricelists_df)}건, 할인 {len(new_discounts_df)}건")
+print(
+    f"  여신한도 {len(new_credit_df)}건, 고객계약 {len(new_contracts_df)}건, 가격표 {len(new_pricelists_df)}건, 할인 {len(new_discounts_df)}건"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1006,12 +1236,20 @@ print("9. Sales Reports / Sales Forecasts 생성")
 print("=" * 70)
 
 order_ids_all = orders_all["Sales_Order_ID"].tolist()
-invoice_ids_all = pd.concat([invoices0["Invoice_ID"], new_invoices_df["Invoice_ID"]], ignore_index=True).tolist() if len(new_invoices_df) else invoices0["Invoice_ID"].tolist()
+invoice_ids_all = (
+    pd.concat(
+        [invoices0["Invoice_ID"], new_invoices_df["Invoice_ID"]], ignore_index=True
+    ).tolist()
+    if len(new_invoices_df)
+    else invoices0["Invoice_ID"].tolist()
+)
 customer_ids_all = customers_all["Customer_ID"].tolist()
 
 REPORT_TYPE_CHOICES = reports0["Report_Type"].value_counts(normalize=True)
 next_report_id = int(reports0["Sales_Report_ID"].max()) + 1
-REPORT_TARGET_NEW = max(int(round(len(reports0) * TOTAL_ORDERS / len(orders0))) - len(reports0), 0)
+REPORT_TARGET_NEW = max(
+    int(round(len(reports0) * TOTAL_ORDERS / len(orders0))) - len(reports0), 0
+)
 new_reports = []
 for _ in range(REPORT_TARGET_NEW):
     gen_d = random_date(DATE_START, DATE_END)
@@ -1025,7 +1263,9 @@ for _ in range(REPORT_TARGET_NEW):
             "Customer_ID": float(RNG.choice(customer_ids_all)),
             "Report_Code": f"SR-{next_report_id:04d}",
             "Report_Name": f"Sales Report {next_report_id}",
-            "Report_Type": str(RNG.choice(REPORT_TYPE_CHOICES.index, p=REPORT_TYPE_CHOICES.values)),
+            "Report_Type": str(
+                RNG.choice(REPORT_TYPE_CHOICES.index, p=REPORT_TYPE_CHOICES.values)
+            ),
             "Period_Start": period_start,
             "Period_End": gen_d,
             "Total_Revenue": round(float(RNG.uniform(500, 40000)), 2),
@@ -1033,7 +1273,9 @@ for _ in range(REPORT_TARGET_NEW):
             "Generated_By_User_ID": float(RNG.integers(1, rep_pool_max(gen_d) + 1)),
             "Generated_At": combine(gen_d),
             "Created_At": combine(gen_d),
-            "Updated_At": combine(min(DATE_END, gen_d + timedelta(days=int(RNG.integers(0, 300))))),
+            "Updated_At": combine(
+                min(DATE_END, gen_d + timedelta(days=int(RNG.integers(0, 300))))
+            ),
             "Created_By_User_ID": int(RNG.integers(1, rep_pool_max(gen_d) + 1)),
         }
     )
@@ -1042,8 +1284,17 @@ new_reports_df = pd.DataFrame(new_reports)
 
 FORECAST_METHOD_CHOICES = forecasts0["Forecast_Method"].value_counts(normalize=True)
 next_forecast_id = int(forecasts0["Sales_Forecast_ID"].max()) + 1
-FORECAST_TARGET_NEW = max(int(round(len(forecasts0) * TOTAL_ORDERS / len(orders0))) - len(forecasts0), 0)
-report_ids_all = pd.concat([reports0["Sales_Report_ID"], new_reports_df["Sales_Report_ID"]], ignore_index=True).tolist() if len(new_reports_df) else reports0["Sales_Report_ID"].tolist()
+FORECAST_TARGET_NEW = max(
+    int(round(len(forecasts0) * TOTAL_ORDERS / len(orders0))) - len(forecasts0), 0
+)
+report_ids_all = (
+    pd.concat(
+        [reports0["Sales_Report_ID"], new_reports_df["Sales_Report_ID"]],
+        ignore_index=True,
+    ).tolist()
+    if len(new_reports_df)
+    else reports0["Sales_Report_ID"].tolist()
+)
 new_forecasts = []
 for _ in range(FORECAST_TARGET_NEW):
     gen_d = random_date(DATE_START, DATE_END)
@@ -1055,7 +1306,9 @@ for _ in range(FORECAST_TARGET_NEW):
         {
             "Sales_Forecast_ID": next_forecast_id,
             "Company_ID": 1,  # D-3
-            "Sales_Report_ID": float(RNG.choice(report_ids_all)) if RNG.random() < 0.85 else np.nan,
+            "Sales_Report_ID": (
+                float(RNG.choice(report_ids_all)) if RNG.random() < 0.85 else np.nan
+            ),
             "Item_ID": float(sample_item()) if RNG.random() < 0.85 else np.nan,
             "Customer_ID": float(RNG.choice(customer_ids_all)),
             "Product_ID": float(RNG.integers(1, 20)) if RNG.random() < 0.85 else np.nan,
@@ -1064,19 +1317,29 @@ for _ in range(FORECAST_TARGET_NEW):
             "Forecasted_Revenue": forecast_rev,
             "Actual_Quantity": actual_qty,
             "Actual_Revenue": actual_rev,
-            "Forecast_Method": str(RNG.choice(FORECAST_METHOD_CHOICES.index, p=FORECAST_METHOD_CHOICES.values)),
+            "Forecast_Method": str(
+                RNG.choice(
+                    FORECAST_METHOD_CHOICES.index, p=FORECAST_METHOD_CHOICES.values
+                )
+            ),
             # 원본 실측: Forecasted/Actual과 연동되는 공식이 아니라, 평균 12.37/표준편차 7.4,
             # 1.42~24.95 범위의 별도 무작위값이었다(느슨하게 연결된 분석용 테이블 특성 그대로 재현).
-            "Accuracy_Percent": round(float(np.clip(RNG.normal(12.37, 7.40), 0.5, 30.0)), 2),
+            "Accuracy_Percent": round(
+                float(np.clip(RNG.normal(12.37, 7.40), 0.5, 30.0)), 2
+            ),
             "Created_By_User_ID": int(RNG.integers(1, rep_pool_max(gen_d) + 1)),
             "Created_At": combine(gen_d),
-            "Updated_At": combine(min(DATE_END, gen_d + timedelta(days=int(RNG.integers(0, 300))))),
+            "Updated_At": combine(
+                min(DATE_END, gen_d + timedelta(days=int(RNG.integers(0, 300))))
+            ),
         }
     )
     next_forecast_id += 1
 new_forecasts_df = pd.DataFrame(new_forecasts)
 
-print(f"  Sales Reports {len(new_reports_df)}건, Sales Forecasts {len(new_forecasts_df)}건")
+print(
+    f"  Sales Reports {len(new_reports_df)}건, Sales Forecasts {len(new_forecasts_df)}건"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1096,8 +1359,12 @@ def combine_sheet(orig: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
 
 
 final_sheets: dict[str, pd.DataFrame] = {
-    "Customers": customers_all.drop(columns=["_acquire_date"]).reindex(columns=customers0.columns),
-    "Sales Orders": combine_sheet(orders0, new_orders_df.drop(columns=["_year"], errors="ignore")),
+    "Customers": customers_all.drop(columns=["_acquire_date"]).reindex(
+        columns=customers0.columns
+    ),
+    "Sales Orders": combine_sheet(
+        orders0, new_orders_df.drop(columns=["_year"], errors="ignore")
+    ),
     "Sales Order Lines": combine_sheet(lines0, new_lines_df),
     "Sales Quotes": combine_sheet(quotes0, quotes_all_new),
     "Sales Quote Lines": combine_sheet(qlines0, qlines_all_new),
@@ -1123,7 +1390,9 @@ before_r = int((final_sheets["Sales Reports"]["Company_ID"] == 2).sum())
 before_f = int((final_sheets["Sales Forecasts"]["Company_ID"] == 2).sum())
 final_sheets["Sales Reports"]["Company_ID"] = 1
 final_sheets["Sales Forecasts"]["Company_ID"] = 1
-print(f"\n  D-3 적용: Sales Reports Company_ID=2 였던 {before_r}건, Sales Forecasts {before_f}건을 1로 통일 (원본 포함)")
+print(
+    f"\n  D-3 적용: Sales Reports Company_ID=2 였던 {before_r}건, Sales Forecasts {before_f}건을 1로 통일 (원본 포함)"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1137,66 +1406,200 @@ print("=" * 70)
 errors: list[str] = []
 
 
-def check_fk(child_df: pd.DataFrame, child_col: str, parent_df: pd.DataFrame, parent_col: str, label: str, nullable: bool = True) -> None:
+def check_fk(
+    child_df: pd.DataFrame,
+    child_col: str,
+    parent_df: pd.DataFrame,
+    parent_col: str,
+    label: str,
+    nullable: bool = True,
+) -> None:
     vals = child_df[child_col].dropna() if nullable else child_df[child_col]
     valid_ids = set(parent_df[parent_col])
     bad = ~vals.astype(float).isin({float(v) for v in valid_ids})
     n_bad = int(bad.sum())
     if n_bad:
-        errors.append(f"FK 위반: {label} — {n_bad}건이 존재하지 않는 {parent_col}를 참조")
+        errors.append(
+            f"FK 위반: {label} — {n_bad}건이 존재하지 않는 {parent_col}를 참조"
+        )
     else:
         print(f"  OK  {label}: {len(vals)}건 전부 유효")
 
 
-check_fk(final_sheets["Sales Orders"], "Customer_ID", final_sheets["Customers"], "Customer_ID", "Sales Orders.Customer_ID -> Customers")
-check_fk(final_sheets["Sales Orders"], "Quote_ID", final_sheets["Sales Quotes"], "Sales_Quote_ID", "Sales Orders.Quote_ID -> Sales Quotes")
-check_fk(final_sheets["Sales Order Lines"], "Sales_Order_ID", final_sheets["Sales Orders"], "Sales_Order_ID", "Sales Order Lines -> Sales Orders", nullable=False)
-check_fk(final_sheets["Sales Quotes"], "Customer_ID", final_sheets["Customers"], "Customer_ID", "Sales Quotes.Customer_ID -> Customers")
-check_fk(final_sheets["Sales Quote Lines"], "Sales_Quote_ID", final_sheets["Sales Quotes"], "Sales_Quote_ID", "Sales Quote Lines -> Sales Quotes", nullable=False)
-check_fk(final_sheets["Order Fulfillment"], "Order_ID", final_sheets["Sales Orders"], "Sales_Order_ID", "Order Fulfillment -> Sales Orders", nullable=False)
-check_fk(final_sheets["Fulfillment Lines"], "Fulfillment_ID", final_sheets["Order Fulfillment"], "Fulfillment_ID", "Fulfillment Lines -> Order Fulfillment", nullable=False)
-check_fk(final_sheets["Fulfillment Lines"], "Sales_Order_Line_ID", final_sheets["Sales Order Lines"], "Sales_Order_Line_ID", "Fulfillment Lines -> Sales Order Lines", nullable=False)
-check_fk(final_sheets["Invoices"], "Customer_ID", final_sheets["Customers"], "Customer_ID", "Invoices.Customer_ID -> Customers", nullable=False)
-check_fk(final_sheets["Invoices"], "Order_ID", final_sheets["Sales Orders"], "Sales_Order_ID", "Invoices.Order_ID -> Sales Orders", nullable=False)
-check_fk(final_sheets["Invoices"], "Fulfillment_ID", final_sheets["Order Fulfillment"], "Fulfillment_ID", "Invoices.Fulfillment_ID -> Order Fulfillment", nullable=False)
-check_fk(final_sheets["Credit Limits"], "Customer_ID", final_sheets["Customers"], "Customer_ID", "Credit Limits -> Customers")
-check_fk(final_sheets["Customer Contracts"], "Customer_ID", final_sheets["Customers"], "Customer_ID", "Customer Contracts -> Customers")
-check_fk(final_sheets["Discounts"], "Customer_ID", final_sheets["Customers"], "Customer_ID", "Discounts.Customer_ID -> Customers")
-check_fk(final_sheets["Discounts"], "Price_List_ID", final_sheets["Price Lists"], "Price_List_ID", "Discounts.Price_List_ID -> Price Lists")
+check_fk(
+    final_sheets["Sales Orders"],
+    "Customer_ID",
+    final_sheets["Customers"],
+    "Customer_ID",
+    "Sales Orders.Customer_ID -> Customers",
+)
+check_fk(
+    final_sheets["Sales Orders"],
+    "Quote_ID",
+    final_sheets["Sales Quotes"],
+    "Sales_Quote_ID",
+    "Sales Orders.Quote_ID -> Sales Quotes",
+)
+check_fk(
+    final_sheets["Sales Order Lines"],
+    "Sales_Order_ID",
+    final_sheets["Sales Orders"],
+    "Sales_Order_ID",
+    "Sales Order Lines -> Sales Orders",
+    nullable=False,
+)
+check_fk(
+    final_sheets["Sales Quotes"],
+    "Customer_ID",
+    final_sheets["Customers"],
+    "Customer_ID",
+    "Sales Quotes.Customer_ID -> Customers",
+)
+check_fk(
+    final_sheets["Sales Quote Lines"],
+    "Sales_Quote_ID",
+    final_sheets["Sales Quotes"],
+    "Sales_Quote_ID",
+    "Sales Quote Lines -> Sales Quotes",
+    nullable=False,
+)
+check_fk(
+    final_sheets["Order Fulfillment"],
+    "Order_ID",
+    final_sheets["Sales Orders"],
+    "Sales_Order_ID",
+    "Order Fulfillment -> Sales Orders",
+    nullable=False,
+)
+check_fk(
+    final_sheets["Fulfillment Lines"],
+    "Fulfillment_ID",
+    final_sheets["Order Fulfillment"],
+    "Fulfillment_ID",
+    "Fulfillment Lines -> Order Fulfillment",
+    nullable=False,
+)
+check_fk(
+    final_sheets["Fulfillment Lines"],
+    "Sales_Order_Line_ID",
+    final_sheets["Sales Order Lines"],
+    "Sales_Order_Line_ID",
+    "Fulfillment Lines -> Sales Order Lines",
+    nullable=False,
+)
+check_fk(
+    final_sheets["Invoices"],
+    "Customer_ID",
+    final_sheets["Customers"],
+    "Customer_ID",
+    "Invoices.Customer_ID -> Customers",
+    nullable=False,
+)
+check_fk(
+    final_sheets["Invoices"],
+    "Order_ID",
+    final_sheets["Sales Orders"],
+    "Sales_Order_ID",
+    "Invoices.Order_ID -> Sales Orders",
+    nullable=False,
+)
+check_fk(
+    final_sheets["Invoices"],
+    "Fulfillment_ID",
+    final_sheets["Order Fulfillment"],
+    "Fulfillment_ID",
+    "Invoices.Fulfillment_ID -> Order Fulfillment",
+    nullable=False,
+)
+check_fk(
+    final_sheets["Credit Limits"],
+    "Customer_ID",
+    final_sheets["Customers"],
+    "Customer_ID",
+    "Credit Limits -> Customers",
+)
+check_fk(
+    final_sheets["Customer Contracts"],
+    "Customer_ID",
+    final_sheets["Customers"],
+    "Customer_ID",
+    "Customer Contracts -> Customers",
+)
+check_fk(
+    final_sheets["Discounts"],
+    "Customer_ID",
+    final_sheets["Customers"],
+    "Customer_ID",
+    "Discounts.Customer_ID -> Customers",
+)
+check_fk(
+    final_sheets["Discounts"],
+    "Price_List_ID",
+    final_sheets["Price Lists"],
+    "Price_List_ID",
+    "Discounts.Price_List_ID -> Price Lists",
+)
 
 # 계산 공식 재검증 (허용 오차 0.02 — 부동소수 반올림)
-for label, df in [("Sales Order Lines", final_sheets["Sales Order Lines"]), ("Sales Quote Lines", final_sheets["Sales Quote Lines"])]:
-    calc_total = (df["Quantity"] * df["Unit_Price"] * (1 - df["Discount_Percent"] / 100)).round(2)
+for label, df in [
+    ("Sales Order Lines", final_sheets["Sales Order Lines"]),
+    ("Sales Quote Lines", final_sheets["Sales Quote Lines"]),
+]:
+    calc_total = (
+        df["Quantity"] * df["Unit_Price"] * (1 - df["Discount_Percent"] / 100)
+    ).round(2)
     diff = (calc_total - df["Line_Total"]).abs()
     if diff.max() > 0.02:
-        errors.append(f"공식 위반: {label}.Line_Total 계산 불일치 최대 {diff.max():.4f}")
+        errors.append(
+            f"공식 위반: {label}.Line_Total 계산 불일치 최대 {diff.max():.4f}"
+        )
     else:
         print(f"  OK  {label}.Line_Total 공식 (최대 오차 {diff.max():.4f})")
 
     calc_tax = (df["Line_Total"] * TAX_RATE).round(2)
     diff_tax = (calc_tax - df["Tax_Amount"]).abs()
     if diff_tax.max() > 0.02:
-        errors.append(f"공식 위반: {label}.Tax_Amount 계산 불일치 최대 {diff_tax.max():.4f}")
+        errors.append(
+            f"공식 위반: {label}.Tax_Amount 계산 불일치 최대 {diff_tax.max():.4f}"
+        )
     else:
         print(f"  OK  {label}.Tax_Amount 공식 (최대 오차 {diff_tax.max():.4f})")
 
 for label, header_df, line_df, key in [
-    ("Sales Orders", final_sheets["Sales Orders"], final_sheets["Sales Order Lines"], "Sales_Order_ID"),
-    ("Sales Quotes", final_sheets["Sales Quotes"], final_sheets["Sales Quote Lines"], "Sales_Quote_ID"),
+    (
+        "Sales Orders",
+        final_sheets["Sales Orders"],
+        final_sheets["Sales Order Lines"],
+        "Sales_Order_ID",
+    ),
+    (
+        "Sales Quotes",
+        final_sheets["Sales Quotes"],
+        final_sheets["Sales Quote Lines"],
+        "Sales_Quote_ID",
+    ),
 ]:
     grp = line_df.groupby(key)["Line_Total"].sum().rename("lines_sum")
     merged = header_df.merge(grp, left_on=key, right_index=True, how="left")
     diff = (merged["Subtotal"] - merged["lines_sum"]).abs()
     if diff.max() > 0.05:
-        errors.append(f"공식 위반: {label}.Subtotal != SUM(Line_Total) 최대 오차 {diff.max():.4f}")
+        errors.append(
+            f"공식 위반: {label}.Subtotal != SUM(Line_Total) 최대 오차 {diff.max():.4f}"
+        )
     else:
         print(f"  OK  {label}.Subtotal = SUM(Line_Total) (최대 오차 {diff.max():.4f})")
 
-    diff_total = (merged["Total_Amount"] - (merged["Subtotal"] + merged["Tax_Amount"])).abs()
+    diff_total = (
+        merged["Total_Amount"] - (merged["Subtotal"] + merged["Tax_Amount"])
+    ).abs()
     if diff_total.max() > 0.02:
-        errors.append(f"공식 위반: {label}.Total_Amount != Subtotal+Tax_Amount 최대 오차 {diff_total.max():.4f}")
+        errors.append(
+            f"공식 위반: {label}.Total_Amount != Subtotal+Tax_Amount 최대 오차 {diff_total.max():.4f}"
+        )
     else:
-        print(f"  OK  {label}.Total_Amount = Subtotal + Tax_Amount (최대 오차 {diff_total.max():.4f})")
+        print(
+            f"  OK  {label}.Total_Amount = Subtotal + Tax_Amount (최대 오차 {diff_total.max():.4f})"
+        )
 
 # 주문 건수·기간 확인
 final_order_count = len(final_sheets["Sales Orders"])
@@ -1216,7 +1619,10 @@ for col in orders0.columns:
         mismatch = (a != b).sum()
     elif pd.api.types.is_numeric_dtype(orig_ref[col]):
         a, b = orig_check[col], orig_ref[col]
-        mismatch = ((a.isna() != b.isna()) | ((~a.isna()) & (~b.isna()) & (a.astype(float) != b.astype(float)))).sum()
+        mismatch = (
+            (a.isna() != b.isna())
+            | ((~a.isna()) & (~b.isna()) & (a.astype(float) != b.astype(float)))
+        ).sum()
     else:
         mismatch = (orig_check[col].astype(str) != orig_ref[col].astype(str)).sum()
     if mismatch:

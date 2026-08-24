@@ -67,11 +67,17 @@ def _type_mapping_for(table: str) -> dict[str, str]:
 
 
 def _boolean_columns(table: str) -> list[str]:
-    return [c["name"] for c in SALES_SCHEMA[table]["columns"] if c["type"] == "TINYINT(1)"]
+    return [
+        c["name"] for c in SALES_SCHEMA[table]["columns"] if c["type"] == "TINYINT(1)"
+    ]
 
 
-def _run(frame: pd.DataFrame, source_label: str, table: str, required_columns: list[str]) -> PipelineResult:
-    _log("INFO", "extract_done", f"source={source_label} table={table} rows={len(frame)}")
+def _run(
+    frame: pd.DataFrame, source_label: str, table: str, required_columns: list[str]
+) -> PipelineResult:
+    _log(
+        "INFO", "extract_done", f"source={source_label} table={table} rows={len(frame)}"
+    )
 
     prepared = frame
     if table in SALES_SCHEMA:
@@ -94,7 +100,11 @@ def _run(frame: pd.DataFrame, source_label: str, table: str, required_columns: l
     )
 
     if not report["is_valid"]:
-        _log("ERROR", "pipeline_aborted", f"table={table} reason=missing_required_columns")
+        _log(
+            "ERROR",
+            "pipeline_aborted",
+            f"table={table} reason=missing_required_columns",
+        )
         return {"source_path": source_label, "validation": report, "load": None}
 
     client = SalesETLMySQLClient()
@@ -109,7 +119,9 @@ def _run(frame: pd.DataFrame, source_label: str, table: str, required_columns: l
     return {"source_path": source_label, "validation": report, "load": load_result}
 
 
-def run_csv_pipeline(path: Path, table: str, required_columns: list[str]) -> PipelineResult:
+def run_csv_pipeline(
+    path: Path, table: str, required_columns: list[str]
+) -> PipelineResult:
     """판매 ETL 단계를 순서대로 실행한다."""
     _log("INFO", "pipeline_start", f"source={path} table={table}")
     try:

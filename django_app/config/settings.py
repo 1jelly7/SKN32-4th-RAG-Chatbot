@@ -23,7 +23,9 @@ def _boolean(name: str, default: bool = False) -> bool:
 
 def _csv(name: str, default: str = "") -> list[str]:
     """쉼표 구분 환경 변수를 빈 항목 없이 반환한다."""
-    return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
+    return [
+        item.strip() for item in os.getenv(name, default).split(",") if item.strip()
+    ]
 
 
 def _positive_int(name: str, default: int) -> int:
@@ -113,7 +115,9 @@ DATABASES = {
 
 AUTH_USER_MODEL = "accounts.User"
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},

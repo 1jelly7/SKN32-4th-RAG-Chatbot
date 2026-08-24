@@ -47,8 +47,12 @@ async def _warmup_embedding_model() -> None:
 
         from ingestion.embedding import embed
 
-        await asyncio.to_thread(embed, ["서버 시작 시 임베딩 모델을 미리 로드하기 위한 예열 문장입니다."])
-        logger.info("embedding_model_warmed_up", extra={"event": "embedding_model_warmed_up"})
+        await asyncio.to_thread(
+            embed, ["서버 시작 시 임베딩 모델을 미리 로드하기 위한 예열 문장입니다."]
+        )
+        logger.info(
+            "embedding_model_warmed_up", extra={"event": "embedding_model_warmed_up"}
+        )
     except Exception as exc:  # noqa: BLE001 - 예열 실패로 API 전체 시작을 막지 않는다.
         logger.warning(
             "embedding_warmup_failed error_type=%s",
@@ -69,6 +73,7 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
         app_dependencies.configure_logging()
         warmup_tasks: list[asyncio.Task[None]] = []
         if app_dependencies.warmup_providers and app_dependencies.mcp is not None:
+
             async def warmup_providers() -> None:
                 try:
                     await app_dependencies.mcp.warmup()
@@ -100,7 +105,7 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
 
     @application.middleware("http")
     async def measure_http_request(
-            request: Request, call_next: Callable[[Request], Awaitable[Response]]
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         started_ns = start_timer()
         request.state.request_id = str(uuid.uuid4())
@@ -113,7 +118,9 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
             total_ms = elapsed_ms(started_ns)
             request.state.stage_timings["app_total"] = total_ms
             response.headers["X-Request-ID"] = request.state.request_id
-            response.headers["Server-Timing"] = server_timing_header(request.state.stage_timings)
+            response.headers["Server-Timing"] = server_timing_header(
+                request.state.stage_timings
+            )
             return response
         finally:
             logger.info(

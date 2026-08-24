@@ -33,7 +33,9 @@ class ReadOnlyMySQLClient:
         connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
-                cursor.execute("SET SESSION MAX_EXECUTION_TIME=%s", (timeout_seconds * 1000,))
+                cursor.execute(
+                    "SET SESSION MAX_EXECUTION_TIME=%s", (timeout_seconds * 1000,)
+                )
                 cursor.execute(normalized)
                 rows = cursor.fetchall()
             return rows
@@ -67,7 +69,9 @@ class ExplainOnlyMySQLClient:
         connection = self._pool.connection()
         try:
             with connection.cursor() as cursor:
-                cursor.execute("SET SESSION MAX_EXECUTION_TIME=%s", (timeout_seconds * 1000,))
+                cursor.execute(
+                    "SET SESSION MAX_EXECUTION_TIME=%s", (timeout_seconds * 1000,)
+                )
                 cursor.execute(f"EXPLAIN {normalized}")
                 cursor.fetchall()
         finally:

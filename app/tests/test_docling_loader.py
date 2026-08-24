@@ -21,7 +21,9 @@ def _text_item(text: str, page_no: int) -> SimpleNamespace:
 
 def _picture_item(page_no: int, caption: str | None) -> SimpleNamespace:
     annotations = [SimpleNamespace(kind="description", text=caption)] if caption else []
-    return SimpleNamespace(prov=[SimpleNamespace(page_no=page_no)], annotations=annotations)
+    return SimpleNamespace(
+        prov=[SimpleNamespace(page_no=page_no)], annotations=annotations
+    )
 
 
 class _FakeDoclingDocument:
@@ -79,19 +81,29 @@ def _patch_docling_internals(monkeypatch, fake_document: _FakeDoclingDocument) -
     fake_base_models_mod.InputFormat = SimpleNamespace(PDF="pdf")
 
     fake_converter_mod = types.ModuleType("docling.document_converter")
-    fake_converter_mod.DocumentConverter = lambda **kwargs: _FakeDocumentConverter(fake_document)
+    fake_converter_mod.DocumentConverter = lambda **kwargs: _FakeDocumentConverter(
+        fake_document
+    )
     fake_converter_mod.PdfFormatOption = lambda **kwargs: kwargs
 
     fake_doc_types_mod = types.ModuleType("docling_core.types.doc")
-    fake_doc_types_mod.PictureItem = SimpleNamespace  # isinstance 체크를 통과시키기 위함이 아니라 아래에서 우회
+    fake_doc_types_mod.PictureItem = (
+        SimpleNamespace  # isinstance 체크를 통과시키기 위함이 아니라 아래에서 우회
+    )
 
-    monkeypatch.setitem(sys.modules, "docling.datamodel.pipeline_options", fake_pipeline_options_mod)
-    monkeypatch.setitem(sys.modules, "docling.datamodel.base_models", fake_base_models_mod)
+    monkeypatch.setitem(
+        sys.modules, "docling.datamodel.pipeline_options", fake_pipeline_options_mod
+    )
+    monkeypatch.setitem(
+        sys.modules, "docling.datamodel.base_models", fake_base_models_mod
+    )
     monkeypatch.setitem(sys.modules, "docling.document_converter", fake_converter_mod)
     monkeypatch.setitem(sys.modules, "docling_core.types.doc", fake_doc_types_mod)
 
 
-def test_load_pdf_docling_embeds_captions_inline_per_page(tmp_path, monkeypatch, fake_settings) -> None:
+def test_load_pdf_docling_embeds_captions_inline_per_page(
+    tmp_path, monkeypatch, fake_settings
+) -> None:
     fake_document = _FakeDoclingDocument(
         texts=[
             _text_item("제1조(목적) 이 문서는 테스트용입니다.", page_no=1),
@@ -118,7 +130,9 @@ def test_load_pdf_docling_embeds_captions_inline_per_page(tmp_path, monkeypatch,
     assert document["metadata"]["source_type"] == "pdf_docling"
 
 
-def test_load_pdf_docling_reports_detected_pictures_without_caption(tmp_path, monkeypatch, fake_settings) -> None:
+def test_load_pdf_docling_reports_detected_pictures_without_caption(
+    tmp_path, monkeypatch, fake_settings
+) -> None:
     """실제 사고 재현 회귀 테스트(2026-08-19): 레이아웃 모델이 그림을 감지했지만
     (작은 아이콘이라 picture_area_threshold에 걸리는 등의 이유로) 캡션이 하나도
     안 달린 상황을, "그림 자체를 아예 못 찾음"과 구분해서 진단할 수 있어야 한다.
@@ -143,10 +157,14 @@ def test_load_pdf_docling_reports_detected_pictures_without_caption(tmp_path, mo
     assert "[이미지:" not in document["content"]
 
 
-def test_load_pdf_with_docling_fallback_uses_pypdf_when_disabled(tmp_path, monkeypatch) -> None:
+def test_load_pdf_with_docling_fallback_uses_pypdf_when_disabled(
+    tmp_path, monkeypatch
+) -> None:
     """설정이 꺼져 있으면(기본값) Docling을 아예 건드리지 않고 기존 pypdf 경로로 간다."""
     settings = SimpleNamespace(
-        openai_api_key="sk-test", openai_model="gpt-4o-mini", enable_docling_captioning=False
+        openai_api_key="sk-test",
+        openai_model="gpt-4o-mini",
+        enable_docling_captioning=False,
     )
     import app.core.config as config_module
 
@@ -156,7 +174,9 @@ def test_load_pdf_with_docling_fallback_uses_pypdf_when_disabled(tmp_path, monke
 
     def _should_not_be_called(_path):
         called["docling"] = True
-        raise AssertionError("enable_docling_captioning=False인데 load_pdf_docling이 호출됨")
+        raise AssertionError(
+            "enable_docling_captioning=False인데 load_pdf_docling이 호출됨"
+        )
 
     monkeypatch.setattr(loaders, "load_pdf_docling", _should_not_be_called)
 
@@ -175,7 +195,9 @@ def test_load_pdf_with_docling_fallback_uses_pypdf_when_disabled(tmp_path, monke
     assert document["metadata"]["source_type"] == "pdf"  # load_pdf() 결과
 
 
-def test_load_pdf_with_docling_fallback_falls_back_on_exception(tmp_path, monkeypatch, fake_settings) -> None:
+def test_load_pdf_with_docling_fallback_falls_back_on_exception(
+    tmp_path, monkeypatch, fake_settings
+) -> None:
     """Docling이 켜져 있어도, 변환 중 예외가 나면 재인덱싱 전체가 안 죽고 pypdf로 폴백한다."""
     attempted = {"docling": False}
 

@@ -56,8 +56,12 @@ def _coerce_boolean_columns(frame: pd.DataFrame, columns: list[str]) -> pd.DataF
     return result
 
 
-def _run(frame: pd.DataFrame, source_label: str, table: str, required_columns: list[str]) -> PipelineResult:
-    _log("INFO", "extract_done", f"source={source_label} table={table} rows={len(frame)}")
+def _run(
+    frame: pd.DataFrame, source_label: str, table: str, required_columns: list[str]
+) -> PipelineResult:
+    _log(
+        "INFO", "extract_done", f"source={source_label} table={table} rows={len(frame)}"
+    )
 
     prepared = frame
     if table in PURCHASE_SCHEMA:
@@ -95,7 +99,9 @@ def _run(frame: pd.DataFrame, source_label: str, table: str, required_columns: l
     return {"source_path": source_label, "validation": report, "load": load_result}
 
 
-def run_csv_pipeline(path: Path, table: str, required_columns: list[str]) -> PipelineResult:
+def run_csv_pipeline(
+    path: Path, table: str, required_columns: list[str]
+) -> PipelineResult:
     """구매 ETL 단계를 순서대로 실행한다(CSV 원천용)."""
     _log("INFO", "pipeline_start", f"source={path} table={table}")
     try:

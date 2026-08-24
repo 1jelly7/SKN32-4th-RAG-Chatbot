@@ -168,7 +168,12 @@ def test_embedding_client_similar_words_score_higher_than_unrelated():
 # ------------------------------------------------------------------
 def _make_chunks_and_vectors(n: int, dimension: int = 32):
     chunks = [
-        {"chunk_id": f"c{i}", "document_id": "doc-1", "content": f"내용 {i}", "metadata": {"title": "t", "updated_at": "now"}}
+        {
+            "chunk_id": f"c{i}",
+            "document_id": "doc-1",
+            "content": f"내용 {i}",
+            "metadata": {"title": "t", "updated_at": "now"},
+        }
         for i in range(n)
     ]
     vectors = [[0.1 * (j + 1) for j in range(dimension)] for _ in range(n)]
@@ -223,7 +228,13 @@ def test_build_index_each_call_produces_new_version(tmp_path):
 def test_build_metadata_uses_file_mtime(tmp_path):
     path = tmp_path / "doc.txt"
     path.write_text("내용", encoding="utf-8")
-    document = {"document_id": "doc-1", "path": str(path), "title": "제목", "content": "내용", "metadata": {}}
+    document = {
+        "document_id": "doc-1",
+        "path": str(path),
+        "title": "제목",
+        "content": "내용",
+        "metadata": {},
+    }
 
     metadata = build_metadata(document)
 
@@ -234,7 +245,13 @@ def test_build_metadata_uses_file_mtime(tmp_path):
 def test_build_metadata_falls_back_to_filename_when_no_title(tmp_path):
     path = tmp_path / "이름없는문서.txt"
     path.write_text("내용", encoding="utf-8")
-    document = {"document_id": "doc-1", "path": str(path), "title": "", "content": "내용", "metadata": {}}
+    document = {
+        "document_id": "doc-1",
+        "path": str(path),
+        "title": "",
+        "content": "내용",
+        "metadata": {},
+    }
 
     metadata = build_metadata(document)
     assert metadata["title"] == "이름없는문서"

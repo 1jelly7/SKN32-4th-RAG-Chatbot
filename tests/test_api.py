@@ -50,7 +50,9 @@ def test_files_endpoint_returns_list():
 
 
 def test_read_missing_file_returns_400():
-    res = legacy_client.post("/api/files/read", json={"filename": "존재하지않는파일.pdf"})
+    res = legacy_client.post(
+        "/api/files/read", json={"filename": "존재하지않는파일.pdf"}
+    )
     assert res.status_code == 400
 
 

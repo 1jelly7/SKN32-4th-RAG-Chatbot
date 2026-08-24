@@ -18,16 +18,22 @@ async def current_user(
 ) -> dict[str, object]:
     """HttpOnly Django 세션을 내부 API로 확인하고 401을 강제한다."""
     if session_token is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다."
+        )
     try:
-        payload = await request.app.state.dependencies.auth_gateway.authenticate(session_token)
+        payload = await request.app.state.dependencies.auth_gateway.authenticate(
+            session_token
+        )
     except AuthenticationUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="인증 서비스를 사용할 수 없습니다.",
         ) from exc
     if payload is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다."
+        )
     try:
         role = cast(Role, payload["role"])
         user_id = payload["user_id"]

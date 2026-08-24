@@ -21,7 +21,9 @@ class LegacyScryptPasswordHasher(BasePasswordHasher):
     _key_length = 32
 
     def encode(self, password: str, salt: str) -> str:
-        raise NotImplementedError("새 비밀번호에는 Django 기본 hasher를 사용해야 합니다.")
+        raise NotImplementedError(
+            "새 비밀번호에는 Django 기본 hasher를 사용해야 합니다."
+        )
 
     def verify(self, password: str, encoded: str) -> bool:
         try:

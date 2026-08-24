@@ -56,7 +56,9 @@ async def main() -> None:
 
     records = await repository.find_paths("")  # 빈 질의는 활성 문서 전체를 반환합니다.
     if not records:
-        print("문서 DB에 등록된 문서가 없습니다. scripts/register_documents.py를 먼저 실행하세요.")
+        print(
+            "문서 DB에 등록된 문서가 없습니다. scripts/register_documents.py를 먼저 실행하세요."
+        )
         return
 
     print(f"문서 DB에서 {len(records)}건의 경로를 조회했습니다.")
@@ -91,7 +93,9 @@ async def main() -> None:
     result = build_index(all_chunks, vectors, output_path)
 
     # 원문/비밀값 없이 요약 정보만 출력합니다.
-    print(f"인덱싱 완료: index_version={result['index_version']}, chunk_count={result['chunk_count']}")
+    print(
+        f"인덱싱 완료: index_version={result['index_version']}, chunk_count={result['chunk_count']}"
+    )
 
 
 if __name__ == "__main__":

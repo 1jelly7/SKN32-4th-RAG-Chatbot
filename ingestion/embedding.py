@@ -59,7 +59,9 @@ class EmbeddingClient:
         """입력 순서를 보존해 각 비어 있지 않은 텍스트의 벡터를 반환한다."""
         for text in texts:
             if not text.strip():
-                raise ValueError("빈 텍스트는 임베딩할 수 없습니다. 상위 단계에서 걸러야 합니다.")
+                raise ValueError(
+                    "빈 텍스트는 임베딩할 수 없습니다. 상위 단계에서 걸러야 합니다."
+                )
 
         if self._backend == "sbert":
             return self._embed_sbert(texts)
@@ -77,7 +79,9 @@ class EmbeddingClient:
 
         tokens: list[str] = []
         for n in (2, 3):
-            tokens.extend(normalized[i : i + n] for i in range(max(0, len(normalized) - n + 1)))
+            tokens.extend(
+                normalized[i : i + n] for i in range(max(0, len(normalized) - n + 1))
+            )
 
         if not tokens:
             return vector.tolist()
@@ -110,7 +114,9 @@ class EmbeddingClient:
 
     def _embed_sbert(self, texts: list[str]) -> list[list[float]]:
         self._ensure_sbert_loaded()
-        vectors = self._sbert_model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+        vectors = self._sbert_model.encode(
+            texts, normalize_embeddings=True, show_progress_bar=False
+        )
         return vectors.tolist()
 
     # ------------------------------------------------------------------
@@ -118,11 +124,15 @@ class EmbeddingClient:
     # ------------------------------------------------------------------
     def _embed_openai(self, texts: list[str]) -> list[list[float]]:
         if not self._api_key:
-            raise RuntimeError("EMBEDDING_BACKEND=openai인데 OPENAI_API_KEY가 비어 있습니다.")
+            raise RuntimeError(
+                "EMBEDDING_BACKEND=openai인데 OPENAI_API_KEY가 비어 있습니다."
+            )
         from openai import OpenAI
 
         client = OpenAI(api_key=self._api_key)
-        response = client.embeddings.create(model=self._model or "text-embedding-3-small", input=texts)
+        response = client.embeddings.create(
+            model=self._model or "text-embedding-3-small", input=texts
+        )
         return [item.embedding for item in response.data]
 
 
@@ -138,10 +148,14 @@ def _get_default_client() -> EmbeddingClient:
             settings = get_settings()
             _default_client = EmbeddingClient(
                 api_key=settings.openai_api_key,
-                model=getattr(settings, "openai_embedding_model", "text-embedding-3-small"),
+                model=getattr(
+                    settings, "openai_embedding_model", "text-embedding-3-small"
+                ),
                 dimension=settings.local_embedding_dimension,
                 backend=settings.embedding_backend,
-                sbert_model_name=getattr(settings, "sbert_model_name", DEFAULT_SBERT_MODEL),
+                sbert_model_name=getattr(
+                    settings, "sbert_model_name", DEFAULT_SBERT_MODEL
+                ),
             )
         except Exception:
             # 설정을 못 읽는 환경(예: 단위 테스트)에서도 기본값(local)으로 동작하게 합니다.

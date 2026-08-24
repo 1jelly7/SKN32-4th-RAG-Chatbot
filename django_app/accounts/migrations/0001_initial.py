@@ -26,9 +26,22 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="User",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("password", models.CharField(max_length=128, verbose_name="password")),
-                ("last_login", models.DateTimeField(blank=True, null=True, verbose_name="last login")),
+                (
+                    "last_login",
+                    models.DateTimeField(
+                        blank=True, null=True, verbose_name="last login"
+                    ),
+                ),
                 (
                     "is_superuser",
                     models.BooleanField(
@@ -45,9 +58,24 @@ class Migration(migrations.Migration):
                         unique=True,
                     ),
                 ),
-                ("first_name", models.CharField(blank=True, max_length=150, verbose_name="first name")),
-                ("last_name", models.CharField(blank=True, max_length=150, verbose_name="last name")),
-                ("email", models.EmailField(blank=True, max_length=254, verbose_name="email address")),
+                (
+                    "first_name",
+                    models.CharField(
+                        blank=True, max_length=150, verbose_name="first name"
+                    ),
+                ),
+                (
+                    "last_name",
+                    models.CharField(
+                        blank=True, max_length=150, verbose_name="last name"
+                    ),
+                ),
+                (
+                    "email",
+                    models.EmailField(
+                        blank=True, max_length=254, verbose_name="email address"
+                    ),
+                ),
                 (
                     "is_staff",
                     models.BooleanField(
@@ -66,17 +94,26 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "date_joined",
-                    models.DateTimeField(default=django.utils.timezone.now, verbose_name="date joined"),
+                    models.DateTimeField(
+                        default=django.utils.timezone.now, verbose_name="date joined"
+                    ),
                 ),
                 ("display_name", models.CharField(max_length=128)),
                 (
                     "role",
                     models.CharField(
-                        choices=[("admin", "Admin"), ("hr", "HR"), ("finance", "Finance")],
+                        choices=[
+                            ("admin", "Admin"),
+                            ("hr", "HR"),
+                            ("finance", "Finance"),
+                        ],
                         max_length=16,
                     ),
                 ),
-                ("legacy_account_id", models.PositiveBigIntegerField(blank=True, null=True, unique=True)),
+                (
+                    "legacy_account_id",
+                    models.PositiveBigIntegerField(blank=True, null=True, unique=True),
+                ),
                 (
                     "groups",
                     models.ManyToManyField(
@@ -107,7 +144,9 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="user",
-            index=models.Index(fields=["role", "is_active"], name="idx_user_role_active"),
+            index=models.Index(
+                fields=["role", "is_active"], name="idx_user_role_active"
+            ),
         ),
         migrations.RunPython(
             preserve_mysql_username_collation,

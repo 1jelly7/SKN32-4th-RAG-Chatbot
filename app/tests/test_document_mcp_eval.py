@@ -26,7 +26,11 @@ DOCUMENTS_DIR = FIXTURES_DIR / "documents"
 def _load_cases() -> list[dict]:
     if not CASES_PATH.exists():
         return []
-    lines = [line for line in CASES_PATH.read_text(encoding="utf-8").splitlines() if line.strip()]
+    lines = [
+        line
+        for line in CASES_PATH.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
     return [json.loads(line) for line in lines]
 
 
@@ -55,7 +59,9 @@ def test_rag_case_finds_expected_document(fixture_index, case):
 
     assert results, f"'{case['question']}'에 대한 검색 결과가 없습니다."
     top_title = results[0]["title"]
-    assert case["expected_document"] in top_title or top_title in case["expected_document"], (
+    assert (
+        case["expected_document"] in top_title or top_title in case["expected_document"]
+    ), (
         f"'{case['question']}' 질문에 예상 문서({case['expected_document']}) 대신 "
         f"'{top_title}'가 최상위로 나왔습니다."
     )
@@ -70,7 +76,7 @@ def test_lexical_search_recovers_exact_policy_term(fixture_index) -> None:
 
 
 def test_lexical_search_does_not_false_positive_on_generic_term(fixture_index) -> None:
-    """"제1조(목적)"처럼 문서마다 반복되는 상투어 하나만 겹쳐서는 근거로 인정하지 않는다.
+    """ "제1조(목적)"처럼 문서마다 반복되는 상투어 하나만 겹쳐서는 근거로 인정하지 않는다.
 
     수정 전 구현은 흔한 말 하나만 일치해도 고정 0.55점을 줘서 범위 밖 질문이
     임계값(0.38)을 쉽게 넘었다(adversarial_eval.py Layer 2에서 발견,
@@ -80,6 +86,6 @@ def test_lexical_search_does_not_false_positive_on_generic_term(fixture_index) -
     results = fixture_index.search_text("목적이 뭐야", top_k=3)
 
     for result in results:
-        assert result["score"] < 0.38, (
-            f"'{result['title']}'가 상투어 하나만으로 임계값을 넘김: {result['score']:.3f}"
-        )
+        assert (
+            result["score"] < 0.38
+        ), f"'{result['title']}'가 상투어 하나만으로 임계값을 넘김: {result['score']:.3f}"

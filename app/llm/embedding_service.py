@@ -28,7 +28,9 @@ class EmbeddingService:
         self.settings = settings
 
         # OpenAI API 키가 설정된 경우에만 OpenAI 클라이언트를 생성합니다.
-        self.client = OpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+        self.client = (
+            OpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+        )
 
         # sbert 모델은 무겁기 때문에 실제로 sbert 백엔드를 선택했을 때만 로드합니다.
         self._sbert_model = None
@@ -47,7 +49,10 @@ class EmbeddingService:
             return 1536
 
         # sbert 모델은 로드된 모델이 실제로 출력하는 차원을 그대로 사용합니다.
-        if self.settings.embedding_backend.lower() == "sbert" and self._sbert_model is not None:
+        if (
+            self.settings.embedding_backend.lower() == "sbert"
+            and self._sbert_model is not None
+        ):
             return self._sbert_model.get_sentence_embedding_dimension()
 
         # 로컬 임베딩 설정에서 정의한 차원을 반환합니다.
@@ -111,7 +116,9 @@ class EmbeddingService:
         # 2-gram과 3-gram을 함께 사용해 짧은 단어와 긴 단어를 모두 포착합니다.
         tokens: list[str] = []
         for n in (2, 3):
-            tokens.extend(normalized[i : i + n] for i in range(max(0, len(normalized) - n + 1)))
+            tokens.extend(
+                normalized[i : i + n] for i in range(max(0, len(normalized) - n + 1))
+            )
 
         # n-gram이 하나도 없으면(빈 텍스트) 0 벡터를 그대로 반환합니다.
         if not tokens:

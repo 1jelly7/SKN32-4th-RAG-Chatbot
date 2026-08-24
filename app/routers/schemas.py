@@ -25,7 +25,9 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=4, ge=1, le=20)
 
     # 요청자의 소속 부서(선택). 지정하면 접근 권한이 없는 문서는 결과에서 제외됩니다.
-    department: str | None = Field(default=None, description="요청자 소속 부서 (부서별 접근 제어용)")
+    department: str | None = Field(
+        default=None, description="요청자 소속 부서 (부서별 접근 제어용)"
+    )
 
 
 # RAG 질문 요청 모델을 정의합니다.
@@ -39,7 +41,9 @@ class RagRequest(BaseModel):
     top_k: int = Field(default=4, ge=1, le=20)
 
     # 요청자의 소속 부서(선택). 지정하면 접근 권한이 없는 문서는 결과에서 제외됩니다.
-    department: str | None = Field(default=None, description="요청자 소속 부서 (부서별 접근 제어용)")
+    department: str | None = Field(
+        default=None, description="요청자 소속 부서 (부서별 접근 제어용)"
+    )
 
 
 # 문서 요약 요청 모델을 정의합니다.

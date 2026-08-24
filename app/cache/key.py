@@ -34,5 +34,7 @@ def make_cache_key(state: GraphState) -> str:
         "role": state.get("user_context", {}).get("role"),
         "allowed_databases": state.get("user_context", {}).get("allowed_databases", []),
     }
-    serialized = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    serialized = json.dumps(
+        material, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()

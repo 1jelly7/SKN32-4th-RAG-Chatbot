@@ -98,7 +98,10 @@ class DocumentService:
         if document_records is not None:
             records = document_records
         else:
-            records = [{"filename": name, "file_path": str(self.settings.docs_dir / name)} for name in self.list_files()]
+            records = [
+                {"filename": name, "file_path": str(self.settings.docs_dir / name)}
+                for name in self.list_files()
+            ]
 
         # 문서 레코드를 순회합니다.
         for record in records:
@@ -125,7 +128,11 @@ class DocumentService:
                         "chunk_index": chunk_index,
                         "department": record.get("department"),
                         "category": record.get("category"),
-                        "version_date": str(record.get("version_date")) if record.get("version_date") else None,
+                        "version_date": (
+                            str(record.get("version_date"))
+                            if record.get("version_date")
+                            else None
+                        ),
                         "allowed_departments": record.get("allowed_departments"),
                     }
                 )

@@ -21,7 +21,11 @@ import pytest
 from mcp_servers.data_tools.sales import query as query_module
 from mcp_servers.data_tools.sales import text2sql as text2sql_module
 from mcp_servers.data_tools.sales.schema import get_schema_resource
-from mcp_servers.data_tools.sales.sql_guard import ALLOWED_VIEWS, referenced_tables, validate_and_normalize
+from mcp_servers.data_tools.sales.sql_guard import (
+    ALLOWED_VIEWS,
+    referenced_tables,
+    validate_and_normalize,
+)
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 CASES_PATH = FIXTURES_DIR / "cases" / "text2sql_cases.jsonl"
@@ -47,14 +51,18 @@ def test_schema_has_no_phantom_tables() -> None:
     schema = get_schema_resource()
     haystack = json.dumps(schema, default=str, ensure_ascii=False)
     for phantom in _PHANTOM_TABLES:
-        assert phantom not in haystack, f"유령 테이블 '{phantom}'이 스키마 리소스에 남아있습니다."
+        assert (
+            phantom not in haystack
+        ), f"유령 테이블 '{phantom}'이 스키마 리소스에 남아있습니다."
 
 
 def test_schema_metrics_reference_allowed_views_only() -> None:
     """지표 정의가 가리키는 뷰도 전부 허용 목록 안에 있어야 한다."""
     schema = get_schema_resource()
     for term, metric in schema["metrics"].items():
-        assert metric["view"] in ALLOWED_VIEWS, f"지표 '{term}'이 허용되지 않은 뷰 '{metric['view']}'를 가리킵니다."
+        assert (
+            metric["view"] in ALLOWED_VIEWS
+        ), f"지표 '{term}'이 허용되지 않은 뷰 '{metric['view']}'를 가리킵니다."
 
 
 def test_revenue_metric_is_defined_once_without_or() -> None:
@@ -68,7 +76,11 @@ def test_revenue_metric_is_defined_once_without_or() -> None:
 
 def test_fallback_templates_removed() -> None:
     """API 키가 없을 때 질문과 무관한 SQL을 돌려주던 하드코딩이 없어야 한다."""
-    for name in ("_FALLBACK_TEMPLATES", "_DEFAULT_FALLBACK_SQL", "_generate_sql_fallback"):
+    for name in (
+        "_FALLBACK_TEMPLATES",
+        "_DEFAULT_FALLBACK_SQL",
+        "_generate_sql_fallback",
+    ):
         assert not hasattr(text2sql_module, name), f"{name}이(가) 아직 남아있습니다."
 
 
@@ -158,7 +170,9 @@ def test_query_sales_retries_once_on_explain_failure() -> None:
     async def first_sql(question: str, schema: Any) -> str:
         return "SELECT bad_column FROM v_sales_order LIMIT 5"
 
-    async def retried_sql(question: str, schema: Any, failed_sql: str, error: str) -> str:
+    async def retried_sql(
+        question: str, schema: Any, failed_sql: str, error: str
+    ) -> str:
         calls.append(error)
         return "SELECT customer_id FROM v_sales_order LIMIT 5"
 
@@ -169,10 +183,12 @@ def test_query_sales_retries_once_on_explain_failure() -> None:
     def fake_query_readonly(sql: str) -> list[dict[str, Any]]:
         return [{"customer_id": 1}]
 
-    with mock.patch.object(query_module, "generate_sql", first_sql), \
-         mock.patch.object(query_module, "generate_sql_with_error", retried_sql), \
-         mock.patch.object(query_module, "explain_readonly", fake_explain), \
-         mock.patch.object(query_module, "query_readonly", fake_query_readonly):
+    with (
+        mock.patch.object(query_module, "generate_sql", first_sql),
+        mock.patch.object(query_module, "generate_sql_with_error", retried_sql),
+        mock.patch.object(query_module, "explain_readonly", fake_explain),
+        mock.patch.object(query_module, "query_readonly", fake_query_readonly),
+    ):
         evidence = asyncio.run(query_module.query_sales("아무 질문"))
 
     assert len(calls) == 1
@@ -187,15 +203,19 @@ def test_query_sales_raises_when_retry_also_fails() -> None:
     async def first_sql(question: str, schema: Any) -> str:
         return "SELECT bad_column FROM v_sales_order LIMIT 5"
 
-    async def retried_sql(question: str, schema: Any, failed_sql: str, error: str) -> str:
+    async def retried_sql(
+        question: str, schema: Any, failed_sql: str, error: str
+    ) -> str:
         return "SELECT still_bad FROM v_sales_order LIMIT 5"
 
     def fake_explain(sql: str) -> None:
         raise RuntimeError("always fails")
 
-    with mock.patch.object(query_module, "generate_sql", first_sql), \
-         mock.patch.object(query_module, "generate_sql_with_error", retried_sql), \
-         mock.patch.object(query_module, "explain_readonly", fake_explain):
+    with (
+        mock.patch.object(query_module, "generate_sql", first_sql),
+        mock.patch.object(query_module, "generate_sql_with_error", retried_sql),
+        mock.patch.object(query_module, "explain_readonly", fake_explain),
+    ):
         with pytest.raises(RuntimeError):
             asyncio.run(query_module.query_sales("아무 질문"))
 
@@ -244,7 +264,11 @@ skip_without_deps = pytest.mark.skipif(
 def _load_golden_cases() -> list[dict]:
     if not CASES_PATH.exists():
         return []
-    lines = [line for line in CASES_PATH.read_text(encoding="utf-8").splitlines() if line.strip()]
+    lines = [
+        line
+        for line in CASES_PATH.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
     return [json.loads(line) for line in lines]
 
 
@@ -255,13 +279,19 @@ def test_golden_case_generates_expected_sql(case: dict) -> None:
     sql = asyncio.run(text2sql_module.generate_sql(case["question"], schema))
 
     if case.get("expect_no_sql"):
-        assert sql == "", f"'{case['question']}'는 NO_SQL이어야 하는데 SQL이 생성됨: {sql}"
+        assert (
+            sql == ""
+        ), f"'{case['question']}'는 NO_SQL이어야 하는데 SQL이 생성됨: {sql}"
         return
 
     assert sql, f"'{case['question']}'는 SQL이 생성돼야 하는데 비어 있음"
     normalized = validate_and_normalize(sql)
     used = referenced_tables(normalized)
     for expected_view in case.get("expected_views", []):
-        assert expected_view in used, f"'{case['question']}' -> {normalized}\n기대한 뷰 '{expected_view}'가 없음"
+        assert (
+            expected_view in used
+        ), f"'{case['question']}' -> {normalized}\n기대한 뷰 '{expected_view}'가 없음"
     for forbidden in case.get("forbidden_substrings", []):
-        assert forbidden not in normalized, f"'{case['question']}' -> {normalized}\n금지된 표현 '{forbidden}'이 포함됨"
+        assert (
+            forbidden not in normalized
+        ), f"'{case['question']}' -> {normalized}\n금지된 표현 '{forbidden}'이 포함됨"

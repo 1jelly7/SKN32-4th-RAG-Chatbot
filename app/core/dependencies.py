@@ -23,6 +23,8 @@ class AppDependencies:
     llm: AsyncLLMPort | None = None
     mcp: MCPClient | None = field(default_factory=lambda: MCPClient(InProcessMCPPort()))
     cache: CacheRepository = field(default_factory=MemoryCache)
-    auth_gateway: AuthenticationGateway = field(default_factory=SettingsDjangoAuthenticationGateway)
+    auth_gateway: AuthenticationGateway = field(
+        default_factory=SettingsDjangoAuthenticationGateway
+    )
     configure_logging: Callable[[], None] = configure_logging
     warmup_providers: bool = False

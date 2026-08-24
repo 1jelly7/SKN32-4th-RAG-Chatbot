@@ -33,7 +33,10 @@ def _error_envelope(domain: str, code: str, message: str) -> dict[str, Any]:
 
 
 async def _execute_query(
-    domain: str, question: str, query: DomainQuery, user_context: dict[str, object] | None
+    domain: str,
+    question: str,
+    query: DomainQuery,
+    user_context: dict[str, object] | None,
 ) -> dict[str, Any]:
     """도메인 service 결과를 공통 success/error envelope로 변환한다."""
     if not question or not question.strip():
@@ -42,19 +45,29 @@ async def _execute_query(
         require_database_access(user_context, f"{domain}_db")
         evidence = await query(question)
     except PermissionError:
-        return _error_envelope(domain, "FORBIDDEN", "요청한 데이터베이스에 접근할 권한이 없습니다.")
+        return _error_envelope(
+            domain, "FORBIDDEN", "요청한 데이터베이스에 접근할 권한이 없습니다."
+        )
     except Exception:  # noqa: BLE001 - provider 상세를 외부 envelope에 노출하지 않는다.
-        logger.exception("data_tool_query_failed domain=%s question_length=%d", domain, len(question))
-        return _error_envelope(domain, "QUERY_ERROR", "업무 데이터 조회에 실패했습니다.")
+        logger.exception(
+            "data_tool_query_failed domain=%s question_length=%d", domain, len(question)
+        )
+        return _error_envelope(
+            domain, "QUERY_ERROR", "업무 데이터 조회에 실패했습니다."
+        )
 
     if len(evidence) != 1 or evidence[0].get("domain") != domain:
-        return _error_envelope(domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다.")
+        return _error_envelope(
+            domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다."
+        )
 
     result = evidence[0]
     rows = result.get("rows")
     generated_sql = result.get("generated_sql")
     if not isinstance(rows, list) or not isinstance(generated_sql, str):
-        return _error_envelope(domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다.")
+        return _error_envelope(
+            domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다."
+        )
     metadata = result.get("metadata")
     if not isinstance(metadata, dict):
         metadata = {}
@@ -85,11 +98,15 @@ async def _execute_query(
 
 
 async def execute_data_tool(
-    tool_name: DataToolName, question: str, user_context: dict[str, object] | None = None
+    tool_name: DataToolName,
+    question: str,
+    user_context: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     """Host transport와 MCP server가 공유하는 도메인 Tool dispatch를 수행한다."""
     if tool_name == "query_purchase":
-        return await _execute_query("purchase", question, run_purchase_query, user_context)
+        return await _execute_query(
+            "purchase", question, run_purchase_query, user_context
+        )
     if tool_name == "query_sales":
         return await _execute_query("sales", question, run_sales_query, user_context)
     raise ValueError(f"지원하지 않는 Data MCP Tool입니다: {tool_name}")
@@ -100,12 +117,16 @@ def create_server() -> MCPServer:
     server = MCPServer(name="data-mcp", version="0.1.0")
 
     @server.tool()
-    async def query_purchase(question: str, user_context: dict[str, object]) -> dict[str, Any]:
+    async def query_purchase(
+        question: str, user_context: dict[str, object]
+    ) -> dict[str, Any]:
         """구매·지출·공급업체 질문에만 사용하고 표준 purchase envelope를 반환한다."""
         return await execute_data_tool("query_purchase", question, user_context)
 
     @server.tool()
-    async def query_sales(question: str, user_context: dict[str, object]) -> dict[str, Any]:
+    async def query_sales(
+        question: str, user_context: dict[str, object]
+    ) -> dict[str, Any]:
         """판매·매출·고객 질문에만 사용하고 표준 sales envelope를 반환한다."""
         return await execute_data_tool("query_sales", question, user_context)
 

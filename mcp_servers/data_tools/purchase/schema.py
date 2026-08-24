@@ -43,9 +43,20 @@ _VIEWS: dict[str, ViewSpec] = {
     "v_purchase_order": {
         "description": "유효한 발주 헤더 1건당 1행. 취소(Cancelled) 상태는 이미 제외되어 있다.",
         "columns": [
-            "po_id", "po_number", "po_date", "po_year", "po_quarter", "po_month",
-            "vendor_id", "vendor_name", "country", "status", "currency", "subtotal",
-            "tax_amount", "po_amount",
+            "po_id",
+            "po_number",
+            "po_date",
+            "po_year",
+            "po_quarter",
+            "po_month",
+            "vendor_id",
+            "vendor_name",
+            "country",
+            "status",
+            "currency",
+            "subtotal",
+            "tax_amount",
+            "po_amount",
         ],
     },
     "v_purchase_order_line": {
@@ -55,18 +66,44 @@ _VIEWS: dict[str, ViewSpec] = {
             "po_amount와 절대 합치지 마라(라인 수만큼 중복 합산된다)."
         ),
         "columns": [
-            "po_line_id", "po_id", "po_number", "po_date", "po_year", "po_quarter",
-            "po_month", "vendor_id", "vendor_name", "item_id", "item_name", "quantity",
-            "unit_price", "discount_percent", "line_total", "currency", "status",
+            "po_line_id",
+            "po_id",
+            "po_number",
+            "po_date",
+            "po_year",
+            "po_quarter",
+            "po_month",
+            "vendor_id",
+            "vendor_name",
+            "item_id",
+            "item_name",
+            "quantity",
+            "unit_price",
+            "discount_percent",
+            "line_total",
+            "currency",
+            "status",
         ],
     },
     "v_vendor_invoice": {
         "description": "청구서 1건당 1행. 미지급금(outstanding_amount)과 연체 여부(status)를 담는다.",
         "columns": [
-            "invoice_id", "invoice_number", "invoice_date", "invoice_year",
-            "invoice_quarter", "invoice_month", "po_id", "vendor_id", "vendor_name",
-            "subtotal", "tax_amount", "invoice_amount", "amount_paid",
-            "outstanding_amount", "currency", "status",
+            "invoice_id",
+            "invoice_number",
+            "invoice_date",
+            "invoice_year",
+            "invoice_quarter",
+            "invoice_month",
+            "po_id",
+            "vendor_id",
+            "vendor_name",
+            "subtotal",
+            "tax_amount",
+            "invoice_amount",
+            "amount_paid",
+            "outstanding_amount",
+            "currency",
+            "status",
         ],
     },
     "v_vendor": {
@@ -75,8 +112,13 @@ _VIEWS: dict[str, ViewSpec] = {
             "아예 없다 — 그런 정보는 조회할 수 없다고 답하라."
         ),
         "columns": [
-            "vendor_id", "vendor_code", "vendor_name", "country", "currency",
-            "payment_terms", "is_active",
+            "vendor_id",
+            "vendor_code",
+            "vendor_name",
+            "country",
+            "currency",
+            "payment_terms",
+            "is_active",
         ],
     },
     "v_purchase_order_status": {
@@ -148,8 +190,21 @@ _METRICS: dict[str, MetricSpec] = {
 
 # 데이터가 없거나 뷰로 답할 수 없는 지표. 왜 안 되는지 사용자에게 설명할 때 쓴다.
 _OUT_OF_SCOPE: list[str] = [
-    "입고", "구매요청", "공급업체평가", "계약", "3-way매칭", "매출", "판매", "고객",
-    "재고", "원가", "마진율", "담당자", "연락처", "은행계좌", "계좌번호",
+    "입고",
+    "구매요청",
+    "공급업체평가",
+    "계약",
+    "3-way매칭",
+    "매출",
+    "판매",
+    "고객",
+    "재고",
+    "원가",
+    "마진율",
+    "담당자",
+    "연락처",
+    "은행계좌",
+    "계좌번호",
 ]
 
 _CURRENCY = "JOD"
@@ -168,8 +223,12 @@ def _load_data_coverage() -> dict[str, str]:
         return _cached_data_coverage
 
     try:
-        rows = query_readonly("SELECT MIN(po_date) AS min_d, MAX(po_date) AS max_d FROM v_purchase_order")
-    except Exception:  # noqa: BLE001 - DB 미가용 시에도 스키마 정보 자체는 내려줄 수 있어야 한다.
+        rows = query_readonly(
+            "SELECT MIN(po_date) AS min_d, MAX(po_date) AS max_d FROM v_purchase_order"
+        )
+    except (
+        Exception
+    ):  # noqa: BLE001 - DB 미가용 시에도 스키마 정보 자체는 내려줄 수 있어야 한다.
         rows = []
 
     if rows and rows[0].get("min_d") and rows[0].get("max_d"):

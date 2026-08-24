@@ -17,7 +17,11 @@ from app.cache.repository import MemoryCache
 from app.core.dependencies import AppDependencies
 from app.main import create_app
 from django_app.accounts.models import User
-from tests.integration.chat_fakes import build_fake_application, document_success, tool_success
+from tests.integration.chat_fakes import (
+    build_fake_application,
+    document_success,
+    tool_success,
+)
 
 
 def _django_login(username: str, password: str) -> str:
@@ -44,7 +48,9 @@ def _fastapi_client(
         transport=httpx.ASGITransport(app=get_asgi_application()),
     )
     if fake_document_mcp:
-        application, _, _ = build_fake_application({"search_documents": document_success()})
+        application, _, _ = build_fake_application(
+            {"search_documents": document_success()}
+        )
         application.state.dependencies.auth_gateway = gateway
     else:
         application = create_app(
@@ -120,7 +126,9 @@ def test_django_session_reaches_fastapi_chat_and_document_download(
 
     with client:
         chat = client.post("/api/chat", json={"question": "휴가 규정을 알려줘"})
-        download = client.get("/api/documents/download", params={"doc_id": "policy-001"})
+        download = client.get(
+            "/api/documents/download", params={"doc_id": "policy-001"}
+        )
 
     assert chat.status_code == 200
     assert chat.json()["answer"] == "fake answer"

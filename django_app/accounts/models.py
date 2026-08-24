@@ -21,12 +21,16 @@ class User(AbstractUser):
     )
     display_name = models.CharField(max_length=128)
     role = models.CharField(max_length=16, choices=Role.choices)
-    legacy_account_id = models.PositiveBigIntegerField(null=True, blank=True, unique=True)
+    legacy_account_id = models.PositiveBigIntegerField(
+        null=True, blank=True, unique=True
+    )
     REQUIRED_FIELDS = ["email", "display_name", "role"]
 
     class Meta:
         db_table = "accounts_user"
-        indexes = [models.Index(fields=["role", "is_active"], name="idx_user_role_active")]
+        indexes = [
+            models.Index(fields=["role", "is_active"], name="idx_user_role_active")
+        ]
 
     def __str__(self) -> str:
         return self.username
