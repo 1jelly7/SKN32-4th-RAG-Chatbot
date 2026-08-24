@@ -17,6 +17,7 @@ from tests.auth_helpers import login
     [
         ("공급업체별 구매 지출 알려줘", "purchase", "query_purchase"),
         ("고객별 매출 알려줘", "sales", "query_sales"),
+        ("올해 매출", "sales", "query_sales"),
     ],
 )
 def test_single_domain_database_questions_call_only_the_selected_tool(

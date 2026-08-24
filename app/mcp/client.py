@@ -256,7 +256,7 @@ class MCPTimeoutError(MCPClientError):
 class MCPClient:
     """세 MCP Tool만 호출하고 응답을 내부 evidence 형식으로 정규화하는 어댑터다."""
 
-    def __init__(self, port: AsyncMCPPort, timeout_seconds: float = 10.0) -> None:
+    def __init__(self, port: AsyncMCPPort, timeout_seconds: float = 30.0) -> None:
         if timeout_seconds <= 0:
             raise ValueError("MCP timeout_seconds는 0보다 커야 합니다.")
         self._port = port

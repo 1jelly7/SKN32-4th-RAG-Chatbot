@@ -294,6 +294,13 @@ def test_data_server_wraps_purchase_rows_in_common_envelope(
     assert result["metadata"]["generated_sql"] == "SELECT 1"
 
 
+def test_default_data_tool_timeout_allows_sales_text2sql_pipeline() -> None:
+    """판매 Text2SQL과 SQL 검증을 합친 내부 조회에 충분한 유한 제한을 사용한다."""
+    client = MCPClient(FakeMCPPort({"query_sales": _success("sales", [{"revenue": 1}])}))
+
+    assert client._timeout_seconds == 30.0
+
+
 def test_data_server_distinguishes_empty_and_query_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
