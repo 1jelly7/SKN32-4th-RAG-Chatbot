@@ -8,7 +8,6 @@ const sendButton = document.querySelector('#send-button');
 const sourcesPanel = document.querySelector('#sources-panel');
 const sourcesList = document.querySelector('#sources-list');
 const sourcesSummary = document.querySelector('#sources-summary');
-const sourcesToggle = document.querySelector('#sources-toggle');
 const sourcesClose = document.querySelector('#sources-close');
 const sourcesBackdrop = document.querySelector('#sources-backdrop');
 const jumpBanner = document.querySelector('#jump-banner');
@@ -556,7 +555,6 @@ function scrollToLatest() {
 
 function setSourcesOpen(isOpen) {
   sourcesPanel.classList.toggle('is-open', isOpen);
-  sourcesToggle.setAttribute('aria-expanded', String(isOpen));
   sourcesBackdrop.hidden = !isOpen;
 }
 
@@ -565,7 +563,6 @@ function autoResize() {
   input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
 }
 
-sourcesToggle.addEventListener('click', () => setSourcesOpen(!sourcesPanel.classList.contains('is-open')));
 sourcesClose.addEventListener('click', () => setSourcesOpen(false));
 sourcesBackdrop.addEventListener('click', () => setSourcesOpen(false));
 sourcesList.addEventListener('click', event => {

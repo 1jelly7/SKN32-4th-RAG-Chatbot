@@ -11,4 +11,5 @@ app_name = "web"
 urlpatterns = [
     path("", views.index, name="index"),
     path("dashboard/", views.dashboard, name="dashboard"),
+    path("report/", views.report, name="report"),
 ]

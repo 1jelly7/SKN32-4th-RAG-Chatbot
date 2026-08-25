@@ -25,3 +25,9 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     (index와 동일한 패턴). view는 계정 DB나 업무 데이터에 접근하지 않는다.
     """
     return render(request, "web/dashboard.html", {"active_tab": "dashboard"})
+
+
+@never_cache
+def report(request: HttpRequest) -> HttpResponse:
+    """리포트 생성 HTML shell을 반환한다. 현재는 빈 화면이다."""
+    return render(request, "web/report.html", {"active_tab": "report"})

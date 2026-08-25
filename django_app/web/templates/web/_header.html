@@ -5,8 +5,9 @@
     <h1>사내 지식 챗봇</h1>
   </div>
   <nav class="top-tabs" aria-label="화면 전환">
-    <a class="top-tab{% if active_tab == 'chat' %} is-active{% endif %}" href="{% url 'web:index' %}">💬 채팅</a>
-    <a class="top-tab{% if active_tab == 'dashboard' %} is-active{% endif %}" href="{% url 'web:dashboard' %}" id="dashboard-tab-link" hidden>📊 대시보드</a>
+    <a class="top-tab{% if active_tab == 'chat' %} is-active{% endif %}" href="{% url 'web:index' %}">채팅</a>
+    <a class="top-tab{% if active_tab == 'dashboard' %} is-active{% endif %}" href="{% url 'web:dashboard' %}" id="dashboard-tab-link" hidden>대시보드</a>
+    <a class="top-tab{% if active_tab == 'report' %} is-active{% endif %}" href="{% url 'web:report' %}">리포트 생성</a>
   </nav>
   <div class="top-user">
     <span id="current-user"></span>
