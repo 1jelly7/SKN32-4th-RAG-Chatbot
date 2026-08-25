@@ -68,7 +68,19 @@ start_gateway() {
 }
 
 status_gateway() {
-    if [[ -f "$STATE_FILE" ]]; then while IFS=' ' read -r name pid; do process_running "$pid" && state=running || state=stopped; echo "$name: $state (PID $pid)"; done < "$STATE_FILE"; else echo "Django/FastAPI: stopped"; fi
+    local django_pid="" fastapi_pid="" name pid state
+    if [[ -f "$STATE_FILE" ]]; then
+        while IFS=' ' read -r name pid; do
+            case "$name" in
+                Django) django_pid="$pid" ;;
+                FastAPI) fastapi_pid="$pid" ;;
+            esac
+        done < "$STATE_FILE"
+    fi
+    if process_running "$django_pid"; then state=running; else state=stopped; fi
+    echo "Django: $state${django_pid:+ (PID $django_pid)}"
+    if process_running "$fastapi_pid"; then state=running; else state=stopped; fi
+    echo "FastAPI: $state${fastapi_pid:+ (PID $fastapi_pid)}"
     pid="$(nginx_pid)"; process_running "$pid" && echo "Nginx: running (PID $pid)" || echo "Nginx: stopped"
 }
 
