@@ -15,14 +15,32 @@ STATE_FILE="$RUNTIME_DIRECTORY/server-gateway-services"
 NGINX_PID_FILE="$RUNTIME_DIRECTORY/nginx-local.pid"
 
 find_python() {
-    local candidates=("$PROJECT_ROOT/django_app/.venv/bin/python" "$PROJECT_ROOT/app/.venv/bin/python" "$PROJECT_ROOT/.venv/bin/python3" "$PROJECT_ROOT/.venv/bin/python")
+    local service="$1"
+    local candidates
+    if [[ "$service" == "django" ]]; then
+        candidates=("$PROJECT_ROOT/django_app/.venv/bin/python" "$PROJECT_ROOT/.venv/bin/python3" "$PROJECT_ROOT/.venv/bin/python")
+    else
+        candidates=("$PROJECT_ROOT/app/.venv/bin/python" "$PROJECT_ROOT/.venv/bin/python3" "$PROJECT_ROOT/.venv/bin/python")
+    fi
     local candidate
-    for candidate in "${candidates[@]}"; do [[ -x "$candidate" ]] && { printf '%s\n' "$candidate"; return; }; done
-    echo "Python virtualenv was not found under django_app/.venv, app/.venv, or .venv." >&2; exit 1
+    for candidate in "${candidates[@]}"; do
+        if [[ -x "$candidate" ]]; then
+            if [[ "$service" != "fastapi" ]] || "$candidate" -c "import uvicorn" >/dev/null 2>&1; then
+                printf '%s\n' "$candidate"
+                return
+            fi
+        fi
+    done
+    if [[ "$service" == "fastapi" ]]; then
+        echo "FastAPI Python with uvicorn was not found. Install uvicorn in app/.venv or .venv." >&2
+    else
+        echo "Django Python was not found under django_app/.venv or .venv." >&2
+    fi
+    exit 1
 }
 
-DJANGO_PYTHON="${DJANGO_PYTHON:-$(find_python)}"
-FASTAPI_PYTHON="${FASTAPI_PYTHON:-$(find_python)}"
+DJANGO_PYTHON="${DJANGO_PYTHON:-$(find_python django)}"
+FASTAPI_PYTHON="${FASTAPI_PYTHON:-$(find_python fastapi)}"
 
 nginx_pid() { [[ -s "$NGINX_PID_FILE" ]] && tr -d '[:space:]' < "$NGINX_PID_FILE" || true; }
 process_running() { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
