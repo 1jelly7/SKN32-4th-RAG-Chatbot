@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Ubuntu용 Django/FastAPI/nginx 게이트웨이 실행기입니다.
+# 사용법: ./scripts/server_gateway {start|stop|restart|status}
+
+ACTION="${1:-start}"
+case "$ACTION" in start|stop|restart|status) ;; *) echo "Usage: $0 {start|stop|restart|status}" >&2; exit 2 ;; esac
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+NGINX_CONFIG="deploy/nginx/local.conf"
+RUNTIME_DIRECTORY="$PROJECT_ROOT/temp"
+LOG_DIRECTORY="$PROJECT_ROOT/logs"
+STATE_FILE="$RUNTIME_DIRECTORY/server-gateway-services"
+NGINX_PID_FILE="$RUNTIME_DIRECTORY/nginx-local.pid"
+
+find_python() {
+    local candidates=("$PROJECT_ROOT/django_app/.venv/bin/python" "$PROJECT_ROOT/app/.venv/bin/python" "$PROJECT_ROOT/.venv/bin/python3" "$PROJECT_ROOT/.venv/bin/python")
+    local candidate
+    for candidate in "${candidates[@]}"; do [[ -x "$candidate" ]] && { printf '%s\n' "$candidate"; return; }; done
+    echo "Python virtualenv was not found under django_app/.venv, app/.venv, or .venv." >&2; exit 1
+}
+
+DJANGO_PYTHON="${DJANGO_PYTHON:-$(find_python)}"
+FASTAPI_PYTHON="${FASTAPI_PYTHON:-$(find_python)}"
+
+nginx_pid() { [[ -s "$NGINX_PID_FILE" ]] && tr -d '[:space:]' < "$NGINX_PID_FILE" || true; }
+process_running() { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
+
+stop_service() {
+    local name="$1" pid
+    pid="${2:-}"
+    if process_running "$pid"; then kill "$pid"; echo "$name stopped: PID $pid"; fi
+}
+
+stop_gateway() {
+    local pid
+    pid="$(nginx_pid)"
+    if process_running "$pid"; then nginx -p "$PROJECT_ROOT/" -c "$NGINX_CONFIG" -s quit || true; else rm -f "$NGINX_PID_FILE"; fi
+    if [[ -f "$STATE_FILE" ]]; then
+        while IFS=' ' read -r name service_pid; do stop_service "$name" "$service_pid"; done < "$STATE_FILE"
+    fi
+    rm -f "$STATE_FILE"
+}
+
+start_gateway() {
+    command -v nginx >/dev/null 2>&1 || { echo "nginx was not found. Install it with: sudo apt install nginx" >&2; exit 1; }
+    [[ -x "$DJANGO_PYTHON" ]] || { echo "Django Python not found: $DJANGO_PYTHON" >&2; exit 1; }
+    [[ -x "$FASTAPI_PYTHON" ]] || { echo "FastAPI Python not found: $FASTAPI_PYTHON" >&2; exit 1; }
+    mkdir -p "$RUNTIME_DIRECTORY" "$LOG_DIRECTORY"
+    local already_running=0
+    if [[ -f "$STATE_FILE" ]]; then
+        while IFS=' ' read -r _ pid; do
+            if process_running "$pid"; then already_running=1; fi
+        done < "$STATE_FILE"
+    fi
+    if (( already_running )); then
+        echo "The gateway is already running. Run status or stop first." >&2; exit 1
+    fi
+    (cd "$PROJECT_ROOT" && "$DJANGO_PYTHON" django_app/manage.py check)
+    (cd "$PROJECT_ROOT" && "$DJANGO_PYTHON" django_app/manage.py collectstatic --clear --noinput)
+    nginx -p "$PROJECT_ROOT/" -t -c "$NGINX_CONFIG"
+    : > "$STATE_FILE"
+    (cd "$PROJECT_ROOT" && exec "$DJANGO_PYTHON" django_app/manage.py runserver 127.0.0.1:8001 --noreload) >>"$LOG_DIRECTORY/django-server.out.log" 2>>"$LOG_DIRECTORY/django-server.error.log" & echo "Django $!" >> "$STATE_FILE"
+    (cd "$PROJECT_ROOT" && exec "$FASTAPI_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port 8002) >>"$LOG_DIRECTORY/fastapi-server.out.log" 2>>"$LOG_DIRECTORY/fastapi-server.error.log" & echo "FastAPI $!" >> "$STATE_FILE"
+    nginx -p "$PROJECT_ROOT/" -c "$NGINX_CONFIG"
+    echo "Server gateway started: http://127.0.0.1:8000/"
+}
+
+status_gateway() {
+    if [[ -f "$STATE_FILE" ]]; then while IFS=' ' read -r name pid; do process_running "$pid" && state=running || state=stopped; echo "$name: $state (PID $pid)"; done < "$STATE_FILE"; else echo "Django/FastAPI: stopped"; fi
+    pid="$(nginx_pid)"; process_running "$pid" && echo "Nginx: running (PID $pid)" || echo "Nginx: stopped"
+}
+
+case "$ACTION" in start) start_gateway ;; stop) stop_gateway ;; restart) stop_gateway; start_gateway ;; status) status_gateway ;; esac
