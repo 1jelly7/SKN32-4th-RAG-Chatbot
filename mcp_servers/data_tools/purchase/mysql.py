@@ -1,0 +1,125 @@
+"""구매 Data MCP에서 guard된 SELECT만 실행하는 읽기 전용 MySQL adapter.
+
+환경변수:
+- PURCHASE_READ_USER / PURCHASE_READ_PASSWORD (읽기 전용 purchase_reader 계정 —
+  실제 행 데이터 조회). PURCHASE_READ_HOST/DATABASE가 비어 있으면 각각
+  MYSQL_READ_HOST / PURCHASE_DB_DATABASE로 폴백한다(app/core/config.py).
+- PURCHASE_DB_HOST / PURCHASE_DB_USER / PURCHASE_DB_PASSWORD + PURCHASE_DB_DATABASE
+  (EXPLAIN 사전검증 전용. purchase 도메인 전용 ETL/admin 계정을 쓴다 — 공용
+  MYSQL_WRITE_*(JangGGo)에는 purchase.* 권한이 없다. 아래 ExplainOnlyMySQLClient
+  설명 참고)
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from app.core.config import get_settings
+from app.core.db_pool import get_pool
+from mcp_servers.data_tools.purchase.sql_guard import validate_and_normalize
+
+
+class ReadOnlyMySQLClient:
+    """SELECT 전용 purchase_reader 계정을 공유 풀에서 연결을 빌려 사용한다."""
+
+    def __init__(self, host: str, user: str, password: str, database: str) -> None:
+        """연결 풀을 준비하되 생성 시점에는 DB에 접속하지 않는다(풀도 지연 연결)."""
+        self._pool = get_pool(host, user, password, database, autocommit=False)
+
+    def query(self, sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
+        """guard를 통과한 단일 SELECT를 timeout과 읽기 전용 세션으로 실행한다."""
+        normalized = validate_and_normalize(sql)
+
+        connection = self._pool.connection()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SET SESSION MAX_EXECUTION_TIME=%s", (timeout_seconds * 1000,)
+                )
+                cursor.execute(normalized)
+                rows = cursor.fetchall()
+            return rows
+        finally:
+            # 풀에서 빌린 연결이라 close()해도 TCP는 끊기지 않고 풀에 반납된다.
+            connection.close()
+
+
+class ExplainOnlyMySQLClient:
+    """EXPLAIN 검증 전용 adapter. 행 데이터는 절대 반환하지 않는다.
+
+    MySQL은 SQL SECURITY DEFINER 뷰에 대해 실제 SELECT는 뷰 생성자 권한으로
+    돌려주지만, EXPLAIN은 호출 계정이 원본 테이블 권한을 직접 가져야 한다
+    (그렇지 않으면 "lacking privileges for underlying table" 오류가 난다).
+    그래서 EXPLAIN만 admin 계정(purchase 도메인 전용 ETL 계정)으로 실행한다 —
+    EXPLAIN은 실행 계획 정보만 돌려주고 실제 행 데이터는 절대 반환하지 않으므로,
+    실제 데이터 조회를 purchase_reader로만 제한하는 원칙은 그대로 유지된다.
+    """
+
+    def __init__(self, host: str, user: str, password: str, database: str) -> None:
+        self._pool = get_pool(host, user, password, database, autocommit=False)
+
+    def explain(self, sql: str, timeout_seconds: int = 10) -> None:
+        """guard를 통과한 SQL을 실제로 실행하지 않고 EXPLAIN으로만 채점한다.
+
+        문법 오류·존재하지 않는 컬럼 같은 문제를 실제 데이터에 닿기 전에 잡는다.
+        통과하면 아무 것도 반환하지 않고, 실패하면 pymysql 예외를 그대로 낸다
+        (호출부가 그 메시지를 LLM에게 보여주고 재작성을 요청한다).
+        """
+        normalized = validate_and_normalize(sql)
+        connection = self._pool.connection()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SET SESSION MAX_EXECUTION_TIME=%s", (timeout_seconds * 1000,)
+                )
+                cursor.execute(f"EXPLAIN {normalized}")
+                cursor.fetchall()
+        finally:
+            connection.close()
+
+
+_default_client: ReadOnlyMySQLClient | None = None
+_default_explain_client: ExplainOnlyMySQLClient | None = None
+
+
+def _get_default_client() -> ReadOnlyMySQLClient:
+    """검증된 구매 읽기전용(purchase_reader) 설정으로 기본 client를 한 번만 만든다."""
+    global _default_client
+    if _default_client is None:
+        settings = get_settings()
+        _default_client = ReadOnlyMySQLClient(
+            host=settings.purchase_read_host or settings.mysql_read_host,
+            user=settings.purchase_read_user or settings.mysql_read_user,
+            password=settings.purchase_read_password or settings.mysql_read_password,
+            database=settings.purchase_read_database or settings.purchase_db_database,
+        )
+    return _default_client
+
+
+def _get_default_explain_client() -> ExplainOnlyMySQLClient:
+    """admin(purchase 도메인 전용 ETL 계정)으로 EXPLAIN 전용 client를 한 번만 만든다.
+
+    sales는 admin이 공용 JangGGo(mysql_write_*)라 그 계정을 그대로 재사용하지만,
+    purchase는 도메인 전용 별도 계정(PURCHASE_DB_*)을 쓴다 — JangGGo에는 purchase.*
+    권한이 없다(실제로 EXPLAIN 시도 시 Access denied로 확인됨).
+    """
+    global _default_explain_client
+    if _default_explain_client is None:
+        settings = get_settings()
+        _default_explain_client = ExplainOnlyMySQLClient(
+            host=settings.purchase_db_host or settings.mysql_write_host,
+            user=settings.purchase_db_user or settings.mysql_write_user,
+            password=settings.purchase_db_password or settings.mysql_write_password,
+            database=settings.purchase_db_database,
+        )
+    return _default_explain_client
+
+
+def query_readonly(sql: str, timeout_seconds: int = 10) -> list[dict[str, Any]]:
+    """기본 ReadOnlyMySQLClient로 위임하는 편의 함수다."""
+    return _get_default_client().query(sql, timeout_seconds)
+
+
+def explain_readonly(sql: str, timeout_seconds: int = 10) -> None:
+    """기본 ExplainOnlyMySQLClient로 위임하는 편의 함수다."""
+    _get_default_explain_client().explain(sql, timeout_seconds)
