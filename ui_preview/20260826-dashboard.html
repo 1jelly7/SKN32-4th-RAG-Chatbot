@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>[시안] 이상탐지 대시보드 + 헤더 탭</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="assets/chart.umd.min.js"></script>
+<style>
+  :root {
+    --ink: #172033; --muted: #667085; --line: #d1d5db; --canvas: #f3f4f6;
+    --surface: #ffffff; --soft: #f8fafc; --blue: #3b82f6; --blue-dark: #1e40af;
+    --blue-soft: #eff6ff; --danger: #b42318; --danger-bg: #fef3f2;
+    --warn: #b45309; --warn-bg: #fffbeb; --warn-line: #fde68a;
+    font-family: "Malgun Gothic", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--canvas); color: var(--ink); }
+  h1, h2, h3, p { margin: 0; }
+
+  /* ------------------------------------------------------------
+     공유 헤더 (채팅/대시보드 두 페이지가 {% include %}로 공유할 파셜)
+     ------------------------------------------------------------ */
+  .top-header { display: flex; align-items: center; gap: 20px; padding: 12px 22px; border-bottom: 1px solid var(--line); background: #fff; }
+  .top-brand { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
+  .top-brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--blue-soft); font-size: 16px; }
+  .top-brand h1 { font-size: 15px; }
+  .top-tabs { display: flex; gap: 4px; flex: 1; }
+  .top-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; color: var(--muted); font-size: 13px; font-weight: 700; text-decoration: none; cursor: pointer; }
+  .top-tab:hover { background: var(--soft); color: var(--ink); }
+  .top-tab.is-active { color: var(--blue-dark); background: var(--blue-soft); }
+  .top-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .top-user button { border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; background: #fff; font-size: 12px; cursor: pointer; }
+
+  .demo-bar { display: flex; gap: 6px; padding: 8px 22px; background: #172033; }
+  .demo-bar button { font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 5px; border: 0; background: #2a3650; color: #fff; cursor: pointer; }
+  .demo-bar button.active { background: var(--blue); }
+  .demo-bar span { color: #94a3b8; font-size: 12px; align-self: center; margin-right: 6px; }
+
+  /* ------------------------------------------------------------
+     대시보드 본문
+     ------------------------------------------------------------ */
+  .dashboard { max-width: 1080px; margin: 0 auto; padding: 24px; }
+  .dashboard-title { font-size: 18px; font-weight: 700; }
+  .dashboard-sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 20px; }
+  .kpi-card { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .kpi-label { color: var(--muted); font-size: 12px; font-weight: 700; }
+  .kpi-value { margin-top: 6px; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+  .kpi-delta { margin-top: 4px; font-size: 12px; }
+  .kpi-delta.up { color: #166534; }
+  .kpi-delta.down { color: var(--danger); }
+  .kpi-card.is-alert { border-color: #fecdca; background: var(--danger-bg); }
+  .kpi-card.is-alert .kpi-value { color: var(--danger); }
+
+  .domain-section { margin-top: 32px; }
+  .domain-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+  .domain-title .badge-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--danger-bg); color: var(--danger); font-size: 11px; font-weight: 700; }
+
+  .chart-card { margin-top: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .chart-card-title { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 10px; }
+  .chart-box { height: 220px; }
+
+  .anomaly-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 14px; }
+  .anomaly-card { padding: 14px; border: 1px solid var(--warn-line); border-radius: 12px; background: var(--warn-bg); }
+  .anomaly-card.is-severe { border-color: #fecdca; background: var(--danger-bg); }
+  .anomaly-head { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+  .anomaly-title { font-size: 13px; font-weight: 700; }
+  .anomaly-severity { flex: 0 0 auto; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; color: var(--warn); background: #fff; border: 1px solid var(--warn-line); }
+  .anomaly-card.is-severe .anomaly-severity { color: var(--danger); border-color: #fecdca; }
+  .anomaly-detail { margin-top: 6px; color: #475467; font-size: 12px; line-height: 1.6; }
+  .anomaly-reason { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,.08); color: var(--muted); font-size: 11px; }
+  .anomaly-reason strong { color: var(--ink); }
+
+  .empty-role { max-width: 480px; margin: 80px auto; text-align: center; color: var(--muted); }
+  .empty-role h2 { font-size: 16px; color: var(--ink); margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <span>데모:</span>
+  <button type="button" data-tab="chat">채팅 탭 클릭 상태</button>
+  <button type="button" data-tab="dashboard" class="active">대시보드 탭 클릭 상태</button>
+  <span style="margin-left:16px">역할:</span>
+  <button type="button" data-role="admin" class="active">admin</button>
+  <button type="button" data-role="finance">finance</button>
+  <button type="button" data-role="hr">hr (탭 자체가 안 보임)</button>
+</div>
+
+<header class="top-header">
+  <div class="top-brand">
+    <span class="top-brand-mark">🤖</span>
+    <h1>사내 지식 챗봇</h1>
+  </div>
+  <nav class="top-tabs" id="top-tabs">
+    <a class="top-tab" data-tab="chat">💬 채팅</a>
+    <a class="top-tab" data-tab="dashboard">📊 대시보드</a>
+  </nav>
+  <div class="top-user">
+    <span id="top-username">Charlie (admin)</span>
+    <button type="button">로그아웃</button>
+  </div>
+</header>
+
+<main id="page-body"></main>
+
+<script>
+  const ROLE_LABEL = { admin: 'admin', finance: 'finance', hr: 'hr' };
+  let currentRole = 'admin';
+  let currentTab = 'dashboard';
+
+  function renderTabs() {
+    document.querySelectorAll('.top-tab').forEach(tab => {
+      const isDashboard = tab.dataset.tab === 'dashboard';
+      tab.hidden = isDashboard && !['admin', 'finance'].includes(currentRole);
+      tab.classList.toggle('is-active', tab.dataset.tab === currentTab);
+    });
+    document.getElementById('top-username').textContent = `Charlie (${currentRole})`;
+  }
+
+  function renderPage() {
+    const body = document.getElementById('page-body');
+    if (currentTab === 'dashboard' && !['admin', 'finance'].includes(currentRole)) {
+      body.innerHTML = `<div class="empty-role"><h2>대시보드에 접근할 수 없습니다</h2><p>이상탐지 대시보드는 매출·구매 데이터 접근 권한이 있는 계정만 볼 수 있습니다.</p></div>`;
+      return;
+    }
+    if (currentTab === 'chat') {
+      body.innerHTML = `<div class="empty-role"><h2>(채팅 화면 — 기존 index.html 그대로)</h2><p>이 시안은 대시보드 화면 확인용이라 채팅 탭은 자리표시자입니다.</p></div>`;
+      return;
+    }
+    body.innerHTML = `
+    <div class="dashboard">
+      <h2 class="dashboard-title">이상탐지 대시보드</h2>
+      <p class="dashboard-sub">매출·구매 데이터에서 평소 패턴을 벗어난 항목을 자동으로 짚어줍니다 · 2026년 8월 기준</p>
+
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">이번 달 매출</div>
+          <div class="kpi-value">4억 3,100만</div>
+          <div class="kpi-delta down">▼ 전월 대비 5.5%</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">이번 달 구매액</div>
+          <div class="kpi-value">2억 1,800만</div>
+          <div class="kpi-delta up">▲ 전월 대비 12.1%</div>
+        </div>
+        <div class="kpi-card is-alert">
+          <div class="kpi-label">연체 미수·미지급금</div>
+          <div class="kpi-value">7,400만</div>
+          <div class="kpi-delta down">▲ 전월 대비 38%</div>
+        </div>
+        <div class="kpi-card is-alert">
+          <div class="kpi-label">이상 신호</div>
+          <div class="kpi-value">6건</div>
+          <div class="kpi-delta">이번 달 새로 감지됨</div>
+        </div>
+      </div>
+
+      <section class="domain-section">
+        <h3 class="domain-title">매출 <span class="badge-count">3</span></h3>
+        <div class="chart-card">
+          <div class="chart-card-title">월별 매출 추이 (빨간 점 = 이동평균 ±2표준편차 이탈)</div>
+          <div class="chart-box"><canvas id="sales-trend-chart"></canvas></div>
+        </div>
+        <div class="anomaly-grid">
+          <div class="anomaly-card is-severe">
+            <div class="anomaly-head"><span class="anomaly-title">고객 "㈜대한물산" 이례적 대형 주문</span><span class="anomaly-severity">심각</span></div>
+            <div class="anomaly-detail">8월 15일 주문 금액 1억 2,000만원</div>
+            <div class="anomaly-reason"><strong>판단 근거:</strong> 이 고객의 최근 6개월 평균 주문액(1,800만원) 대비 6.7배</div>
+          </div>
+          <div class="anomaly-card">
+            <div class="anomaly-head"><span class="anomaly-title">비정상 할인율 라인 3건</span><span class="anomaly-severity">주의</span></div>
+            <div class="anomaly-detail">평균 할인율 8% 대비 35~42% 할인 적용된 주문 라인</div>
+            <div class="anomaly-reason"><strong>판단 근거:</strong> 품목별 평균 할인율 대비 표준편차 3배 이상</div>
+          </div>
+          <div class="anomaly-card">
+            <div class="anomaly-head"><span class="anomaly-title">연체 미수금 급증</span><span class="anomaly-severity">주의</span></div>
+            <div class="anomaly-detail">만기 지난 미수금 4,200만원 (12건)</div>
+            <div class="anomaly-reason"><strong>판단 근거:</strong> 지난 3개월 평균 대비 38% 증가</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="domain-section">
+        <h3 class="domain-title">구매 <span class="badge-count">3</span></h3>
+        <div class="chart-card">
+          <div class="chart-card-title">월별 구매액 추이</div>
+          <div class="chart-box"><canvas id="purchase-trend-chart"></canvas></div>
+        </div>
+        <div class="anomaly-grid">
+          <div class="anomaly-card is-severe">
+            <div class="anomaly-head"><span class="anomaly-title">품목 "원자재-A" 단가 급등</span><span class="anomaly-severity">심각</span></div>
+            <div class="anomaly-detail">벤더 "글로벌소재"로부터 단가 4,200원 → 6,800원</div>
+            <div class="anomaly-reason"><strong>판단 근거:</strong> 최근 6개월 평균 단가 대비 62% 상승</div>
+          </div>
+          <div class="anomaly-card">
+            <div class="anomaly-head"><span class="anomaly-title">특정 벤더 발주 집중</span><span class="anomaly-severity">주의</span></div>
+            <div class="anomaly-detail">이번 달 발주의 71%가 벤더 "한성부품" 한 곳에 집중</div>
+            <div class="anomaly-reason"><strong>판단 근거:</strong> 최근 6개월 평균 집중도(28%) 대비 2.5배</div>
+          </div>
+          <div class="anomaly-card">
+            <div class="anomaly-head"><span class="anomaly-title">미지급금 연체</span><span class="anomaly-severity">주의</span></div>
+            <div class="anomaly-detail">만기 지난 미지급금 3,200만원 (7건)</div>
+            <div class="anomaly-reason"><strong>판단 근거:</strong> 지난 3개월 평균 대비 22% 증가</div>
+          </div>
+        </div>
+      </section>
+    </div>`;
+
+    drawTrendChart('sales-trend-chart', [28.5, 32, 41.2, 39.8, 45.6, 43.1], ['3월', '4월', '5월', '6월', '7월', '8월'], [2]);
+    drawTrendChart('purchase-trend-chart', [15.2, 16.8, 15.9, 17.4, 18.1, 21.8], ['3월', '4월', '5월', '6월', '7월', '8월'], [5]);
+  }
+
+  function drawTrendChart(canvasId, values, labels, anomalyIndexes) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const pointColors = values.map((_, i) => anomalyIndexes.includes(i) ? '#b42318' : '#3b82f6');
+    const pointRadius = values.map((_, i) => anomalyIndexes.includes(i) ? 7 : 3);
+    new Chart(canvas, {
+      type: 'line',
+      data: { labels, datasets: [{ data: values, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.08)', pointBackgroundColor: pointColors, pointRadius, tension: .3, fill: true }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => v + '천만' } } } },
+    });
+  }
+
+  document.getElementById('top-tabs').addEventListener('click', e => {
+    const tab = e.target.closest('.top-tab');
+    if (tab && !tab.hidden) { currentTab = tab.dataset.tab; renderTabs(); renderPage(); }
+  });
+  document.querySelectorAll('.demo-bar [data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.demo-bar [data-tab]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTab = btn.dataset.tab;
+      renderTabs(); renderPage();
+    });
+  });
+  document.querySelectorAll('.demo-bar [data-role]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.demo-bar [data-role]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentRole = btn.dataset.role;
+      if (currentTab === 'dashboard' && !['admin', 'finance'].includes(currentRole)) currentTab = 'chat';
+      renderTabs(); renderPage();
+    });
+  });
+
+  renderTabs();
+  renderPage();
+</script>
+</body>
+</html>

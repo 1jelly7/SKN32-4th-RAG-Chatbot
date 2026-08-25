@@ -120,7 +120,7 @@ class LLMClient:
                     },
                 ],
                 temperature=0.2,
-                max_completion_tokens=600,
+                max_completion_tokens=1200,
                 timeout=30,
             )
         except (

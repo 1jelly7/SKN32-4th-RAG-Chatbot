@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>[시안] 빠른 질문 (첫 화면 예시 질문)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ink: #172033; --muted: #667085; --line: #d1d5db; --canvas: #f3f4f6;
+    --surface: #ffffff; --soft: #f8fafc; --blue: #3b82f6; --blue-dark: #1e40af;
+    --blue-soft: #eff6ff; --danger: #b42318; --danger-bg: #fef3f2;
+    font-family: "Malgun Gothic", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { overflow: hidden; background: var(--canvas); color: var(--ink); }
+  h1, h2, p { margin: 0; }
+
+  .app-shell { height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) 400px; }
+  .chat-panel { min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; background: var(--surface); }
+  .app-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 22px; border-bottom: 1px solid var(--line); }
+  .app-header h1 { font-size: 17px; }
+  .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; }
+  .sources-panel { height: 100%; border-left: 1px solid var(--line); background: #f9fafb; }
+
+  /* ------------------------------------------------------------
+     웰컴 카드 (빈 대화 상태에서만 보임)
+     ------------------------------------------------------------ */
+  .welcome-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 24px; text-align: center; }
+  .welcome-icon { display: grid; place-items: center; width: 64px; height: 64px; margin-bottom: 16px; border-radius: 18px; background: var(--blue-soft); }
+  .welcome-icon img { width: 60%; height: 60%; object-fit: contain; }
+  .welcome-title { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+  .welcome-sub { margin-top: 6px; color: var(--muted); font-size: 13px; }
+  .example-questions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 24px; max-width: 520px; }
+  .example-chip { border: 1px solid var(--line); border-radius: 999px; padding: 10px 16px; background: #fff; color: var(--blue-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+  .example-chip:hover, .example-chip:focus-visible { background: var(--blue-soft); border-color: #bfdbfe; outline: none; }
+  .example-chip::before { content: "💬 "; }
+
+  /* 질문 전송 후 상태를 흉내내는 더미 답변 카드 */
+  .msg-row { display: flex; width: 100%; gap: 16px; margin: 0 0 24px; }
+  .msg-row.user { justify-content: flex-end; }
+  .avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; border: 1px solid #bfdbfe; border-radius: 50%; color: var(--blue); background: var(--blue-soft); font-size: 16px; }
+  .msg { min-width: 0; max-width: 90%; padding: 20px; border: 1px solid var(--line); border-radius: 4px 18px 18px; background: #f9fafb; }
+  .msg-row.user .msg { border: 0; border-radius: 18px 4px 18px 18px; color: #fff; background: linear-gradient(135deg, var(--blue-dark), #3b82f6); max-width: 80%; }
+  .msg-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
+  .msg-row.user .msg-label { color: #dbeafe; }
+  .answer { font-size: 14px; line-height: 1.75; }
+
+  /* 데모 컨트롤 */
+  .demo-bar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 6px; padding: 6px; background: #172033; border-radius: 8px; }
+  .demo-bar button { font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 5px; border: 0; background: #2a3650; color: #fff; cursor: pointer; }
+  .demo-bar button.active { background: var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <button type="button" data-role="hr" class="active">hr로 로그인</button>
+  <button type="button" data-role="finance">finance로 로그인</button>
+  <button type="button" data-role="admin">admin으로 로그인</button>
+</div>
+
+<div class="app-shell">
+  <main class="chat-panel">
+    <header class="app-header"><h1>사내 지식 챗봇</h1></header>
+    <section class="messages" id="messages"></section>
+  </main>
+  <aside class="sources-panel"></aside>
+</div>
+
+<script>
+  const EXAMPLE_QUESTIONS = {
+    hr: ['법인카드 발급 방법 알려줘'],
+    finance: ['2026년 1분기 매출을 2025년 1분기와 비교해줘'],
+    admin: ['법인카드 발급 방법 알려줘', '2026년 1분기 매출을 2025년 1분기와 비교해줘'],
+  };
+
+  const messages = document.getElementById('messages');
+  const iconUrl = 'assets/chatbot-icon.png';
+
+  function renderWelcome(role) {
+    const questions = EXAMPLE_QUESTIONS[role] || EXAMPLE_QUESTIONS.admin;
+    const chipsHtml = questions.map(q => `<button type="button" class="example-chip" data-question="${q}">${q}</button>`).join('');
+    messages.innerHTML = `
+      <div class="welcome-screen">
+        <div class="welcome-icon"><img src="${iconUrl}" alt=""></div>
+        <h2 class="welcome-title">사내 지식 챗봇에게 물어보세요</h2>
+        <p class="welcome-sub">문서 검색과 업무 데이터 조회를 도와드립니다</p>
+        <div class="example-questions">${chipsHtml}</div>
+      </div>`;
+  }
+
+  function simulateSend(question) {
+    // 실 코드에서는 form.requestSubmit()으로 실제 /api/chat 호출.
+    // 시안에서는 웰컴이 사라지고 질문 말풍선 + 더미 로딩 표시만 재현.
+    messages.innerHTML = `
+      <div class="msg-row user"><div class="msg"><span class="msg-label">나</span><div class="answer">${question}</div></div></div>
+      <div class="msg-row assistant"><span class="avatar" aria-hidden="true">🤖</span><div class="msg"><span class="msg-label">사내 지식 챗봇</span><div class="answer">(실제로는 여기서 /api/chat 응답이 옵니다)</div></div></div>`;
+  }
+
+  messages.addEventListener('click', event => {
+    const chip = event.target.closest('.example-chip');
+    if (chip) simulateSend(chip.dataset.question);
+  });
+
+  document.querySelectorAll('.demo-bar button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.demo-bar button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderWelcome(btn.dataset.role);
+    });
+  });
+
+  renderWelcome('hr');
+</script>
+</body>
+</html>

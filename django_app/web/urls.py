@@ -8,4 +8,7 @@ from django_app.web import views
 
 app_name = "web"
 
-urlpatterns = [path("", views.index, name="index")]
+urlpatterns = [
+    path("", views.index, name="index"),
+    path("dashboard/", views.dashboard, name="dashboard"),
+]
