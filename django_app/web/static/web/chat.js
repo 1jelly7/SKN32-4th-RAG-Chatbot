@@ -9,6 +9,13 @@ const sourcesSummary = document.querySelector('#sources-summary');
 const sourcesToggle = document.querySelector('#sources-toggle');
 const sourcesClose = document.querySelector('#sources-close');
 const sourcesBackdrop = document.querySelector('#sources-backdrop');
+// 추가: 리포트(POST /api/reports/generate) 확인용 임시 다운로드 버튼 참조.
+const reportToggle = document.querySelector('#report-toggle');
+const reportPanel = document.querySelector('#report-panel');
+const reportStart = document.querySelector('#report-start');
+const reportEnd = document.querySelector('#report-end');
+const reportDownloadButton = document.querySelector('#report-download');
+const reportStatus = document.querySelector('#report-status');
 const loginScreen = document.querySelector('#login-screen');
 const loginForm = document.querySelector('#login-form');
 const loginError = document.querySelector('#login-error');
@@ -64,9 +71,17 @@ function clearApplicationState() {
   currentUser.textContent = '';
   renderSources([], null);
   setSourcesOpen(false);
+  // TEMP: 로그아웃 시 이전 사용자의 이상탐지 결과가 잠깐이라도 남아있지 않게 초기화.
+  // loadAnomalies()/anomalyBody는 파일 맨 아래 TEMP 블록에 정의돼 있다(호이스팅으로
+  // 여기서도 참조 가능).
+  if (typeof anomalyBody !== 'undefined') anomalyBody.innerHTML = '<p class="anomaly-loading">불러오는 중...</p>';
 }
 function showLogin() { loginScreen.hidden = false; document.querySelector('.app-shell').setAttribute('aria-hidden', 'true'); document.querySelector('#username').focus(); }
-function showApplication(user) { loginScreen.hidden = true; document.querySelector('.app-shell').removeAttribute('aria-hidden'); currentUser.textContent = `${user.display_name} (${user.role})`; }
+// TEMP: showApplication()은 로그인 성공/세션 복원 성공 양쪽에서 호출되는 유일한
+// 지점이라, 여기서 이상탐지를 불러오면 restoreSession() 성공 직후뿐 아니라 방금
+// 로그인한 경우에도 바로 채워진다. 파일 맨 아래 TEMP 블록을 지울 때 이 줄도
+// 함께 지워야 한다(안 지우면 loadAnomalies is not defined 에러가 난다).
+function showApplication(user) { loginScreen.hidden = true; document.querySelector('.app-shell').removeAttribute('aria-hidden'); currentUser.textContent = `${user.display_name} (${user.role})`; loadAnomalies(); }
 async function restoreSession() { const response = await fetch('/api/auth/me'); if (response.ok) showApplication(await response.json()); else showLogin(); }
 loginForm.addEventListener('submit', async event => { event.preventDefault(); loginError.textContent = ''; loginButton.disabled = true; try { const response = await fetch('/api/auth/login', { method: 'POST', headers: await csrfHeaders(), body: JSON.stringify({ username: document.querySelector('#username').value, password: document.querySelector('#password').value }) }); if (!response.ok) throw await responseError(response, '아이디 또는 비밀번호가 올바르지 않습니다.'); clearApplicationState(); csrfTokenValue = null; showApplication((await response.json()).user); document.querySelector('#password').value = ''; } catch (error) { csrfTokenValue = null; loginError.textContent = error.message; } finally { loginButton.disabled = false; } });
 logoutButton.addEventListener('click', async () => { auth_state_revision += 1; clearApplicationState(); loginError.textContent = ''; try { const response = await fetch('/api/auth/logout', { method: 'POST', headers: await csrfHeaders() }); if (!response.ok && response.status !== 401) throw await responseError(response, '로그아웃하지 못했습니다.'); csrfTokenValue = null; showLogin(); } catch (error) { csrfTokenValue = null; loginError.textContent = error.message; await restoreSession(); } });
@@ -319,6 +334,57 @@ sourcesList.addEventListener('click', event => {
   const button = event.target.closest('.source-download');
   if (button) handleDownload(button);
 });
+
+// 추가: 리포트 다운로드 임시 버튼. handleDownload()와 동일한 fetch → blob →
+// objectURL → 링크 클릭 패턴을 재사용한다(documentIcon 다운로드 버튼과 같은 방식).
+// 템플릿은 지금 하나(sales_monthly)뿐이라 하드코딩했다 — 여러 템플릿을 고를 수
+// 있게 하려면 GET /api/reports/templates로 목록을 받아 <select>로 바꿔야 한다.
+function setReportOpen(isOpen) {
+  reportPanel.hidden = !isOpen;
+  reportToggle.setAttribute('aria-expanded', String(isOpen));
+}
+
+reportToggle.addEventListener('click', () => setReportOpen(reportPanel.hidden));
+
+reportDownloadButton.addEventListener('click', async () => {
+  const startDate = reportStart.value;
+  const endDate = reportEnd.value;
+  reportStatus.classList.remove('is-error');
+  if (!startDate || !endDate) {
+    reportStatus.textContent = '시작일과 종료일을 모두 입력하세요.';
+    reportStatus.classList.add('is-error');
+    return;
+  }
+
+  reportDownloadButton.disabled = true;
+  reportStatus.textContent = '리포트를 만드는 중입니다...';
+  try {
+    const response = await fetch('/api/reports/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_id: 'sales_monthly', start_date: startDate, end_date: endDate }),
+    });
+    if (response.status === 401) { showLogin(); throw new Error('세션이 만료되었습니다. 다시 로그인하세요.'); }
+    if (!response.ok) throw await responseError(response, '리포트를 생성하지 못했습니다.');
+
+    const blob = await response.blob();
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = downloadFileName(response, 'report.docx');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(objectUrl);
+    reportStatus.textContent = '다운로드가 시작됐습니다.';
+  } catch (error) {
+    reportStatus.textContent = userFriendlyError(error);
+    reportStatus.classList.add('is-error');
+  } finally {
+    reportDownloadButton.disabled = false;
+  }
+});
+
 input.addEventListener('input', autoResize);
 input.addEventListener('keydown', event => {
   if (event.key === 'Enter' && !event.shiftKey) {
@@ -374,3 +440,44 @@ form.addEventListener('submit', async event => {
 });
 
 restoreSession();
+
+// --- TEMP: 이상탐지 임시 대시보드 (GET /api/anomalies) ---------------------------
+// 다른 팀원이 실제 이상탐지 대시보드를 완성하면 이 블록 전체를 지운다. 단, 이 블록
+// 밖에서 이 블록을 참조하는 곳이 두 군데 있으니 같이 지워야 한다:
+//   1) clearApplicationState() 안의 anomalyBody.innerHTML 초기화 줄
+//   2) showApplication() 끝의 loadAnomalies() 호출 줄
+// (둘 다 해당 함수 옆에 "TEMP" 주석을 남겨뒀다 — 1단계 삭제 체크리스트 참고)
+const anomalyBody = document.querySelector('#anomaly-body');
+
+function renderAnomalies(rows) {
+  if (!rows || rows.length === 0) {
+    anomalyBody.innerHTML = '<p class="anomaly-empty">이상 징후가 발견되지 않았습니다.</p>';
+    return;
+  }
+  const typeLabels = { amount_outlier: '금액 이상치', overdue: '연체 과다', spike: '거래 급증' };
+  const domainLabels = { sales: '판매', purchase: '구매' };
+  const rowsHtml = rows.map(row => `
+    <tr title="${escapeHtml(row.detail)}">
+      <td><span class="anomaly-badge anomaly-badge-${row.domain}">${escapeHtml(domainLabels[row.domain] || row.domain)}</span></td>
+      <td>${escapeHtml(typeLabels[row.type] || row.type)}</td>
+      <td>${escapeHtml(row.entity)}</td>
+      <td class="numeric">${Number(row.amount).toLocaleString()}</td>
+    </tr>`).join('');
+  anomalyBody.innerHTML = `
+    <table class="anomaly-table">
+      <thead><tr><th>도메인</th><th>유형</th><th>거래처</th><th>금액</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>`;
+}
+
+async function loadAnomalies() {
+  anomalyBody.innerHTML = '<p class="anomaly-loading">불러오는 중...</p>';
+  try {
+    const response = await fetch('/api/anomalies');
+    if (!response.ok) throw await responseError(response, '이상탐지 데이터를 불러오지 못했습니다.');
+    renderAnomalies(await response.json());
+  } catch (error) {
+    anomalyBody.innerHTML = `<p class="anomaly-empty">${escapeHtml(userFriendlyError(error))}</p>`;
+  }
+}
+// --- // TEMP: 이상탐지 끝 -------------------------------------------------------
