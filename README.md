@@ -480,7 +480,7 @@ API를 만들어야 했습니다.
 | Tool boundary | MCP | 문서·구매·판매 기능 분리 |
 | RAG | FAISS, sentence-transformers | 문서 검색 |
 | Database | MySQL 8.0 | 계정 · 문서 경로 · 구매 · 판매 |
-| Cache | In-memory (프로세스 내 TTL 캐시) | 검증된 답변 재사용. `RedisCache`는 인터페이스만 정의된 미구현 스텁 |
+| Cache | In-memory (프로세스 내 TTL 캐시) | 검증된 답변 재사용. |
 | Frontend | HTML, CSS, JavaScript, Chart.js | 채팅 · 대시보드 · 표 · 차트 UI |
 | Test | pytest, pytest-asyncio, httpx | 단위·통합·Django 계약 검증 |
 
