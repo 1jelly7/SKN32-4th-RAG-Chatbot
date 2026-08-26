@@ -10,8 +10,6 @@ sales_reader/purchase_reader로 직접 검증한 고정 SQL만 그대로 실행�
 # 통과해야 하며, 그래서 CTE(WITH)를 못 쓰고 서브쿼리로 다시 썼다(아래 _SALES_SPIKE_SQL
 # 주석 참고 — 가드가 CTE 별칭을 허용 목록 밖 테이블로 오인해서 거부했다).
 
-TEMP: 다른 팀원이 실제 이상탐지 대시보드를 완성하면 이 파일 전체를 지운다
-(django_app/web 쪽 TEMP 블록, app/api/anomalies.py와 함께 — 1단계 삭제 체크리스트 참고).
 """
 
 from __future__ import annotations

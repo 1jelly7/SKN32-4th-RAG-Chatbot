@@ -1,8 +1,5 @@
 """이상탐지(anomaly) 임시 대시보드 데이터 HTTP 경계.
 
-TEMP: 다른 팀원이 실제 이상탐지 대시보드를 완성하면 이 파일 전체를 지운다
-(django_app/web 쪽 TEMP 블록, app/services/anomaly_service.py와 함께 — 1단계
-삭제 체크리스트 참고).
 """
 
 from __future__ import annotations
