@@ -71,10 +71,10 @@ Evidence Eval이 채택한 근거만 최종 답변에 사용합니다.
     <td align="center"><b>이호원</b></td>
   </tr>
   <tr>
-    <td align="center"><b>PM · RAG Sales</b></td>
-    <td align="center"><b>Backend</b></td>
-    <td align="center"><b>RAG PDF </b></td>
-    <td align="center"><b>RAG Purchasing</b></td>
+    <td align="center"><b>Front-End</b></td>
+    <td align="center"><b>PM · AWS · Django</b></td>
+    <td align="center"><b>RAG-Test · Docling</b></td>
+    <td align="center"><b>ERP · Report</b></td>
   </tr>
   <tr>
     <td align="center"><b>https://github.com/greenmdw</b></td>
