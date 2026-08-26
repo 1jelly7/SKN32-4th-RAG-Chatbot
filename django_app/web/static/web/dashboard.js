@@ -1,42 +1,11 @@
-// 이상탐지 대시보드. 실제 GET /api/dashboard/anomalies가 만들어지기 전까지는
-// 더미 데이터로 화면만 그린다 (docs/team_share/09_dashboard_anomaly_api_spec.md
-// 참고). API가 생기면 이 파일의 DUMMY_DASHBOARD_DATA와 fetchDashboardData()만
-// 교체하면 된다 — 렌더링 함수들은 DashboardResponse 스키마를 그대로 소비하도록
-// 이미 그 모양에 맞춰 작성했다.
+// 이상탐지 대시보드. GET /api/anomalies(이상 신호 목록)와
+// GET /api/dashboard/monthly-trends(월별 매출·구매 추이)를 함께 불러와
+// KPI 카드·추이 차트·이상탐지 카드로 구성한다.
 // DASHBOARD_ROLES는 auth.js가 이미 선언한다(탭 숨김 판단에도 같은 목록을 씀).
 const dashboardRoot = document.querySelector('#dashboard-root');
 
-const DUMMY_DASHBOARD_DATA = {
-  kpis: [
-    { label: '이번 달 매출', value: '4억 3,100만', deltaText: '▼ 전월 대비 5.5%', deltaDirection: 'down', isAlert: false },
-    { label: '이번 달 구매액', value: '2억 1,800만', deltaText: '▲ 전월 대비 12.1%', deltaDirection: 'up', isAlert: false },
-    { label: '연체 미수·미지급금', value: '7,400만', deltaText: '▲ 전월 대비 38%', deltaDirection: 'down', isAlert: true },
-    { label: '이상 신호', value: '6건', deltaText: '이번 달 새로 감지됨', deltaDirection: null, isAlert: true },
-  ],
-  sales_trend: [
-    { period: '3월', value: 28.5 }, { period: '4월', value: 32 }, { period: '5월', value: 41.2 },
-    { period: '6월', value: 39.8 }, { period: '7월', value: 45.6, is_anomaly: true }, { period: '8월', value: 43.1 },
-  ],
-  purchase_trend: [
-    { period: '3월', value: 15.2 }, { period: '4월', value: 16.8 }, { period: '5월', value: 15.9 },
-    { period: '6월', value: 17.4 }, { period: '7월', value: 18.1 }, { period: '8월', value: 21.8, is_anomaly: true },
-  ],
-  sales_anomalies: [
-    { id: 's1', title: '고객 "㈜대한물산" 이례적 대형 주문', detail: '8월 15일 주문 금액 1억 2,000만원', reason: '이 고객의 최근 6개월 평균 주문액(1,800만원) 대비 6.7배', severity: 'severe' },
-    { id: 's2', title: '비정상 할인율 라인 3건', detail: '평균 할인율 8% 대비 35~42% 할인 적용된 주문 라인', reason: '품목별 평균 할인율 대비 표준편차 3배 이상', severity: 'warning' },
-    { id: 's3', title: '연체 미수금 급증', detail: '만기 지난 미수금 4,200만원 (12건)', reason: '지난 3개월 평균 대비 38% 증가', severity: 'warning' },
-  ],
-  purchase_anomalies: [
-    { id: 'p1', title: '품목 "원자재-A" 단가 급등', detail: '벤더 "글로벌소재"로부터 단가 4,200원 → 6,800원', reason: '최근 6개월 평균 단가 대비 62% 상승', severity: 'severe' },
-    { id: 'p2', title: '특정 벤더 발주 집중', detail: '이번 달 발주의 71%가 벤더 "한성부품" 한 곳에 집중', reason: '최근 6개월 평균 집중도(28%) 대비 2.5배', severity: 'warning' },
-    { id: 'p3', title: '미지급금 연체', detail: '만기 지난 미지급금 3,200만원 (7건)', reason: '지난 3개월 평균 대비 22% 증가', severity: 'warning' },
-  ],
-};
-
-async function fetchDashboardData() {
-  // TODO(백엔드 완료 후 교체): GET /api/dashboard/anomalies 실제 호출로 대체.
-  return DUMMY_DASHBOARD_DATA;
-}
+const TYPE_LABEL = { amount_outlier: '금액 이상치', overdue: '연체 과다', spike: '거래 급증' };
+let charts = {};
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -44,72 +13,127 @@ function escapeHtml(value) {
     .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 }
 
-function kpiCardHtml(kpi) {
-  const deltaClass = kpi.deltaDirection ? ` ${kpi.deltaDirection}` : '';
+function formatAmount(n) {
+  return `${Number(n).toLocaleString()} KRW`;
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`request_failed:${response.status}`);
+  return response.json();
+}
+
+async function fetchDashboardData() {
+  const year = new Date().getFullYear();
+  const [anomalies, trends] = await Promise.all([
+    fetchJson('/api/anomalies'),
+    fetchJson(`/api/dashboard/monthly-trends?year=${year}`),
+  ]);
+  return { anomalies, trends };
+}
+
+function deltaHtml(points) {
+  if (points.length < 2) return `<div class="kpi-sub">전월 비교 불가</div>`;
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  if (prev.amount === 0) return `<div class="kpi-sub">전월 비교 불가</div>`;
+  const pct = ((last.amount - prev.amount) / Math.abs(prev.amount)) * 100;
+  const cls = pct >= 0 ? 'up' : 'down';
+  const arrow = pct >= 0 ? '▲' : '▼';
+  return `<div class="kpi-sub kpi-delta ${cls}">${arrow} 전월 대비 ${Math.abs(pct).toFixed(1)}%</div>`;
+}
+
+function kpiRowHtml(trends, anomalies) {
+  const salesLast = trends.sales.at(-1) ?? null;
+  const purchaseLast = trends.purchase.at(-1) ?? null;
+  const overdueTotal = anomalies.filter(a => a.type === 'overdue').reduce((sum, a) => sum + a.amount, 0);
+
   return `
-  <div class="kpi-card${kpi.isAlert ? ' is-alert' : ''}">
-    <div class="kpi-label">${escapeHtml(kpi.label)}</div>
-    <div class="kpi-value">${escapeHtml(kpi.value)}</div>
-    <div class="kpi-delta${deltaClass}">${escapeHtml(kpi.deltaText)}</div>
+  <div class="kpi-card">
+    <div class="kpi-label">최근 달 매출${salesLast ? ` (${escapeHtml(salesLast.month)})` : ''}</div>
+    <div class="kpi-value">${salesLast ? formatAmount(salesLast.amount) : '데이터 없음'}</div>
+    ${salesLast ? deltaHtml(trends.sales) : ''}
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">최근 달 구매액${purchaseLast ? ` (${escapeHtml(purchaseLast.month)})` : ''}</div>
+    <div class="kpi-value">${purchaseLast ? formatAmount(purchaseLast.amount) : '데이터 없음'}</div>
+    ${purchaseLast ? deltaHtml(trends.purchase) : ''}
+  </div>
+  <div class="kpi-card${overdueTotal > 0 ? ' is-alert' : ''}">
+    <div class="kpi-label">연체 총액</div>
+    <div class="kpi-value">${overdueTotal > 0 ? formatAmount(overdueTotal) : '연체 없음'}</div>
+  </div>
+  <div class="kpi-card${anomalies.length ? ' is-alert' : ''}">
+    <div class="kpi-label">이상 신호</div>
+    <div class="kpi-value">${anomalies.length}건</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">데이터 기준</div>
+    <div class="kpi-value" style="font-size:13px">${escapeHtml(salesLast?.month || purchaseLast?.month || '-')}</div>
   </div>`;
 }
 
-function anomalyCardHtml(anomaly) {
-  const severityLabel = anomaly.severity === 'severe' ? '심각' : '주의';
+function anomalyCardHtml(a) {
   return `
-  <div class="anomaly-card${anomaly.severity === 'severe' ? ' is-severe' : ''}">
+  <div class="anomaly-card">
     <div class="anomaly-head">
-      <span class="anomaly-title">${escapeHtml(anomaly.title)}</span>
-      <span class="anomaly-severity">${severityLabel}</span>
+      <span class="anomaly-entity">${escapeHtml(a.entity)}</span>
+      <span class="anomaly-type">${escapeHtml(TYPE_LABEL[a.type] || a.type)}</span>
     </div>
-    <div class="anomaly-detail">${escapeHtml(anomaly.detail)}</div>
-    <div class="anomaly-reason"><strong>판단 근거:</strong> ${escapeHtml(anomaly.reason)}</div>
+    <div class="anomaly-amount">${formatAmount(a.amount)}</div>
+    <div class="anomaly-detail">${escapeHtml(a.detail)}</div>
+    <div class="anomaly-time">감지 시각 ${new Date(a.detected_at).toLocaleString('ko-KR')}</div>
   </div>`;
 }
 
 function drawTrendChart(canvasId, points) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || typeof Chart === 'undefined') return;
-  const labels = points.map(p => p.period);
-  const values = points.map(p => p.value);
-  const pointColors = points.map(p => p.is_anomaly ? '#b42318' : '#3b82f6');
-  const pointRadius = points.map(p => p.is_anomaly ? 7 : 3);
-  new Chart(canvas, {
+  if (charts[canvasId]) charts[canvasId].destroy();
+  charts[canvasId] = new Chart(canvas, {
     type: 'line',
-    data: { labels, datasets: [{ data: values, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.08)', pointBackgroundColor: pointColors, pointRadius, tension: .3, fill: true }] },
+    data: {
+      labels: points.map(p => p.month),
+      datasets: [{ data: points.map(p => p.amount), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.08)', pointBackgroundColor: '#3b82f6', pointRadius: 3, tension: .3, fill: true }],
+    },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
   });
 }
 
-function renderDashboard(data) {
+function domainSectionHtml(label, trendPoints, canvasId, rows) {
+  const ANOMALY_DISPLAY_LIMIT = 4;
+  const shown = rows.slice().sort((a, b) => b.amount - a.amount).slice(0, ANOMALY_DISPLAY_LIMIT);
+  return `
+  <section class="domain-section">
+    <h3 class="domain-title">${escapeHtml(label)} <span class="badge-count">${rows.length}</span></h3>
+    <div class="dashboard-chart-card">
+      <div class="dashboard-chart-title">월별 ${escapeHtml(label)} 추이</div>
+      <div class="dashboard-chart-box"><canvas id="${canvasId}"></canvas></div>
+    </div>
+    ${shown.length
+      ? `<div class="anomaly-grid">${shown.map(anomalyCardHtml).join('')}</div>`
+      : `<div class="empty-note">현재 감지된 이상 신호가 없습니다.</div>`}
+    ${rows.length > shown.length ? `<p class="anomaly-truncated-note">금액이 큰 상위 ${shown.length}건만 표시합니다 (전체 ${rows.length}건).</p>` : ''}
+  </section>`;
+}
+
+function renderDashboard({ anomalies, trends }) {
+  const salesAnomalies = anomalies.filter(a => a.domain === 'sales');
+  const purchaseAnomalies = anomalies.filter(a => a.domain === 'purchase');
+  const fewDataPoints = trends.sales.length < 2 && trends.purchase.length < 2;
+
   dashboardRoot.innerHTML = `
   <div class="dashboard">
     <h2 class="dashboard-title">이상탐지 대시보드</h2>
-    <p class="dashboard-sub">매출·구매 데이터에서 평소 패턴을 벗어난 항목을 자동으로 짚어줍니다</p>
-
-    <div class="kpi-row">${data.kpis.map(kpiCardHtml).join('')}</div>
-
-    <section class="domain-section">
-      <h3 class="domain-title">매출 <span class="badge-count">${data.sales_anomalies.length}</span></h3>
-      <div class="dashboard-chart-card">
-        <div class="dashboard-chart-title">월별 매출 추이 (빨간 점 = 이동평균 ±2표준편차 이탈)</div>
-        <div class="dashboard-chart-box"><canvas id="sales-trend-chart"></canvas></div>
-      </div>
-      <div class="anomaly-grid">${data.sales_anomalies.map(anomalyCardHtml).join('')}</div>
-    </section>
-
-    <section class="domain-section">
-      <h3 class="domain-title">구매 <span class="badge-count">${data.purchase_anomalies.length}</span></h3>
-      <div class="dashboard-chart-card">
-        <div class="dashboard-chart-title">월별 구매액 추이</div>
-        <div class="dashboard-chart-box"><canvas id="purchase-trend-chart"></canvas></div>
-      </div>
-      <div class="anomaly-grid">${data.purchase_anomalies.map(anomalyCardHtml).join('')}</div>
-    </section>
+    <p class="dashboard-sub">월별 매출·구매 추이와 고정 규칙 기반 이상 신호를 함께 보여줍니다.</p>
+    <div class="kpi-row">${kpiRowHtml(trends, anomalies)}</div>
+    ${fewDataPoints ? `<div class="note-banner">이번 연도 데이터가 아직 1개월뿐이라 추이·전월대비 비교가 제한적입니다.</div>` : ''}
+    ${domainSectionHtml('매출', trends.sales, 'sales-trend-chart', salesAnomalies)}
+    ${domainSectionHtml('구매', trends.purchase, 'purchase-trend-chart', purchaseAnomalies)}
   </div>`;
 
-  drawTrendChart('sales-trend-chart', data.sales_trend);
-  drawTrendChart('purchase-trend-chart', data.purchase_trend);
+  drawTrendChart('sales-trend-chart', trends.sales);
+  drawTrendChart('purchase-trend-chart', trends.purchase);
 }
 
 function renderAccessDenied() {
@@ -120,16 +144,30 @@ function renderAccessDenied() {
   </div>`;
 }
 
+function renderLoadError() {
+  dashboardRoot.innerHTML = `
+  <div class="dashboard-empty-role">
+    <h2>대시보드를 불러오지 못했습니다</h2>
+    <p>잠시 후 다시 시도해 주세요.</p>
+  </div>`;
+}
+
 window.onAuthStateReady = async user => {
   if (!DASHBOARD_ROLES.includes(user.role)) {
     renderAccessDenied();
     return;
   }
-  const data = await fetchDashboardData();
-  renderDashboard(data);
+  try {
+    const data = await fetchDashboardData();
+    renderDashboard(data);
+  } catch (_) {
+    renderLoadError();
+  }
 };
 
 window.onAuthStateCleared = () => {
+  Object.values(charts).forEach(chart => chart.destroy());
+  charts = {};
   dashboardRoot.innerHTML = '';
 };
 

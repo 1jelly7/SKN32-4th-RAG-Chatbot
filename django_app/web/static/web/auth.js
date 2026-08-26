@@ -37,14 +37,21 @@ function showLogin() {
   document.querySelector('#username')?.focus();
 }
 
+// sales_db/purchase_db 접근 권한이 있는 역할만 볼 수 있는 화면들의 공통 목록.
+// 대시보드(이상탐지)·리포트 생성 둘 다 매출/구매 데이터를 다루므로 같은 목록을 쓴다
+// (shared/auth_policy.py의 hr=document_db만 허용과 대응).
 const DASHBOARD_ROLES = ['admin', 'finance'];
+const RESTRICTED_TAB_IDS = ['#dashboard-tab-link', '#report-tab-link'];
 
 function showApplication(user) {
   loginScreen.hidden = true;
   document.querySelector('.app-shell')?.removeAttribute('aria-hidden');
   currentUser.textContent = `${user.display_name} (${user.role})`;
-  const dashboardTab = document.querySelector('#dashboard-tab-link');
-  if (dashboardTab) dashboardTab.hidden = !DASHBOARD_ROLES.includes(user.role);
+  const allowed = DASHBOARD_ROLES.includes(user.role);
+  RESTRICTED_TAB_IDS.forEach(selector => {
+    const tab = document.querySelector(selector);
+    if (tab) tab.hidden = !allowed;
+  });
   window.onAuthStateReady?.(user);
 }
 
