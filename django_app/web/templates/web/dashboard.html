@@ -1,0 +1,28 @@
+{% load static %}
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <title>이상탐지 대시보드 · 사내 지식 챗봇</title>
+  <link rel="stylesheet" href="{% static 'web/style.css' %}">
+  <script src="{% static 'web/vendor/chart.umd.min.js' %}"></script>
+</head>
+<body data-chatbot-icon="{% static 'web/img/chatbot-icon.png' %}">
+  <section id="login-screen" class="login-screen" aria-labelledby="login-title" hidden>
+    <form id="login-form" class="login-card">
+      <h1 id="login-title">사내 지식 챗봇 로그인</h1><p>승인된 계정으로 로그인하세요.</p>
+      <label for="username">로그인 ID</label><input id="username" name="username" autocomplete="username" placeholder="아이디 입력" required maxlength="128">
+      <label for="password">비밀번호</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder="비밀번호 입력" required maxlength="256">
+      <p id="login-error" class="login-error" role="alert" aria-live="polite"></p><button id="login-button" type="submit">로그인</button>
+    </form>
+  </section>
+  {% include "web/_header.html" %}
+  <div class="app-shell app-shell--single">
+    <main id="dashboard-root" class="dashboard-page" aria-label="이상탐지 대시보드"></main>
+  </div>
+  <script src="{% static 'web/auth.js' %}"></script>
+  <script src="{% static 'web/dashboard.js' %}"></script>
+</body>
+</html>

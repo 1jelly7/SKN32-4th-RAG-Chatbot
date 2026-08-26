@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>[시안] 실제 API 반영 — 대시보드 + 리포트 생성</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ink: #172033; --muted: #667085; --line: #d1d5db; --canvas: #f3f4f6;
+    --surface: #ffffff; --soft: #f8fafc; --blue: #3b82f6; --blue-dark: #1e40af;
+    --blue-soft: #eff6ff; --danger: #b42318; --danger-bg: #fef3f2;
+    --warn: #b45309; --warn-bg: #fffbeb; --warn-line: #fde68a;
+    font-family: "Malgun Gothic", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); color: var(--ink); }
+  h1, h2, h3, p { margin: 0; }
+
+  .top-header { display: flex; align-items: center; gap: 20px; flex: 0 0 auto; padding: 12px 22px; border-bottom: 1px solid var(--line); background: #fff; }
+  .top-brand { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
+  .top-brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 6px; background: #172033; color: #7ab8ff; font-size: 14px; }
+  .top-brand h1 { font-size: 15px; }
+  .top-tabs { display: flex; gap: 4px; flex: 1; }
+  .top-tab { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 8px; color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer; }
+  .top-tab:hover { background: var(--soft); color: var(--ink); }
+  .top-tab.is-active { color: var(--blue-dark); background: var(--blue-soft); }
+  .top-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .top-user button { border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; background: #fff; font-size: 12px; cursor: pointer; }
+
+  .demo-bar { display: flex; gap: 6px; padding: 8px 22px; background: #172033; flex: 0 0 auto; flex-wrap: wrap; }
+  .demo-bar span { color: #94a3b8; font-size: 12px; align-self: center; margin-right: 4px; }
+  .demo-bar button { font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 5px; border: 0; background: #2a3650; color: #fff; cursor: pointer; }
+  .demo-bar button.active { background: var(--blue); }
+
+  .page-body { flex: 1; min-height: 0; overflow-y: auto; }
+  .page { max-width: 900px; margin: 0 auto; padding: 24px; }
+  .page-title { font-size: 18px; font-weight: 700; }
+  .page-sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
+
+  /* --- 대시보드: 이상탐지 리스트 (KPI/추이 없음 — 실제 API에 데이터 없음) --- */
+  .domain-section { margin-top: 28px; }
+  .domain-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+  .domain-title .badge-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); font-size: 11px; font-weight: 700; }
+  .anomaly-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
+  .anomaly-card { padding: 14px; border: 1px solid var(--warn-line); border-radius: 12px; background: var(--warn-bg); }
+  .anomaly-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .anomaly-type { flex: 0 0 auto; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; color: var(--warn); background: #fff; border: 1px solid var(--warn-line); }
+  .anomaly-entity { font-size: 13px; font-weight: 700; }
+  .anomaly-amount { margin-top: 6px; font-size: 16px; font-weight: 700; color: var(--ink); }
+  .anomaly-detail { margin-top: 4px; color: #475467; font-size: 12px; line-height: 1.6; }
+  .anomaly-time { margin-top: 8px; color: var(--muted); font-size: 11px; }
+  .empty-note { margin-top: 12px; padding: 14px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 13px; text-align: center; }
+
+  .dashboard-empty-role { max-width: 480px; margin: 80px auto; text-align: center; color: var(--muted); }
+  .dashboard-empty-role h2 { font-size: 16px; color: var(--ink); margin-bottom: 8px; }
+
+  /* --- 리포트 생성 --- */
+  .template-list { display: grid; gap: 10px; margin-top: 16px; }
+  .template-card { display: flex; align-items: start; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; }
+  .template-card.is-selected { border-color: var(--blue); background: var(--blue-soft); }
+  .template-card input { margin-top: 3px; }
+  .template-name { font-size: 14px; font-weight: 700; }
+  .template-desc { margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+  .date-row { display: flex; gap: 12px; margin-top: 20px; }
+  .date-field { display: grid; gap: 6px; }
+  .date-field label { font-size: 12px; font-weight: 700; color: var(--muted); }
+  .date-field input { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px; }
+
+  .generate-button { margin-top: 20px; display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 9px; padding: 11px 20px; background: var(--blue); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .generate-button:hover:not(:disabled) { background: var(--blue-dark); }
+  .generate-button:disabled { opacity: .6; cursor: progress; }
+
+  .report-status { margin-top: 16px; padding: 12px 14px; border-radius: 10px; font-size: 13px; display: none; }
+  .report-status.is-visible { display: block; }
+  .report-status.status-loading { background: var(--blue-soft); color: var(--blue-dark); }
+  .report-status.status-success { background: #dcfce7; color: #166534; }
+  .report-status.status-error { background: var(--danger-bg); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <span>역할:</span>
+  <button type="button" data-role="admin" class="active">admin</button>
+  <button type="button" data-role="finance">finance</button>
+  <button type="button" data-role="hr">hr</button>
+  <span style="margin-left:14px">탭:</span>
+  <button type="button" data-tab="dashboard" class="tab-demo active">대시보드</button>
+  <button type="button" data-tab="report" class="tab-demo">리포트 생성</button>
+  <span style="margin-left:14px">리포트 상태:</span>
+  <button type="button" data-report="idle">기본</button>
+  <button type="button" data-report="loading">생성 중</button>
+  <button type="button" data-report="success">성공</button>
+  <button type="button" data-report="error403">403</button>
+  <button type="button" data-report="error422">422(근거부족)</button>
+</div>
+
+<header class="top-header">
+  <div class="top-brand">
+    <span class="top-brand-mark">◐</span>
+    <h1>사내 지식 챗봇</h1>
+  </div>
+  <nav class="top-tabs" id="top-tabs">
+    <a class="top-tab" data-tab="chat">채팅</a>
+    <a class="top-tab" data-tab="dashboard" id="dashboard-tab-link">대시보드</a>
+    <a class="top-tab" data-tab="report" id="report-tab-link">리포트 생성</a>
+  </nav>
+  <div class="top-user"><span id="current-user">Charlie (admin)</span><button type="button">로그아웃</button></div>
+</header>
+
+<div class="page-body" id="page-body"></div>
+
+<script>
+  const DASHBOARD_ROLES = ['admin', 'finance'];
+  let currentRole = 'admin';
+  let currentTab = 'dashboard';
+  let reportState = 'idle';
+
+  // 실제 GET /api/anomalies 응답 형태 그대로 (더미 값)
+  const ANOMALIES = [
+    { domain: 'sales', type: 'amount_outlier', entity: '㈜대한물산', amount: 124500000, detail: 'SO-20260815 (2026-08-15)', detected_at: '2026-08-26T01:00:00Z' },
+    { domain: 'sales', type: 'overdue', entity: '㈜한빛유통', amount: 42800000, detail: '5건 연체', detected_at: '2026-08-26T01:00:00Z' },
+    { domain: 'sales', type: 'spike', entity: '㈜서진테크', amount: 38200000, detail: '최근30일 38200000 vs 6개월평균 11400000', detected_at: '2026-08-26T01:00:00Z' },
+    { domain: 'purchase', type: 'amount_outlier', entity: '글로벌소재', amount: 68000000, detail: 'PO-20260812 (2026-08-12)', detected_at: '2026-08-26T01:00:00Z' },
+    { domain: 'purchase', type: 'overdue', entity: '한성부품', amount: 19500000, detail: '3건 연체', detected_at: '2026-08-26T01:00:00Z' },
+  ];
+
+  const TYPE_LABEL = { amount_outlier: '금액 이상치', overdue: '연체 과다', spike: '거래 급증' };
+  const DOMAIN_LABEL = { sales: '매출', purchase: '구매' };
+
+  const TEMPLATES = [
+    { id: 'sales_monthly', name: '월간 매출 리포트', description: '매출 추이·고객별 순위·미수금 현황을 한 문서로 묶은 판매 리포트.' },
+  ];
+
+  const REPORT_MESSAGES = {
+    loading: { cls: 'status-loading', text: '리포트를 생성하는 중입니다…' },
+    success: { cls: 'status-success', text: '리포트 생성이 완료되어 다운로드를 시작합니다.' },
+    error403: { cls: 'status-error', text: '요청한 데이터베이스에 접근할 권한이 없습니다.' },
+    error422: { cls: 'status-error', text: '리포트를 만들기에 근거가 부족합니다.' },
+  };
+
+  function formatAmount(n) { return n.toLocaleString() + ' KRW'; }
+
+  function renderTabs() {
+    document.querySelectorAll('.top-tab').forEach(tab => {
+      const restricted = tab.dataset.tab === 'dashboard' || tab.dataset.tab === 'report';
+      tab.hidden = restricted && !DASHBOARD_ROLES.includes(currentRole);
+      tab.classList.toggle('is-active', tab.dataset.tab === currentTab);
+    });
+    document.getElementById('current-user').textContent = `Charlie (${currentRole})`;
+  }
+
+  function anomalyCardHtml(a) {
+    return `
+    <div class="anomaly-card">
+      <div class="anomaly-head">
+        <span class="anomaly-entity">${a.entity}</span>
+        <span class="anomaly-type">${TYPE_LABEL[a.type]}</span>
+      </div>
+      <div class="anomaly-amount">${formatAmount(a.amount)}</div>
+      <div class="anomaly-detail">${a.detail}</div>
+      <div class="anomaly-time">감지 시각 ${new Date(a.detected_at).toLocaleString('ko-KR')}</div>
+    </div>`;
+  }
+
+  function renderDashboard() {
+    if (!DASHBOARD_ROLES.includes(currentRole)) {
+      return `<div class="dashboard-empty-role"><h2>대시보드에 접근할 수 없습니다</h2><p>이상탐지 데이터는 매출·구매 접근 권한이 있는 계정만 볼 수 있습니다.</p></div>`;
+    }
+    const salesRows = ANOMALIES.filter(a => a.domain === 'sales');
+    const purchaseRows = ANOMALIES.filter(a => a.domain === 'purchase');
+    const section = (label, rows) => `
+      <section class="domain-section">
+        <h3 class="domain-title">${label} <span class="badge-count">${rows.length}</span></h3>
+        ${rows.length
+          ? `<div class="anomaly-grid">${rows.map(anomalyCardHtml).join('')}</div>`
+          : `<div class="empty-note">현재 감지된 이상 신호가 없습니다.</div>`}
+      </section>`;
+    return `
+    <div class="page">
+      <h2 class="page-title">이상탐지 대시보드</h2>
+      <p class="page-sub">고정 규칙(금액 이상치·연체 과다·거래 급증)으로 매출·구매 데이터를 점검합니다. 매 조회마다 새로 계산됩니다.</p>
+      ${section('매출', salesRows)}
+      ${section('구매', purchaseRows)}
+    </div>`;
+  }
+
+  function renderReport() {
+    if (!DASHBOARD_ROLES.includes(currentRole)) {
+      return `<div class="dashboard-empty-role"><h2>리포트 생성에 접근할 수 없습니다</h2><p>리포트는 매출·구매 접근 권한이 있는 계정만 만들 수 있습니다.</p></div>`;
+    }
+    const templatesHtml = TEMPLATES.map((t, i) => `
+      <label class="template-card${i === 0 ? ' is-selected' : ''}">
+        <input type="radio" name="template" value="${t.id}" ${i === 0 ? 'checked' : ''}>
+        <div>
+          <div class="template-name">${t.name}</div>
+          <div class="template-desc">${t.description}</div>
+        </div>
+      </label>`).join('');
+    const status = REPORT_MESSAGES[reportState];
+    return `
+    <div class="page">
+      <h2 class="page-title">리포트 생성</h2>
+      <p class="page-sub">템플릿과 조회 기간을 선택하면 .docx 문서로 만들어 바로 다운로드합니다.</p>
+      <div class="template-list">${templatesHtml}</div>
+      <div class="date-row">
+        <div class="date-field"><label for="start-date">시작일</label><input type="date" id="start-date" value="2026-01-01"></div>
+        <div class="date-field"><label for="end-date">종료일</label><input type="date" id="end-date" value="2026-08-25"></div>
+      </div>
+      <button type="button" class="generate-button" ${reportState === 'loading' ? 'disabled' : ''}>${reportState === 'loading' ? '생성 중…' : '리포트 생성'}</button>
+      <div class="report-status ${status ? status.cls + ' is-visible' : ''}">${status ? status.text : ''}</div>
+    </div>`;
+  }
+
+  function renderPage() {
+    const body = document.getElementById('page-body');
+    if (currentTab === 'dashboard') body.innerHTML = renderDashboard();
+    else if (currentTab === 'report') body.innerHTML = renderReport();
+    else body.innerHTML = `<div class="page"><p class="page-sub">(채팅 화면 — 기존 그대로)</p></div>`;
+  }
+
+  document.querySelectorAll('.demo-bar [data-role]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.demo-bar [data-role]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentRole = btn.dataset.role;
+      if (!DASHBOARD_ROLES.includes(currentRole)) currentTab = 'chat';
+      renderTabs(); renderPage();
+    });
+  });
+  document.querySelectorAll('.tab-demo').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-demo').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTab = btn.dataset.tab;
+      renderTabs(); renderPage();
+    });
+  });
+  document.querySelectorAll('.demo-bar [data-report]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      reportState = btn.dataset.report;
+      renderPage();
+    });
+  });
+
+  renderTabs();
+  renderPage();
+</script>
+</body>
+</html>

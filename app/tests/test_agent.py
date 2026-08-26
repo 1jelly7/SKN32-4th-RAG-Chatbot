@@ -15,8 +15,8 @@ from app.agent.graph import build_graph
 from app.agent.llm import FakeLLMPort
 from app.agent.nodes import (
     _build_sources,
-    _build_tables,
     answer_synthesis,
+    build_tables,
     database_retrieval,
     route_data_domain,
     route_question,
@@ -39,6 +39,22 @@ def _tool_success(
         "data": data,
         "sources": sources or [],
         "metadata": metadata or {},
+    }
+
+
+# 추가: purchase/sales envelope의 data는 이제 rows 평면 리스트가 아니라 쿼리 블록
+# ([{label, generated_sql, rows, row_count, metadata}, ...]) 리스트다(5단계,
+# app/schemas/mcp.py의 DatabaseQueryBlock). 이 파일의 query_purchase/query_sales
+# fake 응답은 전부 이 헬퍼로 블록을 감싼다.
+def _database_block(
+    rows: list[dict[str, Any]], generated_sql: str = "SELECT 1", label: str = ""
+) -> dict[str, Any]:
+    return {
+        "label": label,
+        "generated_sql": generated_sql,
+        "rows": rows,
+        "row_count": len(rows),
+        "metadata": {},
     }
 
 
@@ -132,8 +148,8 @@ async def test_database_retrieval_preserves_database_origin_and_domain() -> None
     port = FakeMCPPort(
         {
             "search_documents": _tool_success("document", []),
-            "query_purchase": _tool_success("purchase", [{"amount": 100}]),
-            "query_sales": _tool_success("sales", [{"revenue": 200}]),
+            "query_purchase": _tool_success("purchase", [_database_block([{"amount": 100}])]),
+            "query_sales": _tool_success("sales", [_database_block([{"revenue": 200}])]),
         }
     )
     mcp_client = MCPClient(port)
@@ -148,6 +164,45 @@ async def test_database_retrieval_preserves_database_origin_and_domain() -> None
         "sales",
     ]
     assert [call.tool_name for call in port.calls] == ["query_purchase", "query_sales"]
+
+
+# 추가(8단계): 복합질문(하나의 도메인에 하위 SELECT 여러 개)이 database_retrieval을
+# 거쳐도 항목마다 label이 붙은 evidence로 펼쳐지고, build_tables()가 항목 수만큼
+# 표를 만드는지 확인한다.
+@pytest.mark.asyncio
+async def test_database_retrieval_preserves_labels_for_compound_question() -> None:
+    port = FakeMCPPort(
+        {
+            "search_documents": _tool_success("document", []),
+            "query_sales": _tool_success(
+                "sales",
+                [
+                    _database_block(
+                        [{"total": 1000}],
+                        "SELECT SUM(order_amount) FROM v_sales_order",
+                        "올해 매출 합계",
+                    ),
+                    _database_block(
+                        [{"customer_name": "Acme"}],
+                        "SELECT customer_name FROM v_sales_order",
+                        "매출 최고 기업",
+                    ),
+                ],
+            ),
+        }
+    )
+    mcp_client = MCPClient(port)
+
+    result = await database_retrieval(
+        {"question": "올해 매출과 매출 최고 기업 알려줘", "data_domain": "sales"},
+        mcp_client,
+    )
+
+    evidence = result["database_evidence"]
+    assert len(evidence) == 2
+    assert {item["label"] for item in evidence} == {"올해 매출 합계", "매출 최고 기업"}
+    assert all(item["domain"] == "sales" for item in evidence)
+    assert len(build_tables(evidence)) == 2
 
 
 # ------------------------------------------------------------------
@@ -340,7 +395,7 @@ async def test_database_retrieval_keeps_sales_evidence_when_purchase_fails() -> 
         {
             "search_documents": _tool_success("document", []),
             "query_purchase": RuntimeError("구매 조회 실패"),
-            "query_sales": _tool_success("sales", [{"revenue": 200}]),
+            "query_sales": _tool_success("sales", [_database_block([{"revenue": 200}])]),
         }
     )
     mcp_client = MCPClient(port)
@@ -381,8 +436,8 @@ async def test_graph_calls_only_allowed_mcp_tools_for_each_route(
                 [{"content": "휴가 규정", "score": 0.9}],
                 [{"document_id": "policy-1", "title": "휴가 규정"}],
             ),
-            "query_purchase": _tool_success("purchase", [{"amount": 100}]),
-            "query_sales": _tool_success("sales", [{"revenue": 200}]),
+            "query_purchase": _tool_success("purchase", [_database_block([{"amount": 100}])]),
+            "query_sales": _tool_success("sales", [_database_block([{"revenue": 200}])]),
         }
     )
 
@@ -414,7 +469,7 @@ async def test_graph_both_fans_in_document_and_partial_database_evidence(
                 "message": "실패",
                 "error_code": "QUERY_ERROR",
             },
-            "query_sales": _tool_success("sales", [{"revenue": 200}]),
+            "query_sales": _tool_success("sales", [_database_block([{"revenue": 200}])]),
         }
     )
 
@@ -431,6 +486,75 @@ async def test_graph_both_fans_in_document_and_partial_database_evidence(
     assert result["evidence_status"] == "PARTIALLY_SUPPORTED"
 
 
+# 추가(8단계): BOTH 라우트(문서+구매+판매)에서 구매·판매 양쪽 모두 복합질문이면
+# evidence가 최대 6개까지 늘어날 수 있다(6단계에서 확인한 조합). 전체 그래프가
+# 이 조합에서도 깨지지 않고 항목 수만큼 표를 만드는지 끝까지 실행해 확인한다.
+@pytest.mark.asyncio
+async def test_graph_both_route_with_compound_questions_on_both_domains(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_complete(
+        prompt: str, context: list[dict[str, Any]], question: str, llm: object = None
+    ) -> str:
+        return "합쳐진 답변"
+
+    monkeypatch.setattr("app.agent.nodes.complete", fake_complete)
+    port = FakeMCPPort(
+        {
+            "search_documents": _tool_success(
+                "document",
+                [{"content": "휴가 규정", "score": 0.9}],
+                [{"document_id": "policy-1", "title": "휴가 규정"}],
+            ),
+            "query_purchase": _tool_success(
+                "purchase",
+                [
+                    _database_block(
+                        [{"total": 500}],
+                        "SELECT SUM(po_amount) FROM v_purchase_order",
+                        "올해 구매액 합계",
+                    ),
+                    _database_block(
+                        [{"vendor_name": "Acme"}],
+                        "SELECT vendor_name FROM v_purchase_order",
+                        "구매액 최대 공급업체",
+                    ),
+                ],
+            ),
+            "query_sales": _tool_success(
+                "sales",
+                [
+                    _database_block(
+                        [{"total": 1000}],
+                        "SELECT SUM(order_amount) FROM v_sales_order",
+                        "올해 매출 합계",
+                    ),
+                    _database_block(
+                        [{"customer_name": "Foo"}],
+                        "SELECT customer_name FROM v_sales_order",
+                        "매출 최고 기업",
+                    ),
+                ],
+            ),
+        }
+    )
+
+    result = await build_graph(MCPClient(port)).ainvoke(
+        {"question": "휴가 규정과 구매 및 판매 현황"}
+    )
+
+    assert len(result["document_evidence"]) == 1
+    assert len(result["database_evidence"]) == 4
+    assert {item["label"] for item in result["database_evidence"]} == {
+        "올해 구매액 합계",
+        "구매액 최대 공급업체",
+        "올해 매출 합계",
+        "매출 최고 기업",
+    }
+    assert len(result["tables"]) == 4
+    assert result["evidence_status"] == "SUPPORTED"
+
+
 @pytest.mark.asyncio
 async def test_graph_retries_insufficient_evidence_exactly_once() -> None:
     """품질 미달 근거가 무한 조회 없이 한 번만 보강되게 한다."""
@@ -441,8 +565,8 @@ async def test_graph_retries_insufficient_evidence_exactly_once() -> None:
                 [{"content": "관련성이 낮은 문서", "score": 0.1}],
                 [{"document_id": "policy-low", "title": "낮은 관련성"}],
             ),
-            "query_purchase": _tool_success("purchase", [{"amount": 100}]),
-            "query_sales": _tool_success("sales", [{"revenue": 200}]),
+            "query_purchase": _tool_success("purchase", [_database_block([{"amount": 100}])]),
+            "query_sales": _tool_success("sales", [_database_block([{"revenue": 200}])]),
         }
     )
 
@@ -534,7 +658,7 @@ def test_source_and_table_serialization_preserves_safe_metadata_only() -> None:
     ]
 
     sources = _build_sources(evidence)
-    tables = _build_tables(evidence)
+    tables = build_tables(evidence)
 
     assert sources[0]["pages"] == [3]
     assert sources[0]["chunks"] == [{"page": 3, "text": "내용"}]
@@ -649,7 +773,7 @@ async def test_graph_sales_route_uses_in_process_data_mcp_and_mysql(
 # tables (표/차트 데이터 변환) - 순수 함수, 외부 의존성 없음
 # ------------------------------------------------------------------
 def test_build_tables_extracts_columns_and_rows():
-    from app.agent.nodes import _build_tables
+    from app.agent.nodes import build_tables
 
     evidence = [
         {
@@ -662,7 +786,7 @@ def test_build_tables_extracts_columns_and_rows():
             ],
         }
     ]
-    tables = _build_tables(evidence)
+    tables = build_tables(evidence)
 
     assert len(tables) == 1
     assert tables[0]["columns"] == ["vendor_name", "total"]
@@ -672,7 +796,7 @@ def test_build_tables_extracts_columns_and_rows():
 def test_build_tables_converts_decimal_to_float():
     from decimal import Decimal
 
-    from app.agent.nodes import _build_tables
+    from app.agent.nodes import build_tables
 
     evidence = [
         {
@@ -682,14 +806,14 @@ def test_build_tables_converts_decimal_to_float():
             "rows": [{"amount": Decimal("123.45")}],
         }
     ]
-    tables = _build_tables(evidence)
+    tables = build_tables(evidence)
 
     assert tables[0]["rows"][0][0] == 123.45
     assert isinstance(tables[0]["rows"][0][0], float)
 
 
 def test_build_tables_marks_chartable_when_label_and_value_present():
-    from app.agent.nodes import _build_tables
+    from app.agent.nodes import build_tables
 
     evidence = [
         {
@@ -702,7 +826,7 @@ def test_build_tables_marks_chartable_when_label_and_value_present():
             ],
         }
     ]
-    tables = _build_tables(evidence)
+    tables = build_tables(evidence)
 
     assert tables[0]["chartable"] is True
     assert tables[0]["label_column"] == "customer"
@@ -710,7 +834,7 @@ def test_build_tables_marks_chartable_when_label_and_value_present():
 
 
 def test_build_tables_prefers_last_numeric_column_as_value():
-    from app.agent.nodes import _build_tables
+    from app.agent.nodes import build_tables
 
     evidence = [
         {
@@ -720,13 +844,13 @@ def test_build_tables_prefers_last_numeric_column_as_value():
             "rows": [{"vendor": "A", "po_count": 3, "total_spend": 50000}],
         }
     ]
-    tables = _build_tables(evidence)
+    tables = build_tables(evidence)
 
     assert tables[0]["value_column"] == "total_spend"
 
 
 def test_build_tables_not_chartable_without_label_column():
-    from app.agent.nodes import _build_tables
+    from app.agent.nodes import build_tables
 
     evidence = [
         {
@@ -736,26 +860,26 @@ def test_build_tables_not_chartable_without_label_column():
             "rows": [{"count": 5, "total": 10}],
         }
     ]
-    tables = _build_tables(evidence)
+    tables = build_tables(evidence)
 
     assert tables[0]["chartable"] is False
 
 
 def test_build_tables_skips_document_evidence():
-    from app.agent.nodes import _build_tables
+    from app.agent.nodes import build_tables
 
     evidence = [{"type": "document", "content": "문서 내용"}]
-    tables = _build_tables(evidence)
+    tables = build_tables(evidence)
     assert tables == []
 
 
 def test_build_tables_skips_empty_rows():
-    from app.agent.nodes import _build_tables
+    from app.agent.nodes import build_tables
 
     evidence = [
         {"type": "database", "domain": "purchase", "generated_sql": "x", "rows": []}
     ]
-    tables = _build_tables(evidence)
+    tables = build_tables(evidence)
     assert tables == []
 
 
@@ -1107,8 +1231,8 @@ async def test_empty_internal_search_is_not_reported_as_mcp_failure() -> None:
     port = FakeMCPPort(
         {
             "search_documents": _tool_success("document", []),
-            "query_purchase": _tool_success("purchase", [{"amount": 100}]),
-            "query_sales": _tool_success("sales", [{"revenue": 200}]),
+            "query_purchase": _tool_success("purchase", [_database_block([{"amount": 100}])]),
+            "query_sales": _tool_success("sales", [_database_block([{"revenue": 200}])]),
         }
     )
 

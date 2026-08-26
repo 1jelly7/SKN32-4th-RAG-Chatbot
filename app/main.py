@@ -14,14 +14,18 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI, Request, Response
 
+from app.api.anomalies import router as anomalies_router  # TEMP: 1단계 삭제 체크리스트 참고
 from app.api.chat import router as chat_router
 from app.api.documents import router as documents_router
+from app.api.reports import router as reports_router
 from app.api.system import router as system_router
 from app.agent.graph import build_graph
 from app.agent.prompts import PROMPT_VERSION
 from app.core.dependencies import AppDependencies
 from app.logging.context import reset_request_id, set_request_id
 from app.logging.performance import elapsed_ms, server_timing_header, start_timer
+
+from app.api.dashboard import router as dashboard_router
 
 CACHE_KEY_CONTEXT = {
     "document_index_version": "unknown",
@@ -138,9 +142,12 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
     application.state.graph = build_graph(app_dependencies.mcp, app_dependencies.llm)
     application.state.cache_key_context = dict(CACHE_KEY_CONTEXT)
 
+    application.include_router(anomalies_router, prefix="/api")  # TEMP
     application.include_router(chat_router, prefix="/api")
     application.include_router(documents_router, prefix="/api")
+    application.include_router(reports_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
+    application.include_router(dashboard_router, prefix="/api")
 
     return application
 

@@ -449,7 +449,7 @@ async def answer_synthesis(
 
     state["answer"] = answer
     state["sources"] = _build_sources(evidence)
-    state["tables"] = _build_tables(evidence)
+    state["tables"] = build_tables(evidence)
     return state
 
 
@@ -462,7 +462,7 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
-def _build_tables(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_tables(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """database 타입 근거를 프론트엔드가 표/차트로 그릴 수 있는 형태로 변환합니다."""
     tables: list[dict[str, Any]] = []
 

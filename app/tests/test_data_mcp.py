@@ -42,19 +42,63 @@ def _success(
     }
 
 
+# 추가: purchase/sales envelope의 data는 이제 rows 평면 리스트가 아니라 쿼리 블록
+# ([{label, generated_sql, rows, row_count, metadata}, ...]) 리스트다(5단계,
+# app/schemas/mcp.py의 DatabaseQueryBlock). document 도메인은 그대로 content 청크
+# 리스트를 쓰므로 _success()는 그대로 두고, purchase/sales 전용 헬퍼만 추가한다.
+def _database_block(
+    rows: list[dict[str, Any]],
+    generated_sql: str = "SELECT 1",
+    label: str = "",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "label": label,
+        "generated_sql": generated_sql,
+        "rows": rows,
+        "row_count": len(rows),
+        "metadata": metadata or {},
+    }
+
+
+# old:
+# def test_data_query_normalizes_purchase_and_sales_and_records_calls() -> None:
+#     port = FakeMCPPort(
+#         {
+#             "search_documents": _success("document", []),
+#             "query_purchase": _success(
+#                 "purchase",
+#                 [{"vendor": "A사", "amount": 100}],
+#                 metadata={"generated_sql": "SELECT amount"},
+#             ),
+#             "query_sales": _success(
+#                 "sales",
+#                 [{"customer": "B사", "revenue": 200}],
+#                 metadata={"generated_sql": "SELECT revenue"},
+#             ),
+#         }
+#     )
+#     client = MCPClient(port)
+#
+#     evidence = asyncio.run(client.data_query("both", "구매와 판매 현황"))
+#
+#     assert [item["domain"] for item in evidence] == ["purchase", "sales"]
+#     assert [call.tool_name for call in port.calls] == ["query_purchase", "query_sales"]
+#     assert port.calls[0].payload == {"question": "구매와 판매 현황"}
+#
+# 변경 이유: data가 rows 평면 리스트가 아니라 쿼리 블록 리스트로 바뀌어서,
+# _database_block() 헬퍼로 블록을 만들어야 한다.
 def test_data_query_normalizes_purchase_and_sales_and_records_calls() -> None:
     port = FakeMCPPort(
         {
             "search_documents": _success("document", []),
             "query_purchase": _success(
                 "purchase",
-                [{"vendor": "A사", "amount": 100}],
-                metadata={"generated_sql": "SELECT amount"},
+                [_database_block([{"vendor": "A사", "amount": 100}], "SELECT amount")],
             ),
             "query_sales": _success(
                 "sales",
-                [{"customer": "B사", "revenue": 200}],
-                metadata={"generated_sql": "SELECT revenue"},
+                [_database_block([{"customer": "B사", "revenue": 200}], "SELECT revenue")],
             ),
         }
     )
@@ -65,6 +109,50 @@ def test_data_query_normalizes_purchase_and_sales_and_records_calls() -> None:
     assert [item["domain"] for item in evidence] == ["purchase", "sales"]
     assert [call.tool_name for call in port.calls] == ["query_purchase", "query_sales"]
     assert port.calls[0].payload == {"question": "구매와 판매 현황"}
+
+
+def test_data_query_expands_multi_block_envelope_and_preserves_labels() -> None:
+    """복합질문 응답(블록 2개)이 evidence 2개로 펼쳐지고 label이 보존돼야 한다."""
+    port = FakeMCPPort(
+        {
+            "search_documents": _success("document", []),
+            "query_purchase": _success(
+                "purchase",
+                [
+                    _database_block(
+                        [{"total": 500}], "SELECT SUM(po_amount)", "올해 구매액 합계"
+                    ),
+                    _database_block(
+                        [{"vendor": "Acme"}],
+                        "SELECT vendor_name",
+                        "구매액 최대 공급업체",
+                    ),
+                ],
+            ),
+        }
+    )
+
+    evidence = asyncio.run(MCPClient(port).purchase_query("올해 구매액과 최대 공급업체"))
+
+    assert len(evidence) == 2
+    by_label = {item["label"]: item for item in evidence}
+    assert by_label["올해 구매액 합계"]["rows"] == [{"total": 500}]
+    assert by_label["구매액 최대 공급업체"]["rows"] == [{"vendor": "Acme"}]
+    for item in evidence:
+        assert item["type"] == "database"
+        assert item["domain"] == "purchase"
+
+
+def test_purchase_query_rejects_malformed_query_block() -> None:
+    """블록에 generated_sql이 빠지면 MCPMalformedPayloadError로 거부해야 한다."""
+    port = FakeMCPPort(
+        {
+            "query_purchase": _success("purchase", [{"label": "이상함", "rows": []}]),
+        }
+    )
+
+    with pytest.raises(MCPMalformedPayloadError):
+        asyncio.run(MCPClient(port).purchase_query("구매 현황"))
 
 
 def test_document_search_normalizes_data_and_sources() -> None:
@@ -167,9 +255,27 @@ def test_purchase_query_distinguishes_mcp_errors(
         asyncio.run(MCPClient(port, timeout_seconds=0.01).purchase_query("구매 현황"))
 
 
+# old:
+# def test_fake_mcp_returns_defensive_response_copy() -> None:
+#     """fake 결과 변형이 production fixture 의미를 오염시키지 않게 한다."""
+#     response = _success("purchase", [{"amount": 100}])
+#     port = FakeMCPPort(
+#         {
+#             "search_documents": _success("document", []),
+#             "query_purchase": response,
+#             "query_sales": _success("sales", []),
+#         }
+#     )
+#
+#     evidence = asyncio.run(MCPClient(port).purchase_query("구매 현황"))
+#     evidence[0]["rows"][0]["amount"] = 999
+#
+#     assert response["data"][0]["amount"] == 100
+#
+# 변경 이유: data[0]이 이제 rows 자체가 아니라 쿼리 블록이라, rows는 블록 안에 있다.
 def test_fake_mcp_returns_defensive_response_copy() -> None:
     """fake 결과 변형이 production fixture 의미를 오염시키지 않게 한다."""
-    response = _success("purchase", [{"amount": 100}])
+    response = _success("purchase", [_database_block([{"amount": 100}])])
     port = FakeMCPPort(
         {
             "search_documents": _success("document", []),
@@ -181,9 +287,37 @@ def test_fake_mcp_returns_defensive_response_copy() -> None:
     evidence = asyncio.run(MCPClient(port).purchase_query("구매 현황"))
     evidence[0]["rows"][0]["amount"] = 999
 
-    assert response["data"][0]["amount"] == 100
+    assert response["data"][0]["rows"][0]["amount"] == 100
 
 
+# old:
+# def test_data_tool_preserves_domain_metadata() -> None:
+#     async def query(_: str) -> list[dict[str, Any]]:
+#         return [
+#             {
+#                 "domain": "sales",
+#                 "rows": [{"order_month": "2026-01", "total_sales": 1200}],
+#                 "generated_sql": "SELECT total_sales",
+#                 "elapsed_ms": 1.2,
+#                 "metadata": {
+#                     "chart_hint": "line",
+#                     "currency": "JOD",
+#                     "views_used": ["v_sales_order"],
+#                 },
+#             }
+#         ]
+#
+#     envelope = asyncio.run(
+#         _execute_query("sales", "월별 매출", query, TEST_ADMIN_CONTEXT)
+#     )
+#
+#     assert envelope["metadata"]["chart_hint"] == "line"
+#     assert envelope["metadata"]["currency"] == "JOD"
+#     assert envelope["metadata"]["row_count"] == 1
+#
+# 변경 이유: 항목별 metadata(chart_hint, currency, row_count 등)가 이제 envelope
+# 최상단이 아니라 각 쿼리 블록(envelope["data"][i]["metadata"])에 담긴다 —
+# 항목마다 다른 뷰·지표를 쓸 수 있어 하나로 합칠 수 없기 때문이다(5단계).
 def test_data_tool_preserves_domain_metadata() -> None:
     async def query(_: str) -> list[dict[str, Any]]:
         return [
@@ -204,9 +338,10 @@ def test_data_tool_preserves_domain_metadata() -> None:
         _execute_query("sales", "월별 매출", query, TEST_ADMIN_CONTEXT)
     )
 
-    assert envelope["metadata"]["chart_hint"] == "line"
-    assert envelope["metadata"]["currency"] == "JOD"
-    assert envelope["metadata"]["row_count"] == 1
+    block = envelope["data"][0]
+    assert block["metadata"]["chart_hint"] == "line"
+    assert block["metadata"]["currency"] == "JOD"
+    assert block["row_count"] == 1
 
 
 def test_data_tool_preserves_specific_empty_result_message() -> None:
@@ -288,10 +423,21 @@ def test_data_server_wraps_purchase_rows_in_common_envelope(
     monkeypatch.setattr(server, "run_purchase_query", fake_query)
     result = asyncio.run(server.execute_data_tool("query_purchase", "구매 현황"))
 
+    # old:
+    # assert result["data"] == [{"amount": 100}]
+    # assert result["metadata"]["generated_sql"] == "SELECT 1"
+    # 변경 이유: data가 이제 rows 평면 리스트가 아니라 쿼리 블록 리스트다.
     assert result["status"] == "success"
     assert result["domain"] == "purchase"
-    assert result["data"] == [{"amount": 100}]
-    assert result["metadata"]["generated_sql"] == "SELECT 1"
+    assert result["data"] == [
+        {
+            "label": "",
+            "generated_sql": "SELECT 1",
+            "rows": [{"amount": 100}],
+            "row_count": 1,
+            "metadata": {"elapsed_ms": 1.0},
+        }
+    ]
 
 
 def test_default_data_tool_timeout_allows_sales_text2sql_pipeline() -> None:

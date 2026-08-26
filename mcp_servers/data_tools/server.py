@@ -32,6 +32,79 @@ def _error_envelope(domain: str, code: str, message: str) -> dict[str, Any]:
     }
 
 
+# old:
+# async def _execute_query(
+#     domain: str,
+#     question: str,
+#     query: DomainQuery,
+#     user_context: dict[str, object] | None,
+# ) -> dict[str, Any]:
+#     """도메인 service 결과를 공통 success/error envelope로 변환한다."""
+#     if not question or not question.strip():
+#         return _error_envelope(domain, "INVALID_INPUT", "질문이 비어 있습니다.")
+#     try:
+#         require_database_access(user_context, f"{domain}_db")
+#         evidence = await query(question)
+#     except PermissionError:
+#         return _error_envelope(
+#             domain, "FORBIDDEN", "요청한 데이터베이스에 접근할 권한이 없습니다."
+#         )
+#     except Exception:  # noqa: BLE001 - provider 상세를 외부 envelope에 노출하지 않는다.
+#         logger.exception(
+#             "data_tool_query_failed domain=%s question_length=%d", domain, len(question)
+#         )
+#         return _error_envelope(
+#             domain, "QUERY_ERROR", "업무 데이터 조회에 실패했습니다."
+#         )
+#
+#     if len(evidence) != 1 or evidence[0].get("domain") != domain:
+#         return _error_envelope(
+#             domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다."
+#         )
+#
+#     result = evidence[0]
+#     rows = result.get("rows")
+#     generated_sql = result.get("generated_sql")
+#     if not isinstance(rows, list) or not isinstance(generated_sql, str):
+#         return _error_envelope(
+#             domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다."
+#         )
+#     metadata = result.get("metadata")
+#     if not isinstance(metadata, dict):
+#         metadata = {}
+#     if not rows:
+#         message = result.get("message") or metadata.get("message")
+#         if not isinstance(message, str) or not message.strip():
+#             message = "해당 조건의 데이터가 없습니다. 보유 기간과 조건을 확인해 다시 질문해 주세요."
+#         response = _error_envelope(domain, "NO_RESULT", message)
+#         response["metadata"] = metadata
+#         return response
+#
+#     response_metadata = dict(metadata)
+#     response_metadata.update(
+#         {
+#             "generated_sql": generated_sql,
+#             "row_count": len(rows),
+#             "elapsed_ms": result.get("elapsed_ms"),
+#         }
+#     )
+#     return {
+#         "status": "success",
+#         "domain": domain,
+#         "message": None,
+#         "data": rows,
+#         "sources": [],
+#         "metadata": response_metadata,
+#     }
+#
+# 변경 이유: query_purchase()/query_sales()가 이제 복합질문에서 evidence를
+# 1~MAX_SUB_QUERIES(3)개까지 반환한다. "정확히 1개" 강제를 "1개 이상, 전부 같은
+# domain"으로 완화하고, data를 rows 평면 리스트가 아니라 항목별 쿼리 블록
+# ([{label, generated_sql, rows, row_count, metadata}, ...]) 리스트로 바꿨다 —
+# 서로 다른 컬럼 구조의 표 여러 개를 하나의 평면 리스트에 합칠 수 없기 때문이다.
+# 항목이 전부 빈 결과일 때만 기존과 동일하게 NO_RESULT로 처리하고, 일부만 비어 있으면
+# success로 두고 그 항목의 블록에 message를 남긴다(하위 계층에서 빈 rows는
+# _build_tables가 걸러낸다).
 async def _execute_query(
     domain: str,
     question: str,
@@ -56,44 +129,55 @@ async def _execute_query(
             domain, "QUERY_ERROR", "업무 데이터 조회에 실패했습니다."
         )
 
-    if len(evidence) != 1 or evidence[0].get("domain") != domain:
+    if not evidence or any(item.get("domain") != domain for item in evidence):
         return _error_envelope(
             domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다."
         )
 
-    result = evidence[0]
-    rows = result.get("rows")
-    generated_sql = result.get("generated_sql")
-    if not isinstance(rows, list) or not isinstance(generated_sql, str):
-        return _error_envelope(
-            domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다."
+    blocks: list[dict[str, Any]] = []
+    for result in evidence:
+        rows = result.get("rows")
+        generated_sql = result.get("generated_sql")
+        if not isinstance(rows, list) or not isinstance(generated_sql, str):
+            return _error_envelope(
+                domain, "INTERNAL_ERROR", "조회 결과 형식이 올바르지 않습니다."
+            )
+        metadata = result.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+        block_metadata = dict(metadata)
+        block_metadata["elapsed_ms"] = result.get("elapsed_ms")
+        if not rows:
+            message = result.get("message") or metadata.get("message")
+            if not isinstance(message, str) or not message.strip():
+                message = "해당 조건의 데이터가 없습니다. 보유 기간과 조건을 확인해 다시 질문해 주세요."
+            block_metadata["message"] = message
+        blocks.append(
+            {
+                "label": result.get("label", ""),
+                "generated_sql": generated_sql,
+                "rows": rows,
+                "row_count": len(rows),
+                "metadata": block_metadata,
+            }
         )
-    metadata = result.get("metadata")
-    if not isinstance(metadata, dict):
-        metadata = {}
-    if not rows:
-        message = result.get("message") or metadata.get("message")
-        if not isinstance(message, str) or not message.strip():
-            message = "해당 조건의 데이터가 없습니다. 보유 기간과 조건을 확인해 다시 질문해 주세요."
+
+    if not any(block["rows"] for block in blocks):
+        # 항목 전부가 빈 결과다 — 기존 단일 쿼리와 동일하게 NO_RESULT로 처리한다.
+        message = blocks[0]["metadata"].get(
+            "message", "해당 조건의 데이터가 없습니다. 보유 기간과 조건을 확인해 다시 질문해 주세요."
+        )
         response = _error_envelope(domain, "NO_RESULT", message)
-        response["metadata"] = metadata
+        response["metadata"] = {"blocks": blocks}
         return response
 
-    response_metadata = dict(metadata)
-    response_metadata.update(
-        {
-            "generated_sql": generated_sql,
-            "row_count": len(rows),
-            "elapsed_ms": result.get("elapsed_ms"),
-        }
-    )
     return {
         "status": "success",
         "domain": domain,
         "message": None,
-        "data": rows,
+        "data": blocks,
         "sources": [],
-        "metadata": response_metadata,
+        "metadata": {},
     }
 
 

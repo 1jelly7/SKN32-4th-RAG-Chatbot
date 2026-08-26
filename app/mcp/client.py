@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from app.agent.state import DataDomain
 from app.schemas.mcp import (
+    DatabaseQueryBlock,
     DocumentChunk,
     DocumentSource,
     MCPDomain,
@@ -429,23 +430,54 @@ def _parse_envelope(tool_name: ToolName, raw_response: object) -> ToolSuccessEnv
     raise MCPQueryError(tool_name, error.message)
 
 
+# old:
+# def _database_evidence(
+#     domain: MCPDomain, envelope: ToolSuccessEnvelope
+# ) -> list[dict[str, Any]]:
+#     """SQL을 변경하지 않고 Data MCP의 행과 metadata를 database evidence로 보존한다."""
+#     generated_sql = envelope.metadata.get("generated_sql", "")
+#     if not isinstance(generated_sql, str):
+#         raise MCPMalformedPayloadError(
+#             "query_purchase" if domain == "purchase" else "query_sales",
+#             "generated_sql 형식이 올바르지 않습니다.",
+#         )
+#     return [
+#         {
+#             "type": "database",
+#             "domain": domain,
+#             "generated_sql": generated_sql,
+#             "rows": envelope.data,
+#             "row_count": envelope.metadata.get("row_count", len(envelope.data)),
+#             "metadata": envelope.metadata,
+#         }
+#     ]
+#
+# 변경 이유: 복합질문 지원을 위해 mcp_servers/data_tools/server.py가 이제
+# envelope.data를 rows 평면 리스트가 아니라 쿼리 블록([{label, generated_sql, rows,
+# row_count, metadata}, ...]) 리스트로 채운다. 블록마다 독립된 database evidence로
+# 펼쳐서, 서로 다른 컬럼 구조를 가진 여러 표를 각각 온전히 보존한다.
 def _database_evidence(
     domain: MCPDomain, envelope: ToolSuccessEnvelope
 ) -> list[dict[str, Any]]:
-    """SQL을 변경하지 않고 Data MCP의 행과 metadata를 database evidence로 보존한다."""
-    generated_sql = envelope.metadata.get("generated_sql", "")
-    if not isinstance(generated_sql, str):
-        raise MCPMalformedPayloadError(
-            "query_purchase" if domain == "purchase" else "query_sales",
-            "generated_sql 형식이 올바르지 않습니다.",
+    """SQL을 변경하지 않고 Data MCP의 쿼리 블록들을 database evidence로 펼친다."""
+    tool_name = "query_purchase" if domain == "purchase" else "query_sales"
+    evidence: list[dict[str, Any]] = []
+    for raw_block in envelope.data:
+        try:
+            block = DatabaseQueryBlock.model_validate(raw_block)
+        except ValidationError as exc:
+            raise MCPMalformedPayloadError(
+                tool_name, "database 쿼리 블록 형식이 올바르지 않습니다."
+            ) from exc
+        evidence.append(
+            {
+                "type": "database",
+                "domain": domain,
+                "label": block.label,
+                "generated_sql": block.generated_sql,
+                "rows": block.rows,
+                "row_count": block.row_count,
+                "metadata": block.metadata,
+            }
         )
-    return [
-        {
-            "type": "database",
-            "domain": domain,
-            "generated_sql": generated_sql,
-            "rows": envelope.data,
-            "row_count": envelope.metadata.get("row_count", len(envelope.data)),
-            "metadata": envelope.metadata,
-        }
-    ]
+    return evidence

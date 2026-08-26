@@ -100,6 +100,84 @@ def test_generate_sql_raises_without_api_key(monkeypatch: pytest.MonkeyPatch) ->
 
 
 # ---------------------------------------------------------------------------
+# 1-1. 복합질문 응답 파싱 _extract_queries (외부 서비스 없음)
+# ---------------------------------------------------------------------------
+
+
+def test_extract_queries_returns_empty_list_for_no_sql() -> None:
+    assert text2sql_module._extract_queries("NO_SQL") == []
+    assert text2sql_module._extract_queries("  no_sql  ") == []
+
+
+def test_extract_queries_parses_json_array() -> None:
+    raw = json.dumps(
+        {
+            "queries": [
+                {
+                    "label": "올해 구매액 합계",
+                    "sql": "SELECT SUM(po_amount) AS total FROM v_purchase_order",
+                },
+                {
+                    "label": "구매액 최대 공급업체",
+                    "sql": "SELECT vendor_name FROM v_purchase_order ORDER BY po_amount DESC LIMIT 1",
+                },
+            ]
+        }
+    )
+    assert text2sql_module._extract_queries(raw) == [
+        {
+            "label": "올해 구매액 합계",
+            "sql": "SELECT SUM(po_amount) AS total FROM v_purchase_order",
+        },
+        {
+            "label": "구매액 최대 공급업체",
+            "sql": "SELECT vendor_name FROM v_purchase_order ORDER BY po_amount DESC LIMIT 1",
+        },
+    ]
+
+
+def test_extract_queries_truncates_to_max_sub_queries() -> None:
+    """5개를 요청해도 MAX_SUB_QUERIES(3)개까지만 남긴다."""
+    raw = json.dumps(
+        {
+            "queries": [
+                {"label": f"항목{i}", "sql": f"SELECT {i} FROM v_purchase_order"}
+                for i in range(5)
+            ]
+        }
+    )
+    result = text2sql_module._extract_queries(raw)
+    assert len(result) == text2sql_module.MAX_SUB_QUERIES == 3
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "이건 JSON이 아닙니다",
+        "{}",  # "queries" 키 없음
+        json.dumps({"queries": "SELECT 1"}),  # queries가 리스트가 아님
+    ],
+)
+def test_extract_queries_returns_empty_list_on_malformed_json(raw: str) -> None:
+    """파싱 실패는 예전처럼 무관한 SQL을 돌려주지 않고 빈 리스트로 안전하게 처리한다."""
+    assert text2sql_module._extract_queries(raw) == []
+
+
+def test_extract_queries_skips_items_without_sql() -> None:
+    raw = json.dumps(
+        {
+            "queries": [
+                {"label": "빈 항목"},
+                {"label": "정상", "sql": "SELECT 1 FROM v_purchase_order"},
+            ]
+        }
+    )
+    assert text2sql_module._extract_queries(raw) == [
+        {"label": "정상", "sql": "SELECT 1 FROM v_purchase_order"}
+    ]
+
+
+# ---------------------------------------------------------------------------
 # 2. SQL 가드 (외부 서비스 없음)
 # ---------------------------------------------------------------------------
 
@@ -148,8 +226,10 @@ def test_referenced_tables_finds_multiple_joins() -> None:
 def test_query_purchase_returns_empty_when_llm_declines() -> None:
     """LLM이 NO_SQL로 답하면(범위 밖) rows=[]를 돌려줘 server.py가 NO_RESULT로 처리한다."""
 
-    async def declines(question: str, schema: Any) -> str:
-        return ""
+    # old: async def declines(question: str, schema: Any) -> str: return ""
+    # 변경 이유: generate_sql()이 이제 list[dict]를 반환한다. NO_SQL은 빈 리스트로 표현한다.
+    async def declines(question: str, schema: Any) -> list[dict[str, str]]:
+        return []
 
     with mock.patch.object(query_module, "generate_sql", declines):
         evidence = asyncio.run(query_module.query_purchase("답할 수 없는 질문"))
@@ -173,14 +253,21 @@ def test_query_purchase_retries_once_on_explain_failure() -> None:
     """EXPLAIN이 실패하면 오류 메시지를 재작성 함수에 넘기고 최대 1회만 재시도한다."""
     calls: list[str] = []
 
-    async def first_sql(question: str, schema: Any) -> str:
-        return "SELECT bad_column FROM v_purchase_order LIMIT 5"
+    # old: 아래 두 함수가 단일 문자열(str)을 반환했다.
+    # 변경 이유: generate_sql()/generate_sql_with_error()가 이제 list[dict]를
+    # 반환한다. _run_single_query()는 재작성 결과의 첫 번째 항목만 사용한다.
+    async def first_sql(question: str, schema: Any) -> list[dict[str, str]]:
+        return [
+            {"label": "테스트", "sql": "SELECT bad_column FROM v_purchase_order LIMIT 5"}
+        ]
 
     async def retried_sql(
         question: str, schema: Any, failed_sql: str, error: str
-    ) -> str:
+    ) -> list[dict[str, str]]:
         calls.append(error)
-        return "SELECT vendor_id FROM v_purchase_order LIMIT 5"
+        return [
+            {"label": "테스트", "sql": "SELECT vendor_id FROM v_purchase_order LIMIT 5"}
+        ]
 
     def fake_explain(sql: str) -> None:
         if "bad_column" in sql:
@@ -199,6 +286,7 @@ def test_query_purchase_retries_once_on_explain_failure() -> None:
 
     assert len(calls) == 1
     assert "bad_column" in calls[0]
+    assert evidence[0]["label"] == "테스트"
     assert evidence[0]["metadata"]["retry_count"] == 1
     assert evidence[0]["row_count"] == 1
 
@@ -206,13 +294,17 @@ def test_query_purchase_retries_once_on_explain_failure() -> None:
 def test_query_purchase_raises_when_retry_also_fails() -> None:
     """재시도까지 실패하면 예외를 그대로 올려 server.py가 QUERY_ERROR로 변환하게 한다."""
 
-    async def first_sql(question: str, schema: Any) -> str:
-        return "SELECT bad_column FROM v_purchase_order LIMIT 5"
+    async def first_sql(question: str, schema: Any) -> list[dict[str, str]]:
+        return [
+            {"label": "테스트", "sql": "SELECT bad_column FROM v_purchase_order LIMIT 5"}
+        ]
 
     async def retried_sql(
         question: str, schema: Any, failed_sql: str, error: str
-    ) -> str:
-        return "SELECT still_bad FROM v_purchase_order LIMIT 5"
+    ) -> list[dict[str, str]]:
+        return [
+            {"label": "테스트", "sql": "SELECT still_bad FROM v_purchase_order LIMIT 5"}
+        ]
 
     def fake_explain(sql: str) -> None:
         raise RuntimeError("always fails")
@@ -224,6 +316,78 @@ def test_query_purchase_raises_when_retry_also_fails() -> None:
     ):
         with pytest.raises(RuntimeError):
             asyncio.run(query_module.query_purchase("아무 질문"))
+
+
+# ---------------------------------------------------------------------------
+# 3-1. 복합질문 통합 흐름 (LLM/DB를 mock으로 대체 — 외부 서비스 없음)
+# ---------------------------------------------------------------------------
+
+
+def test_query_purchase_handles_compound_question_with_multiple_labels() -> None:
+    """복합질문이면 항목마다 label이 붙은 독립 evidence를 병렬로 만든다."""
+
+    async def multi_sql(question: str, schema: Any) -> list[dict[str, str]]:
+        return [
+            {
+                "label": "올해 구매액 합계",
+                "sql": "SELECT SUM(po_amount) AS total FROM v_purchase_order",
+            },
+            {
+                "label": "구매액 최대 공급업체",
+                "sql": "SELECT vendor_name FROM v_purchase_order ORDER BY po_amount DESC LIMIT 1",
+            },
+        ]
+
+    def fake_query_readonly(sql: str) -> list[dict[str, Any]]:
+        if "SUM(po_amount)" in sql:
+            return [{"total": 500}]
+        return [{"vendor_name": "Acme"}]
+
+    with (
+        mock.patch.object(query_module, "generate_sql", multi_sql),
+        mock.patch.object(query_module, "explain_readonly", lambda sql: None),
+        mock.patch.object(query_module, "query_readonly", fake_query_readonly),
+    ):
+        evidence = asyncio.run(
+            query_module.query_purchase("올해 구매액과 구매액 최대 공급업체 알려줘")
+        )
+
+    assert len(evidence) == 2
+    by_label = {item["label"]: item for item in evidence}
+    assert by_label["올해 구매액 합계"]["rows"] == [{"total": 500}]
+    assert by_label["구매액 최대 공급업체"]["rows"] == [{"vendor_name": "Acme"}]
+    for item in evidence:
+        assert item["domain"] == "purchase"
+
+
+def test_query_purchase_keeps_per_item_empty_result_without_dropping_others() -> None:
+    """한 항목만 빈 결과여도 다른 항목의 결과는 그대로 남는다."""
+
+    async def multi_sql(question: str, schema: Any) -> list[dict[str, str]]:
+        return [
+            {"label": "결과 있음", "sql": "SELECT 1 AS total FROM v_purchase_order"},
+            {
+                "label": "결과 없음",
+                "sql": "SELECT 1 AS total FROM v_purchase_order WHERE 1=0",
+            },
+        ]
+
+    def fake_query_readonly(sql: str) -> list[dict[str, Any]]:
+        return [] if "1=0" in sql else [{"total": 1}]
+
+    with (
+        mock.patch.object(query_module, "generate_sql", multi_sql),
+        mock.patch.object(query_module, "explain_readonly", lambda sql: None),
+        mock.patch.object(query_module, "query_readonly", fake_query_readonly),
+    ):
+        evidence = asyncio.run(query_module.query_purchase("복합질문"))
+
+    assert len(evidence) == 2
+    by_label = {item["label"]: item for item in evidence}
+    assert by_label["결과 있음"]["rows"] == [{"total": 1}]
+    assert by_label["결과 없음"]["rows"] == []
+    assert isinstance(by_label["결과 없음"]["message"], str)
+    assert by_label["결과 없음"]["message"]
 
 
 def test_chart_hint_prefers_line_for_period_columns() -> None:
@@ -281,16 +445,21 @@ def _load_golden_cases() -> list[dict]:
 @skip_without_deps
 @pytest.mark.parametrize("case", _load_golden_cases(), ids=lambda c: c["question"])
 def test_golden_case_generates_expected_sql(case: dict) -> None:
+    """골든 케이스는 원래 단일 SQL 질문만 다루므로, 복합질문으로 쪼개져도 첫 항목만 본다.
+
+    변경 이유: generate_sql()이 이제 list[dict]를 반환한다(NO_SQL=[]).
+    """
     schema = get_schema_resource()
-    sql = asyncio.run(text2sql_module.generate_sql(case["question"], schema))
+    queries = asyncio.run(text2sql_module.generate_sql(case["question"], schema))
 
     if case.get("expect_no_sql"):
         assert (
-            sql == ""
-        ), f"'{case['question']}'는 NO_SQL이어야 하는데 SQL이 생성됨: {sql}"
+            queries == []
+        ), f"'{case['question']}'는 NO_SQL이어야 하는데 SQL이 생성됨: {queries}"
         return
 
-    assert sql, f"'{case['question']}'는 SQL이 생성돼야 하는데 비어 있음"
+    assert queries, f"'{case['question']}'는 SQL이 생성돼야 하는데 비어 있음"
+    sql = queries[0]["sql"]
     normalized = validate_and_normalize(sql)
     used = referenced_tables(normalized)
     for expected_view in case.get("expected_views", []):

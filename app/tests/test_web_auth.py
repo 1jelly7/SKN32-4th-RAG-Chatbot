@@ -5,13 +5,14 @@ from pathlib import Path
 
 WEB_ROOT = Path("django_app/web")
 WEB_SCRIPT = WEB_ROOT / "static/web/chat.js"
+WEB_AUTH_SCRIPT = WEB_ROOT / "static/web/auth.js"
 WEB_STYLE = WEB_ROOT / "static/web/style.css"
 WEB_TEMPLATE = WEB_ROOT / "templates/web/index.html"
 
 
 def test_login_invalidates_stale_session_restore_result() -> None:
     """초기 /auth/me 401이 로그인 성공 후 화면을 덮어쓰지 않게 한다."""
-    script = WEB_SCRIPT.read_text(encoding="utf-8")
+    script = WEB_AUTH_SCRIPT.read_text(encoding="utf-8")
     assert "let auth_state_revision = 0;" in script
     assert (
         "loginForm.addEventListener('submit', () => { auth_state_revision += 1; }, true);"
@@ -37,7 +38,7 @@ def test_logout_clears_messages_and_aborts_pending_chat() -> None:
 
 def test_login_and_logout_send_django_csrf_token() -> None:
     """세션 쿠키 기반 쓰기 요청은 Django CSRF 검증을 우회하지 않아야 한다."""
-    script = WEB_SCRIPT.read_text(encoding="utf-8")
+    script = WEB_AUTH_SCRIPT.read_text(encoding="utf-8")
     assert "fetch('/api/auth/csrf')" in script
     assert "'X-CSRFToken': csrfTokenValue" in script
     assert "headers: await csrfHeaders()" in script
