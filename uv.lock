@@ -2318,7 +2318,7 @@ wheels = [
 ]
 
 [[package]]
-name = "skn32-3rd-pj-rag-mcp-chatbot"
+name = "skn-4th-rag-chatbot"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

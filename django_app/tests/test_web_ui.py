@@ -90,10 +90,10 @@ def test_ui_script_renders_tables_charts_and_failure_states_without_unsafe_html(
     assert script is not None
     source = Path(script).read_text(encoding="utf-8")
 
-    assert "function renderTable(table)" in source
-    assert "function renderChartPlaceholder(table)" in source
-    assert "function drawChart(canvasId, table)" in source
-    assert "new Chart(canvas" in source
+    assert "function mountTableBlock(container, table, blockId)" in source
+    assert '<table class="data-table">' in source
+    assert "chartInstance = new Chart(canvas" in source
+    assert "maintainAspectRatio: false" in source
     assert "function handleDownload(button)" in source
     assert "response.status === 401" in source
     assert (
@@ -121,7 +121,11 @@ def test_ui_template_loads_only_same_origin_script_assets() -> None:
         "<script src=\"{% static 'web/vendor/chart.umd.min.js' %}\"></script>"
         in template
     )
+    auth_script = "<script src=\"{% static 'web/auth.js' %}\"></script>"
+    chat_script = "<script src=\"{% static 'web/chat.js' %}\"></script>"
+    assert auth_script in template
     assert "<script src=\"{% static 'web/chat.js' %}\"></script>" in template
+    assert template.index(auth_script) < template.index(chat_script)
 
 
 def test_local_gateway_sets_immutable_cache_only_for_static_assets() -> None:

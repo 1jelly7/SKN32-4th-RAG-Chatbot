@@ -32,18 +32,23 @@ def tool_success(
 
 
 def database_success(domain: str, amount: int) -> dict[str, Any]:
-    """DB provenance와 freshness metadata가 포함된 단일 행 envelope를 만든다."""
+    """DB provenance와 freshness metadata가 포함된 단일 쿼리 블록을 만든다."""
     return tool_success(
         domain,
-        [{"category": domain, "amount": amount}],
-        metadata={
-            "generated_sql": "SELECT category, amount FROM reporting_view",
-            "row_count": 1,
-            "table_name": "reporting_view",
-            "query_id": f"{domain}-query",
-            "freshness_seconds": 30,
-            "source_version": "fixture-v1",
-        },
+        [
+            {
+                "label": f"{domain} fixture",
+                "generated_sql": "SELECT category, amount FROM reporting_view",
+                "rows": [{"category": domain, "amount": amount}],
+                "row_count": 1,
+                "metadata": {
+                    "table_name": "reporting_view",
+                    "query_id": f"{domain}-query",
+                    "freshness_seconds": 30,
+                    "source_version": "fixture-v1",
+                },
+            }
+        ],
     )
 
 
