@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>[시안] 답변별 출처 연결</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 시안 전용 CDN. 실제 이식 시 self-host된 fonts/noto-sans-kr.css를 쓴다 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #172033; --muted: #667085; --line: #d1d5db; --canvas: #f3f4f6;
+    --surface: #ffffff; --soft: #f8fafc; --blue: #3b82f6; --blue-dark: #1e40af;
+    --blue-soft: #eff6ff; --danger: #b42318; --danger-bg: #fef3f2;
+    font-family: "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); }
+  h1, h2, p { margin: 0; }
+
+  .app-shell { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) 400px; }
+  .chat-panel { min-width: 0; display: flex; flex-direction: column; background: var(--surface); }
+  .app-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 22px; border-bottom: 1px solid var(--line); }
+  .app-header h1 { font-size: 17px; letter-spacing: -.02em; }
+  .messages { flex: 1; overflow-y: auto; padding: 24px; }
+
+  .msg-row { display: flex; width: 100%; gap: 16px; margin: 0 0 24px; }
+  .msg-row.user { justify-content: flex-end; }
+  .avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; border: 1px solid #bfdbfe; border-radius: 50%; color: var(--blue); background: var(--blue-soft); font-size: 16px; }
+  .msg { min-width: 0; max-width: 90%; padding: 20px; border: 1px solid var(--line); border-radius: 4px 18px 18px; background: #f9fafb; box-shadow: 0 2px 4px rgba(16,24,40,.08); }
+  .msg-row.assistant .msg { width: 90%; }
+  .msg-row.user .msg { border: 0; border-radius: 18px 4px 18px 18px; color: #fff; background: linear-gradient(135deg, var(--blue-dark), #3b82f6); max-width: 80%; }
+  .msg-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+  .msg-row.user .msg-label { color: #dbeafe; }
+  .answer { overflow-wrap: anywhere; font-size: 14px; line-height: 1.75; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .badge { display: inline-flex; align-items: center; min-height: 22px; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .badge-DOCUMENT { color: #166534; background: #dcfce7; }
+  .badge-DATABASE { color: #1d4ed8; background: #dbeafe; }
+  .badge-BOTH { color: #9a3412; background: #ffedd5; }
+  .badge-GENERAL { color: #475467; background: #eaecf0; }
+  .badge-cached { color: #9a6700; background: #fef0c7; }
+
+  /* --- 신규: 출처 칩 --- */
+  .source-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 14px; padding: 7px 12px;
+    border: 1px solid var(--line); border-radius: 9px;
+    background: #fff; color: var(--blue-dark);
+    font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .source-chip:hover, .source-chip:focus-visible { background: var(--blue-soft); border-color: #bfdbfe; outline: none; }
+  .source-chip.is-empty { color: var(--muted); }
+  .source-chip .count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--blue-soft); color: var(--blue-dark); font-size: 11px; }
+  .source-chip.is-empty .count { background: #eaecf0; color: var(--muted); }
+
+  /* 패널에서 선택된 답변 강조 */
+  .msg-row.assistant.is-selected .msg { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+
+  /* --- 출처 패널 --- */
+  .sources-panel { min-height: 100vh; overflow: hidden; border-left: 1px solid var(--line); background: #f9fafb; display: flex; flex-direction: column; }
+  .sources-header { padding: 18px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.96); }
+  .sources-heading { display: flex; align-items: center; gap: 12px; }
+  .sources-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; color: var(--blue); background: var(--blue-soft); font-size: 17px; }
+  .sources-header h2 { font-size: 15px; }
+  .sources-context { margin-top: 3px; color: var(--muted); font-size: 12px; }
+
+  .jump-banner {
+    display: none; align-items: center; justify-content: space-between; gap: 10px;
+    margin: 12px 18px 0; padding: 10px 12px;
+    border: 1px solid #bfdbfe; border-radius: 10px;
+    background: var(--blue-soft); color: var(--blue-dark); font-size: 12px;
+  }
+  .jump-banner.is-visible { display: flex; }
+  .jump-banner button { border: 0; border-radius: 7px; padding: 6px 10px; background: var(--blue); color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .jump-banner button:hover { background: var(--blue-dark); }
+
+  .sources-list { flex: 1; overflow-y: auto; padding: 15px 18px; }
+  .source-empty { display: grid; place-items: center; min-height: 250px; padding: 28px; color: var(--muted); text-align: center; font-size: 13px; line-height: 1.6; }
+  .source-empty span { margin-bottom: 12px; color: #98a2b3; font-size: 26px; }
+  .source-card { margin-bottom: 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 2px 5px rgba(16,24,40,.03); }
+  .source-card-main { padding: 14px; }
+  .source-title-row { display: flex; align-items: start; gap: 9px; }
+  .source-icon { color: var(--blue); font-size: 17px; line-height: 1.2; }
+  .source-title { flex: 1; overflow-wrap: anywhere; font-size: 13px; line-height: 1.45; }
+  .source-meta { margin-top: 10px; color: var(--muted); font-size: 11px; }
+
+  /* 데모 컨트롤 (시안 전용) */
+  .demo-bar { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 6px; padding: 6px; background: #172033; border-radius: 8px; }
+  .demo-bar button { font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 5px; border: 0; background: #2a3650; color: #fff; cursor: pointer; }
+  .demo-bar button.active { background: var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <button type="button" data-demo="select1">답변1 클릭</button>
+  <button type="button" data-demo="select2">답변2(웹) 클릭</button>
+  <button type="button" data-demo="select3">답변3(0건) 클릭</button>
+  <button type="button" data-demo="newarrive" class="active">새 답변 도착 시뮬레이션</button>
+</div>
+
+<div class="app-shell">
+  <main class="chat-panel">
+    <header class="app-header"><h1>사내 지식 챗봇</h1></header>
+    <section class="messages" id="messages">
+
+      <div class="msg-row user"><div class="msg"><span class="msg-label">나</span><div class="answer">2024년 매출 상위 3개 제품 알려줘</div></div></div>
+      <div class="msg-row assistant" data-answer-id="a1">
+        <span class="avatar">🤖</span>
+        <div class="msg">
+          <span class="msg-label">사내 지식 챗봇</span>
+          <div class="meta"><span class="badge badge-DATABASE">업무 데이터</span></div>
+          <div class="answer">2024년 매출 상위 3개 제품은 <strong>제품A, 제품B, 제품C</strong> 순입니다.</div>
+          <button class="source-chip" data-target="a1">📄 <span>문서 근거 2건 보기</span><span class="count">2</span></button>
+        </div>
+      </div>
+
+      <div class="msg-row user"><div class="msg"><span class="msg-label">나</span><div class="answer">환불 정책은 어떻게 돼?</div></div></div>
+      <div class="msg-row assistant" data-answer-id="a2">
+        <span class="avatar">🤖</span>
+        <div class="msg">
+          <span class="msg-label">사내 지식 챗봇</span>
+          <div class="meta"><span class="badge badge-GENERAL">일반 지식</span></div>
+          <div class="answer">일반적인 전자상거래 환불 정책은 구매 후 7일 이내 청약철회가 원칙입니다.</div>
+          <button class="source-chip" data-target="a2">🌐 <span>웹 출처 1건 보기</span><span class="count">1</span></button>
+        </div>
+      </div>
+
+      <div class="msg-row user"><div class="msg"><span class="msg-label">나</span><div class="answer">2025년 3분기 재고 회전율은?</div></div></div>
+      <div class="msg-row assistant" data-answer-id="a3">
+        <span class="avatar">🤖</span>
+        <div class="msg">
+          <span class="msg-label">사내 지식 챗봇</span>
+          <div class="meta"><span class="badge badge-DOCUMENT">사내 문서</span></div>
+          <div class="answer">관련 문서를 찾지 못해 답변드리기 어렵습니다. 다른 표현으로 다시 질문해 주세요.</div>
+          <button class="source-chip is-empty" data-target="a3">📄 <span>근거 0건</span><span class="count">0</span></button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <aside class="sources-panel">
+    <header class="sources-header">
+      <div class="sources-heading">
+        <span class="sources-mark">▤</span>
+        <div>
+          <h2>참고 문서 출처</h2>
+          <p class="sources-context" id="sources-context">문서 검색 결과가 여기에 표시됩니다</p>
+        </div>
+      </div>
+    </header>
+    <div class="jump-banner" id="jump-banner">
+      <span>새 답변의 근거가 준비됐습니다.</span>
+      <button type="button" id="jump-button">새 답변의 근거 보기</button>
+    </div>
+    <div class="sources-list" id="sources-list">
+      <div class="source-empty"><span>▤</span><p>답변의 출처 칩을 눌러 근거 문서를 확인하세요.</p></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+  // ---- 더미 출처 데이터 (실제로는 서버 응답의 sources를 답변 id별로 저장) ----
+  const SOURCES = {
+    a1: {
+      question: '2024년 매출 상위 3개 제품 알려줘', index: 1,
+      html: `
+        <article class="source-card"><div class="source-card-main">
+          <div class="source-title-row"><span class="source-icon">📄</span><h3 class="source-title">2024_매출_리포트.pdf</h3></div>
+          <p class="source-meta">3, 7페이지 참조 · 갱신 2025-01-10</p>
+        </div></article>
+        <article class="source-card"><div class="source-card-main">
+          <div class="source-title-row"><span class="source-icon">📄</span><h3 class="source-title">제품별_판매현황_2024.xlsx</h3></div>
+          <p class="source-meta">1페이지 참조 · 갱신 2025-01-12</p>
+        </div></article>`
+    },
+    a2: {
+      question: '환불 정책은 어떻게 돼?', index: 2,
+      html: `
+        <article class="source-card"><div class="source-card-main">
+          <div class="source-title-row"><span class="source-icon">🌐</span><h3 class="source-title">전자상거래 소비자보호법 안내 - 공정거래위원회</h3></div>
+          <p class="source-meta"><a href="#" onclick="return false">ftc.go.kr/...</a></p>
+        </div></article>`
+    },
+    a3: {
+      question: '2025년 3분기 재고 회전율은?', index: 3,
+      html: `<div class="source-empty"><span>▤</span><p>관련 문서를 찾지 못했습니다. 다른 표현으로 다시 질문해 주세요.</p></div>`
+    }
+  };
+
+  let selectedId = null;
+  let latestId = 'a3'; // 지금 화면에 보이는 마지막 답변
+
+  const context = document.getElementById('sources-context');
+  const list = document.getElementById('sources-list');
+  const banner = document.getElementById('jump-banner');
+  const jumpButton = document.getElementById('jump-button');
+
+  function selectAnswer(id) {
+    selectedId = id;
+    document.querySelectorAll('.msg-row.assistant').forEach(row => {
+      row.classList.toggle('is-selected', row.dataset.answerId === id);
+    });
+    const data = SOURCES[id];
+    context.textContent = `${data.index}번째 답변 · "${data.question}"의 근거`;
+    list.innerHTML = data.html;
+    // 최신 답변을 보고 있으면 배너를 숨긴다
+    if (id === latestId) banner.classList.remove('is-visible');
+  }
+
+  document.querySelectorAll('.source-chip').forEach(chip => {
+    chip.addEventListener('click', () => selectAnswer(chip.dataset.target));
+  });
+
+  jumpButton.addEventListener('click', () => selectAnswer(latestId));
+
+  // ---- 데모 컨트롤 ----
+  document.querySelector('[data-demo="select1"]').addEventListener('click', () => selectAnswer('a1'));
+  document.querySelector('[data-demo="select2"]').addEventListener('click', () => selectAnswer('a2'));
+  document.querySelector('[data-demo="select3"]').addEventListener('click', () => selectAnswer('a3'));
+  document.querySelector('[data-demo="newarrive"]').addEventListener('click', () => {
+    // "과거 답변을 보고 있는데 새 답변이 도착" 상황을 재현
+    selectAnswer('a1');
+    window.setTimeout(() => {
+      if (selectedId !== latestId) banner.classList.add('is-visible');
+    }, 400);
+  });
+
+  selectAnswer('a1');
+</script>
+</body>
+</html>

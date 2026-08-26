@@ -9,46 +9,20 @@
   <link rel="stylesheet" href="{% static 'web/style.css' %}">
   <script src="{% static 'web/vendor/chart.umd.min.js' %}"></script>
 </head>
-<body>
+<body data-chatbot-icon="{% static 'web/img/chatbot-icon.png' %}">
   <section id="login-screen" class="login-screen" aria-labelledby="login-title" hidden>
     <form id="login-form" class="login-card">
       <h1 id="login-title">사내 지식 챗봇 로그인</h1><p>승인된 계정으로 로그인하세요.</p>
-      <label for="username">로그인 ID</label><input id="username" name="username" autocomplete="username" required maxlength="128">
-      <label for="password">비밀번호</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256">
+      <label for="username">로그인 ID</label><input id="username" name="username" autocomplete="username" placeholder="아이디 입력" required maxlength="128">
+      <label for="password">비밀번호</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder="비밀번호 입력" required maxlength="256">
       <p id="login-error" class="login-error" role="alert" aria-live="polite"></p><button id="login-button" type="submit">로그인</button>
     </form>
   </section>
+  {% include "web/_header.html" %}
   <div class="app-shell">
     <main class="chat-panel" aria-label="사내 지식 챗봇">
       <header class="app-header">
-        <div class="brand">
-          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" class="svg-icon"><path d="M5 10h14v9H5zM12 4v3M9 14h.01M15 14h.01M8 19v2M16 19v2M3 12h2M19 12h2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg></span>
-          <div>
-            <h1>사내 지식 챗봇</h1>
-            <p>문서와 업무 데이터를 안전하게 검색합니다</p>
-          </div>
-        </div>
-        <div class="user-menu"><span id="current-user"></span><button id="logout-button" type="button">로그아웃</button></div>
-        <!-- 추가: 리포트 기능(POST /api/reports/generate) 확인용 임시 다운로드 버튼.
-             실사용 UI에 맞는 자리/디자인은 아직 정해지지 않았고, 지금은 API가
-             브라우저에서 실제로 잘 도는지 눈으로 확인하는 용도다. -->
-        <button id="report-toggle" class="icon-button" type="button" aria-expanded="false" aria-controls="report-panel">
-          <svg viewBox="0 0 24 24" class="svg-icon" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
-          <span class="sr-only">리포트 다운로드 열기</span>
-        </button>
-        <div id="report-panel" class="report-panel" hidden>
-          <p class="report-panel-title">월간 매출 리포트 (임시)</p>
-          <label class="sr-only" for="report-start">시작일</label>
-          <input id="report-start" type="date" required>
-          <label class="sr-only" for="report-end">종료일</label>
-          <input id="report-end" type="date" required>
-          <button id="report-download" type="button">다운로드</button>
-          <p id="report-status" class="report-status" role="status" aria-live="polite"></p>
-        </div>
-        <button id="sources-toggle" class="icon-button sources-toggle" type="button" aria-expanded="false" aria-controls="sources-panel">
-          <svg viewBox="0 0 24 24" class="svg-icon" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/></svg>
-          <span class="sr-only">출처 패널 열기</span>
-        </button>
+        <p class="app-header-sub">문서와 업무 데이터를 안전하게 검색합니다</p>
       </header>
 
       <section id="messages" class="messages" aria-live="polite" aria-label="대화 내용"></section>
@@ -77,27 +51,20 @@
         </div>
         <button id="sources-close" class="icon-button close-button" type="button" aria-label="출처 패널 닫기">×</button>
       </header>
+      <div id="jump-banner" class="jump-banner" role="status">
+        <span>새 답변의 근거가 준비됐습니다.</span>
+        <button id="jump-button" type="button">새 답변의 근거 보기</button>
+      </div>
       <div id="sources-list" class="sources-list">
         <div class="source-empty">
           <span aria-hidden="true">▤</span>
           <p>사내 문서 검색을 실행하면 근거 문서와 관련도가 표시됩니다.</p>
         </div>
       </div>
-      <!-- TEMP: 이상탐지 임시 대시보드(GET /api/anomalies, app/services/anomaly_service.py +
-           app/api/anomalies.py). 다른 팀원이 실제 대시보드를 완성하면 이 블록과 짝인
-           style.css/chat.js의 TEMP 블록, 위 두 백엔드 파일을 함께 지운다(7단계 삭제 체크리스트). -->
-      <div id="anomaly-panel" class="anomaly-panel">
-        <header class="anomaly-header">
-          <h2>이상탐지 (임시)</h2>
-        </header>
-        <div id="anomaly-body" class="anomaly-body">
-          <p class="anomaly-loading">불러오는 중...</p>
-        </div>
-      </div>
-      <!-- // TEMP: 이상탐지 끝 -->
     </aside>
   </div>
   <div id="sources-backdrop" class="sources-backdrop" hidden></div>
+  <script src="{% static 'web/auth.js' %}"></script>
   <script src="{% static 'web/chat.js' %}"></script>
 </body>
 </html>
