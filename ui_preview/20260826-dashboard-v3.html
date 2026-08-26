@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>[시안] 대시보드 v3 — 월별 추이 + 이상탐지</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="assets/chart.umd.min.js"></script>
+<style>
+  :root {
+    --ink: #172033; --muted: #667085; --line: #d1d5db; --canvas: #f3f4f6;
+    --surface: #ffffff; --soft: #f8fafc; --blue: #3b82f6; --blue-dark: #1e40af;
+    --blue-soft: #eff6ff; --danger: #b42318; --danger-bg: #fef3f2;
+    --warn: #b45309; --warn-bg: #fffbeb; --warn-line: #fde68a;
+    font-family: "Malgun Gothic", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); color: var(--ink); }
+  h1, h2, h3, p { margin: 0; }
+
+  .top-header { display: flex; align-items: center; gap: 20px; flex: 0 0 auto; padding: 12px 22px; border-bottom: 1px solid var(--line); background: #fff; }
+  .top-brand { display: flex; align-items: center; gap: 10px; }
+  .top-brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 6px; background: #172033; color: #7ab8ff; font-size: 14px; }
+  .top-brand h1 { font-size: 15px; }
+  .top-tabs { display: flex; gap: 4px; flex: 1; }
+  .top-tab { padding: 8px 14px; border-radius: 8px; color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer; }
+  .top-tab.is-active { color: var(--blue-dark); background: var(--blue-soft); }
+  .top-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+
+  .demo-bar { display: flex; gap: 6px; padding: 8px 22px; background: #172033; flex: 0 0 auto; flex-wrap: wrap; }
+  .demo-bar span { color: #94a3b8; font-size: 12px; align-self: center; margin-right: 4px; }
+  .demo-bar button { font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 5px; border: 0; background: #2a3650; color: #fff; cursor: pointer; }
+  .demo-bar button.active { background: var(--blue); }
+
+  .page-body { flex: 1; min-height: 0; overflow-y: auto; }
+  .dashboard { max-width: 1080px; margin: 0 auto; padding: 24px; }
+  .dashboard-title { font-size: 18px; font-weight: 700; }
+  .dashboard-sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 20px; }
+  .kpi-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .kpi-label { color: var(--muted); font-size: 11px; font-weight: 700; }
+  .kpi-value { margin-top: 6px; font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+  .kpi-sub { margin-top: 4px; font-size: 11px; color: var(--muted); }
+  .kpi-delta.up { color: #166534; }
+  .kpi-delta.down { color: var(--danger); }
+  .kpi-card.is-alert { border-color: #fecdca; background: var(--danger-bg); }
+  .kpi-card.is-alert .kpi-value { color: var(--danger); }
+
+  .domain-section { margin-top: 28px; }
+  .domain-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+  .domain-title .badge-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); font-size: 11px; font-weight: 700; }
+
+  .trend-chart-card { margin-top: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .trend-chart-title { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 10px; }
+  .trend-chart-box { height: 200px; }
+
+  .anomaly-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
+  .anomaly-card { padding: 14px; border: 1px solid var(--warn-line); border-radius: 12px; background: var(--warn-bg); }
+  .anomaly-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .anomaly-type { flex: 0 0 auto; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; color: var(--warn); background: #fff; border: 1px solid var(--warn-line); }
+  .anomaly-entity { font-size: 13px; font-weight: 700; }
+  .anomaly-amount { margin-top: 6px; font-size: 16px; font-weight: 700; }
+  .anomaly-detail { margin-top: 4px; color: #475467; font-size: 12px; line-height: 1.6; }
+  .anomaly-time { margin-top: 8px; color: var(--muted); font-size: 11px; }
+  .empty-note { margin-top: 12px; padding: 14px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 13px; text-align: center; }
+
+  .note-banner { margin-top: 16px; padding: 10px 14px; border: 1px solid var(--warn-line); background: var(--warn-bg); color: var(--warn); border-radius: 10px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <span>데모:</span>
+  <button type="button" data-scenario="normal" class="active">정상 데이터</button>
+  <button type="button" data-scenario="onemonth">데이터 1개월뿐(전월대비 없음)</button>
+  <button type="button" data-scenario="empty">이상 신호 0건</button>
+</div>
+
+<header class="top-header">
+  <div class="top-brand"><span class="top-brand-mark">◐</span><h1>사내 지식 챗봇</h1></div>
+  <nav class="top-tabs"><a class="top-tab">채팅</a><a class="top-tab is-active">대시보드</a><a class="top-tab">리포트 생성</a></nav>
+  <div class="top-user">Charlie (admin)</div>
+</header>
+
+<div class="page-body" id="page-body"></div>
+
+<script>
+  // 실제 API 응답 형태 그대로 (더미 값)
+  const SCENARIOS = {
+    normal: {
+      trends: {
+        sales: [
+          { month: '2026-03', amount: 285000000 }, { month: '2026-04', amount: 320000000 },
+          { month: '2026-05', amount: 412000000 }, { month: '2026-06', amount: 398000000 },
+          { month: '2026-07', amount: 456000000 }, { month: '2026-08', amount: 431000000 },
+        ],
+        purchase: [
+          { month: '2026-03', amount: 152000000 }, { month: '2026-04', amount: 168000000 },
+          { month: '2026-05', amount: 159000000 }, { month: '2026-06', amount: 174000000 },
+          { month: '2026-07', amount: 181000000 }, { month: '2026-08', amount: 218000000 },
+        ],
+      },
+      anomalies: [
+        { domain: 'sales', type: 'amount_outlier', entity: '㈜대한물산', amount: 124500000, detail: 'SO-20260815 (2026-08-15)', detected_at: '2026-08-26T01:00:00Z' },
+        { domain: 'sales', type: 'overdue', entity: '㈜한빛유통', amount: 42800000, detail: '5건 연체', detected_at: '2026-08-26T01:00:00Z' },
+        { domain: 'sales', type: 'spike', entity: '㈜서진테크', amount: 38200000, detail: '최근30일 38200000 vs 6개월평균 11400000', detected_at: '2026-08-26T01:00:00Z' },
+        { domain: 'purchase', type: 'amount_outlier', entity: '글로벌소재', amount: 68000000, detail: 'PO-20260812 (2026-08-12)', detected_at: '2026-08-26T01:00:00Z' },
+        { domain: 'purchase', type: 'overdue', entity: '한성부품', amount: 19500000, detail: '3건 연체', detected_at: '2026-08-26T01:00:00Z' },
+      ],
+    },
+    onemonth: {
+      trends: { sales: [{ month: '2026-08', amount: 431000000 }], purchase: [{ month: '2026-08', amount: 218000000 }] },
+      anomalies: [],
+    },
+    empty: {
+      trends: {
+        sales: [{ month: '2026-07', amount: 456000000 }, { month: '2026-08', amount: 431000000 }],
+        purchase: [{ month: '2026-07', amount: 181000000 }, { month: '2026-08', amount: 218000000 }],
+      },
+      anomalies: [],
+    },
+  };
+
+  const TYPE_LABEL = { amount_outlier: '금액 이상치', overdue: '연체 과다', spike: '거래 급증' };
+  let charts = {};
+
+  function formatAmount(n) { return n.toLocaleString() + ' KRW'; }
+
+  function kpiHtml(trends, anomalies) {
+    const lastOf = arr => arr.length ? arr[arr.length - 1] : null;
+    const prevOf = arr => arr.length >= 2 ? arr[arr.length - 2] : null;
+    const deltaHtml = (arr) => {
+      const last = lastOf(arr), prev = prevOf(arr);
+      if (!last || !prev || prev.amount === 0) return `<div class="kpi-sub">전월 비교 불가</div>`;
+      const pct = ((last.amount - prev.amount) / Math.abs(prev.amount)) * 100;
+      const cls = pct >= 0 ? 'up' : 'down';
+      const arrow = pct >= 0 ? '▲' : '▼';
+      return `<div class="kpi-sub kpi-delta ${cls}">${arrow} 전월 대비 ${Math.abs(pct).toFixed(1)}%</div>`;
+    };
+    const salesLast = lastOf(trends.sales);
+    const purchaseLast = lastOf(trends.purchase);
+    const overdueTotal = anomalies.filter(a => a.type === 'overdue').reduce((s, a) => s + a.amount, 0);
+
+    return `
+    <div class="kpi-card">
+      <div class="kpi-label">최근 달 매출${salesLast ? ` (${salesLast.month})` : ''}</div>
+      <div class="kpi-value">${salesLast ? formatAmount(salesLast.amount) : '데이터 없음'}</div>
+      ${salesLast ? deltaHtml(trends.sales) : ''}
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">최근 달 구매액${purchaseLast ? ` (${purchaseLast.month})` : ''}</div>
+      <div class="kpi-value">${purchaseLast ? formatAmount(purchaseLast.amount) : '데이터 없음'}</div>
+      ${purchaseLast ? deltaHtml(trends.purchase) : ''}
+    </div>
+    <div class="kpi-card${overdueTotal > 0 ? ' is-alert' : ''}">
+      <div class="kpi-label">연체 총액</div>
+      <div class="kpi-value">${overdueTotal > 0 ? formatAmount(overdueTotal) : '연체 없음'}</div>
+    </div>
+    <div class="kpi-card${anomalies.length ? ' is-alert' : ''}">
+      <div class="kpi-label">이상 신호</div>
+      <div class="kpi-value">${anomalies.length}건</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">데이터 기준</div>
+      <div class="kpi-value" style="font-size:13px">${salesLast?.month || purchaseLast?.month || '-'}</div>
+    </div>`;
+  }
+
+  function anomalyCardHtml(a) {
+    return `
+    <div class="anomaly-card">
+      <div class="anomaly-head"><span class="anomaly-entity">${a.entity}</span><span class="anomaly-type">${TYPE_LABEL[a.type]}</span></div>
+      <div class="anomaly-amount">${formatAmount(a.amount)}</div>
+      <div class="anomaly-detail">${a.detail}</div>
+      <div class="anomaly-time">감지 시각 ${new Date(a.detected_at).toLocaleString('ko-KR')}</div>
+    </div>`;
+  }
+
+  function drawTrend(canvasId, points) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    if (charts[canvasId]) charts[canvasId].destroy();
+    charts[canvasId] = new Chart(canvas, {
+      type: 'line',
+      data: { labels: points.map(p => p.month), datasets: [{ data: points.map(p => p.amount), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.08)', pointBackgroundColor: '#3b82f6', pointRadius: 3, tension: .3, fill: true }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+    });
+  }
+
+  function render(scenarioKey) {
+    const { trends, anomalies } = SCENARIOS[scenarioKey];
+    const salesAnomalies = anomalies.filter(a => a.domain === 'sales');
+    const purchaseAnomalies = anomalies.filter(a => a.domain === 'purchase');
+
+    const section = (label, trendPoints, canvasId, rows) => `
+      <section class="domain-section">
+        <h3 class="domain-title">${label} <span class="badge-count">${rows.length}</span></h3>
+        <div class="trend-chart-card">
+          <div class="trend-chart-title">월별 ${label} 추이</div>
+          <div class="trend-chart-box"><canvas id="${canvasId}"></canvas></div>
+        </div>
+        ${rows.length
+          ? `<div class="anomaly-grid">${rows.map(anomalyCardHtml).join('')}</div>`
+          : `<div class="empty-note">현재 감지된 이상 신호가 없습니다.</div>`}
+      </section>`;
+
+    document.getElementById('page-body').innerHTML = `
+      <div class="dashboard">
+        <h2 class="dashboard-title">이상탐지 대시보드</h2>
+        <p class="dashboard-sub">월별 매출·구매 추이와 고정 규칙 기반 이상 신호를 함께 보여줍니다.</p>
+        <div class="kpi-row">${kpiHtml(trends, anomalies)}</div>
+        ${trends.sales.length < 2 && trends.purchase.length < 2 ? `<div class="note-banner">이번 연도 데이터가 아직 1개월뿐이라 추이·전월대비 비교가 제한적입니다.</div>` : ''}
+        ${section('매출', trends.sales, 'sales-trend', salesAnomalies)}
+        ${section('구매', trends.purchase, 'purchase-trend', purchaseAnomalies)}
+      </div>`;
+
+    drawTrend('sales-trend', trends.sales);
+    drawTrend('purchase-trend', trends.purchase);
+  }
+
+  document.querySelectorAll('.demo-bar button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.demo-bar button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render(btn.dataset.scenario);
+    });
+  });
+
+  render('normal');
+</script>
+</body>
+</html>

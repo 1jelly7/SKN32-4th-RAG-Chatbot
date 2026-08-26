@@ -25,6 +25,8 @@ from app.core.dependencies import AppDependencies
 from app.logging.context import reset_request_id, set_request_id
 from app.logging.performance import elapsed_ms, server_timing_header, start_timer
 
+from app.api.dashboard import router as dashboard_router
+
 CACHE_KEY_CONTEXT = {
     "document_index_version": "unknown",
     "database_freshness_bucket": "unknown",
@@ -145,6 +147,7 @@ def create_app(dependencies: AppDependencies | None = None) -> FastAPI:
     application.include_router(documents_router, prefix="/api")
     application.include_router(reports_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
+    application.include_router(dashboard_router, prefix="/api")
 
     return application
 
