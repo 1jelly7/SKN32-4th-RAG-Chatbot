@@ -9,7 +9,6 @@
 ![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white)
 ![FAISS](https://img.shields.io/badge/FAISS-0467DF)
 ![MySQL](https://img.shields.io/badge/MySQL-4479A1?logo=mysql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
 ![Nginx](https://img.shields.io/badge/Nginx-009639?logo=nginx&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-Tool%20Boundary-6E56CF)
 ![Tests](https://img.shields.io/badge/tests-402%20passed%20%C2%B7%2027%20skipped-success)
@@ -235,7 +234,7 @@ python scripts/verify_docling.py <PDF 경로>
 FastAPI(`:8002`)에 요청을 나눠 보냅니다.
 
 - **Django**: 사용자 UI, 계정/세션/로그인, Django Admin
-- **FastAPI**: 채팅 API, LangGraph 오케스트레이션, 답변 캐시(메모리 또는 Redis), MCP Client
+- **FastAPI**: 채팅 API, LangGraph 오케스트레이션, 답변 캐시(프로세스 내 메모리), MCP Client
 - **MCP Tool 서비스**: 문서 검색(FAISS)과 구매·판매 Text2SQL을 같은 프로세스 안에서 호출
   (현재 전송 방식은 `InProcessMCPPort`이며, 원격 MCP transport는 아직 연결되지 않음)
 
@@ -328,9 +327,9 @@ nDCG@k를 계산합니다.
 
 **결과: 402 passed · 27 skipped**
 
-기본 unit/integration 테스트는 fake/mock 중심입니다. 실제 MySQL, Redis, 원격 MCP, 운영
-FAISS까지 검증했다는 의미는 아니며, 외부 서비스 검증은 opt-in 테스트(`RUN_LOCAL_MYSQL_TESTS=1`)로
-별도 수행합니다.
+기본 unit/integration 테스트는 fake/mock 중심입니다. 실제 MySQL, 원격 MCP, 운영 FAISS까지
+검증했다는 의미는 아니며, 외부 서비스 검증은 opt-in 테스트(`RUN_LOCAL_MYSQL_TESTS=1`)로 별도
+수행합니다.
 
 ### 적대적 테스트
 
@@ -481,7 +480,7 @@ API를 만들어야 했습니다.
 | Tool boundary | MCP | 문서·구매·판매 기능 분리 |
 | RAG | FAISS, sentence-transformers | 문서 검색 |
 | Database | MySQL 8.0 | 계정 · 문서 경로 · 구매 · 판매 |
-| Cache | In-memory (기본), Redis 어댑터 | 검증된 답변 재사용 |
+| Cache | In-memory (프로세스 내 TTL 캐시) | 검증된 답변 재사용. |
 | Frontend | HTML, CSS, JavaScript, Chart.js | 채팅 · 대시보드 · 표 · 차트 UI |
 | Test | pytest, pytest-asyncio, httpx | 단위·통합·Django 계약 검증 |
 
@@ -646,6 +645,6 @@ docs/                 아키텍처, 인터페이스, 소유권, 테스트 문서
 
 <div align="center">
 
-**SKN 32기 · 장꼬방(JangGGo) 팀** · 2026.08.26
+⏳ **SKN 32기 · 장꼬방(JangGGo) 팀** · 2026.08.26
 
 </div>
