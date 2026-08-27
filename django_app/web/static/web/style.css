@@ -71,6 +71,7 @@ button { cursor: pointer; }
 .top-brand h1 { font-size: 15px; }
 .top-tabs { display: flex; gap: 4px; flex: 1; }
 .top-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; color: var(--muted); font-size: 13px; font-weight: 700; text-decoration: none; }
+.top-tab[hidden] { display: none; }
 .top-tab:hover { background: var(--soft); color: var(--ink); }
 .top-tab.is-active { color: var(--blue-dark); background: var(--blue-soft); }
 .top-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }

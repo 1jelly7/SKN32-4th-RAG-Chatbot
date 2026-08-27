@@ -693,3 +693,30 @@
   유지, 안내 문구 정상. 구매는 2건 그대로(4 이하라 안내 없음).
 - 상태: 완료
 
+
+
+## [2026-08-26 16:00] hr 역할 탭 숨김이 CSS에 막혀 동작하지 않던 버그 수정
+- 지시: hr 계정 접속 시 대시보드·리포트 생성 탭이 보이는 문제 확인 요청 → 두 탭을
+  보이지 않게 하고 클릭도 못 하게 수정.
+- 원인: auth.js는 `tab.hidden = !allowed`로 hidden 속성을 정상적으로 설정하고 있었으나,
+  style.css의 `.top-tab { display: inline-flex; }`가 브라우저 UA 스타일시트의
+  `[hidden] { display: none }`을 이겨서 무력화됨. 같은 파일 26행의
+  `.login-screen[hidden] { display: none; }`은 이 문제를 이미 처리하고 있었는데
+  탭에만 누락돼 있었음.
+- 범위: django_app/web/static/web/style.css (1줄 추가)
+- 실행 내용:
+  - `.top-tab[hidden] { display: none; }` 을 `.top-tab` 규칙 바로 뒤에 추가.
+    display:none이라 화면에서 사라지는 동시에 클릭·키보드 포커스 순서에서도 제외됨
+    (별도 pointer-events나 tabindex 처리 불필요).
+  - collectstatic 실행 후 로컬 gateway 재시작 — ManifestStaticFilesStorage가
+    매니페스트를 프로세스 기동 시 메모리에 올리므로, 재시작 전에는 옛 해시 CSS가
+    계속 서빙되어 수정이 반영되지 않았음.
+- 검증: hr/admin 세션으로 실제 브라우저에서 확인.
+  - hr: 대시보드·리포트 탭이 display:none, offsetParent null, 면적 0x0,
+    elementFromPoint로 클릭 도달 불가, 키보드 순회 대상은 "채팅" 하나뿐.
+  - admin: 세 탭 모두 display:flex로 정상 노출, 회귀 없음.
+  - 이전 검증이 이 버그를 놓친 이유: `t.hidden`(DOM 속성)만 확인했는데 속성은
+    정상적으로 true였음. 실제 렌더링 여부(offsetParent/computed display)를
+    확인하지 않아 통과한 것으로 오판했음. 이번 검증 스크립트는 렌더링·클릭·
+    포커스까지 함께 본다.
+- 상태: 완료

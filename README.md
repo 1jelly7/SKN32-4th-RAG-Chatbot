@@ -9,7 +9,6 @@
 ![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white)
 ![FAISS](https://img.shields.io/badge/FAISS-0467DF)
 ![MySQL](https://img.shields.io/badge/MySQL-4479A1?logo=mysql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
 ![Nginx](https://img.shields.io/badge/Nginx-009639?logo=nginx&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-Tool%20Boundary-6E56CF)
 ![Tests](https://img.shields.io/badge/tests-402%20passed%20%C2%B7%2027%20skipped-success)
@@ -40,6 +39,7 @@ Evidence Eval이 채택한 근거만 최종 답변에 사용합니다.
 - [기술적 도전과 해결](#기술적-도전과-해결)
 - [기술 스택](#기술-스택)
 - [빠른 시작](#빠른-시작)
+- [AWS 배포](#aws-배포)
 - [API](#api)
 - [프로젝트 구조](#프로젝트-구조)
 - [보안과 안전장치](#보안과-안전장치)
@@ -51,7 +51,9 @@ Evidence Eval이 채택한 근거만 최종 답변에 사용합니다.
 
 ## 시연 영상
 
-⏳ **[채워야 함]** GUI 최종본 완료 후 녹화 · 유튜브 링크 삽입 예정
+[![사내 지식 RAG·Text2SQL MCP 챗봇 시연 영상](docs/assets/video.jpg)](https://youtu.be/VkXhhf4m8TE)
+
+**▶️ 이미지를 클릭하면 유튜브에서 시연 영상이 재생됩니다**
 
 ---
 
@@ -71,10 +73,10 @@ Evidence Eval이 채택한 근거만 최종 답변에 사용합니다.
     <td align="center"><b>이호원</b></td>
   </tr>
   <tr>
-    <td align="center"><b>PM · RAG Sales</b></td>
-    <td align="center"><b>Backend</b></td>
-    <td align="center"><b>RAG PDF </b></td>
-    <td align="center"><b>RAG Purchasing</b></td>
+    <td align="center"><b>Front-End</b></td>
+    <td align="center"><b>PM · AWS · Django</b></td>
+    <td align="center"><b>RAG-Test · WebSearching</b></td>
+    <td align="center"><b>ERP-Chatbot</b></td>
   </tr>
   <tr>
     <td align="center"><b>https://github.com/greenmdw</b></td>
@@ -235,9 +237,8 @@ python scripts/verify_docling.py <PDF 경로>
 FastAPI(`:8002`)에 요청을 나눠 보냅니다.
 
 - **Django**: 사용자 UI, 계정/세션/로그인, Django Admin
-- **FastAPI**: 채팅 API, LangGraph 오케스트레이션, 답변 캐시(메모리 또는 Redis), MCP Client
+- **FastAPI**: 채팅 API, LangGraph 오케스트레이션, 답변 캐시(프로세스 내 메모리), MCP Client
 - **MCP Tool 서비스**: 문서 검색(FAISS)과 구매·판매 Text2SQL을 같은 프로세스 안에서 호출
-  (현재 전송 방식은 `InProcessMCPPort`이며, 원격 MCP transport는 아직 연결되지 않음)
 
 새 경로를 Nginx에 추가할 때는 반드시 `deploy/nginx/local.conf`의 catch-all
 (`location ^~ /api/ { return 404; }`)보다 먼저 매치되는 구체적인 `location` 블록을 등록해야
@@ -328,9 +329,9 @@ nDCG@k를 계산합니다.
 
 **결과: 402 passed · 27 skipped**
 
-기본 unit/integration 테스트는 fake/mock 중심입니다. 실제 MySQL, Redis, 원격 MCP, 운영
-FAISS까지 검증했다는 의미는 아니며, 외부 서비스 검증은 opt-in 테스트(`RUN_LOCAL_MYSQL_TESTS=1`)로
-별도 수행합니다.
+기본 unit/integration 테스트는 fake/mock 중심입니다. 실제 MySQL, 원격 MCP, 운영 FAISS까지
+검증했다는 의미는 아니며, 외부 서비스 검증은 opt-in 테스트(`RUN_LOCAL_MYSQL_TESTS=1`)로 별도
+수행합니다.
 
 ### 적대적 테스트
 
@@ -481,7 +482,7 @@ API를 만들어야 했습니다.
 | Tool boundary | MCP | 문서·구매·판매 기능 분리 |
 | RAG | FAISS, sentence-transformers | 문서 검색 |
 | Database | MySQL 8.0 | 계정 · 문서 경로 · 구매 · 판매 |
-| Cache | In-memory (기본), Redis 어댑터 | 검증된 답변 재사용 |
+| Cache | In-memory (프로세스 내 TTL 캐시) | 검증된 답변 재사용. `RedisCache`는 인터페이스만 정의된 미구현 스텁 |
 | Frontend | HTML, CSS, JavaScript, Chart.js | 채팅 · 대시보드 · 표 · 차트 UI |
 | Test | pytest, pytest-asyncio, httpx | 단위·통합·Django 계약 검증 |
 
@@ -546,7 +547,101 @@ upstream 주소일 뿐, 정상 사용자 접속 경로가 아닙니다.
 
 ---
 
+## AWS 배포
+
+로컬 개발 구성([빠른 시작](#빠른-시작))은 3개 프로세스(Django·FastAPI·Nginx)를 개별 실행하는
+방식이라, 그 구조를 그대로 단일 EC2 인스턴스의 **systemd 서비스**로 옮기는 배포 방식을
+채택했습니다. 아래에서 이 선택의 근거, 서버 스펙, 네트워크 구성, 배포 절차 순으로 정리합니다.
+
+### 배포 방식 선정
+
+| 방식 | 장점 | 이 프로젝트에서의 문제 |
+|---|---|---|
+| Docker Compose | 환경 재현성, 배포 스크립트 표준화 | 2GiB RAM에서 Docker 데몬 + 컨테이너별 베이스 이미지 오버헤드가 부담. MySQL·임베딩 모델까지 올리면 여유가 크지 않음 |
+| **네이티브(systemd) — 채택** | 오버헤드 없이 가용 메모리를 앱에 온전히 사용, 기존 `local_gateway.ps1` 구조를 그대로 이식 가능 | 서버 간 이식성은 Docker보다 낮음 — 지금은 단일 인스턴스라 문제 없음 |
+| RDS(MySQL 분리) | 백업 자동화, 수평 확장 | 지금 데이터 규모(발주 250건 등)엔 과함 · 비용과 네트워크 왕복만 늘어남 |
+| **로컬 MySQL(동일 인스턴스) — 채택** | 추가 비용·네트워크 지연 없음 | 인스턴스 장애 시 DB도 함께 영향받음 — 트래픽이 늘면 RDS 분리를 재검토 |
+
+**메모리가 빠듯하다는 전제 하에 오버헤드를 최소화하는 쪽을 우선했습니다.** 트래픽이 늘거나
+다중 인스턴스로 확장할 시점이 오면 Docker + RDS로 전환하는 걸 다음 단계로 남겨둡니다.
+
+### 네트워크 접근 방식 선정
+
+| 방식 | 장점 | 이 프로젝트에서의 문제 |
+|---|---|---|
+| 도메인 공개형(퍼블릭 도메인 + `0.0.0.0/0` 오픈) | 접근이 가장 간편, 어디서든 바로 접속 | 매출·구매·HR 데이터를 다루는 **사내용** 툴을 인터넷 전체에 노출 — 이 프로젝트가 강조해온 "최소 권한·직접 접근 금지" 철학과 상충 |
+| Private IP 전용(회사 내부망 취급) | 인터넷 노출이 전혀 없어 가장 안전 | 실제 사내망이 VPN Gateway/Direct Connect로 이 VPC에 연결돼 있어야 성립. 학습 프로젝트라 그런 물리적 내부망 자체가 없어 접속 방법이 없음 |
+| **퍼블릭 IP + SSL VPN(WireGuard) — 채택** | 앱(:443)은 인터넷에 직접 노출되지 않고 VPN 터널을 통과해야만 도달 가능. 실제 사내망 없이도 "가상의 내부망" 효과 | VPN 클라이언트 설정이 한 단계 더 필요(팀원·평가자가 WireGuard 설치 필요) |
+
+애플리케이션 계층 RBAC(역할별 DB 접근 통제)에 **네트워크 계층 통제**를 한 겹 더 얹는
+구조입니다. WireGuard는 OpenVPN보다 가볍고(커널 기반) AWS Client VPN처럼 연결
+시간당 과금도 없어, 2GiB RAM 인스턴스에 부담 없이 앱과 같은 인스턴스에 올릴 수 있습니다.
+
+### 서버 스펙
+
+| 항목 | 값 |
+|---|---|
+| 인스턴스 유형 | `t3.small` |
+| vCPU | 2개 |
+| RAM | 2GiB |
+| AMI | Ubuntu Server 24.04 LTS |
+| 스토리지 볼륨 타입 | gp3 |
+| 스토리지 용량 | 30GiB |
+
+> **2GiB RAM 제약에 대한 대응**: MySQL(`innodb_buffer_pool_size`를 128MB로 명시 축소) +
+> Django/FastAPI(각 프로세스 worker 1개) + 임베딩 모델을 함께 올리면 여유가 크지 않습니다.
+> 스왑 2GB를 안전망으로 추가하고, `ENABLE_DOCLING_CAPTIONING`은 운영에서도 기본값(`false`)을
+> 유지할 것을 권장합니다(레이아웃 모델 로딩이 메모리 부담을 더함). 실사용 중 메모리 압박이
+> 관측되면 `t3.medium`으로 올리는 걸 우선 검토합니다.
+
+### AWS 네트워크 구성도
+
+<div align="center">
+  <img src="docs/assets/aws 구성도.png" alt="AWS 네트워크 구성도" width="100%">
+</div>
+
+- **애플리케이션(Nginx `:443`)은 인터넷에 직접 노출되지 않습니다.** 인터넷에 공개된 건
+  VPN 서버(WireGuard, UDP `51820`)뿐이고, `443`/`80`은 **VPN 터널 인터페이스(`wg0`)에만
+  바인딩**해 VPN을 통과한 트래픽만 받습니다.
+- **보안 그룹**은 `51820/udp`(WireGuard, `0.0.0.0/0`)만 공개로 열고, `22`(SSH)도
+  공개 인바운드에서 제거해 **VPN 터널을 통해서만 접속**하도록 통일했습니다.
+- Django(`:8001`)와 FastAPI(`:8002`)는 기존과 동일하게 `127.0.0.1`에만 바인딩해 Nginx를
+  거치지 않은 직접 접근이 불가능합니다.
+- **MySQL도 `127.0.0.1`에만 바인딩**해 인스턴스 외부에서는 접근할 수 없습니다.
+- 아웃바운드는 OpenAI API 호출과 패키지 설치(`apt`/`pip`)를 위해 전체 허용합니다.
+- TLS 인증서는 `443`이 공개로 열려 있지 않아 Let's Encrypt의 기본 HTTP-01 방식이 안 되므로,
+  도메인이 있다면 **DNS-01 챌린지**로 발급하거나, 어차피 VPN으로 신뢰된 사용자만 접근하므로
+  **자체 서명 인증서**로도 충분합니다.
+
+### 배포 계획
+
+아직 실제 배포는 진행하지 않은 단계이며, 아래는 위 결정들을 실행에 옮길 때 따르기로 한
+방침입니다.
+
+- **인스턴스·네트워크**: 위 스펙으로 EC2를 만들고 **Elastic IP**를 붙여 VPN 서버 주소가
+  재시작 후에도 바뀌지 않게 합니다. 보안 그룹은 처음부터 `51820/udp`(WireGuard)만
+  `0.0.0.0/0`으로 열고, `22`/`80`/`443`은 보안 그룹 단계에서부터 아예 공개 인바운드에
+  포함하지 않습니다.
+- **VPN 우선 구성**: 애플리케이션을 올리기 전에 WireGuard부터 구성합니다. 서버 키 쌍을
+  만들고 `wg0` 인터페이스에 내부 대역(`10.8.0.0/24` 등)을 할당한 뒤, `iptables`로
+  `wg0`에서 들어온 트래픽만 `443`/`80`/`22`에 도달하도록 제한합니다. 팀원·평가자 몫의
+  클라이언트 키는 이 시점에 미리 발급해 배포합니다.
+- **애플리케이션 배치**: 저장소를 clone하고 `venv` + `pip install -r requirements.txt`,
+  `.env`에 운영 값(`DJANGO_SECRET_KEY`, `AUTH_INTROSPECTION_KEY`, `OPENAI_API_KEY` 등)을
+  채운 뒤 `python setup_all.py --apply`로 DB·계정·문서 인덱스·ETL을 한 번에 준비합니다.
+- **프로세스 관리**: Django(gunicorn)·FastAPI(uvicorn)를 systemd 서비스로 등록해 부팅 시
+  자동 시작되게 하고, 메모리를 아끼기 위해 둘 다 worker 1개로 제한합니다.
+- **Nginx/TLS**: `deploy/nginx/local.conf`를 기반으로 `listen`을 `wg0`의 내부 IP에만
+  바인딩하도록 바꾸고, 도메인이 있으면 DNS-01로, 없으면 자체 서명 인증서로 TLS를
+  적용합니다.
+- **자원 안전망**: 2GB 스왑 파일을 추가해두고, 배포 직후 `systemctl status`로 4개
+  서비스(Django·FastAPI·Nginx·WireGuard)가 모두 정상인지, VPN 없이는 `443`이 실제로
+  열리지 않는지를 반드시 외부에서 재확인합니다.
+
+---
+
 ## API
+
 
 | Method | Endpoint | 설명 | 인증 |
 |---|---|---|---|
@@ -613,8 +708,6 @@ docs/                 아키텍처, 인터페이스, 소유권, 테스트 문서
 - Django는 account DB만 소유하며 채팅, MCP, 업무 DB를 호출하지 않습니다.
 - Data MCP 조회는 허용된 View에 대한 읽기 전용 쿼리만 수행합니다.
 - ETL과 문서 인덱싱은 채팅 요청 경로에서 실행하지 않습니다.
-- 원격 MCP transport(`DOCUMENT_MCP_URL`/`DATA_MCP_URL`)는 아직 연결되지 않았고, 현재는
-  `InProcessMCPPort`로 같은 프로세스 안에서 Tool을 호출합니다.
 
 ---
 
@@ -646,6 +739,6 @@ docs/                 아키텍처, 인터페이스, 소유권, 테스트 문서
 
 <div align="center">
 
-**SKN 32기 · 장꼬방(JangGGo) 팀** · 2026.08.26
+⏳ **SKN 32기 · 장꼬방(JangGGo) 팀** · 2026.08.26
 
 </div>
