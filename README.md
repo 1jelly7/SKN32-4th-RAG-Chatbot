@@ -51,7 +51,7 @@ Evidence Eval이 채택한 근거만 최종 답변에 사용합니다.
 
 ## 시연 영상
 
-[![사내 지식 RAG·Text2SQL MCP 챗봇 시연 영상](https://img.youtube.com/vi/8LOiReSEG5Q/maxresdefault.jpg)](https://youtu.be/8LOiReSEG5Q)
+[![사내 지식 RAG·Text2SQL MCP 챗봇 시연 영상](docs/assets/video.jpg)](https://youtu.be/VkXhhf4m8TE)
 
 **▶️ 이미지를 클릭하면 유튜브에서 시연 영상이 재생됩니다**
 
