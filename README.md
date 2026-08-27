@@ -51,7 +51,9 @@ Evidence Eval이 채택한 근거만 최종 답변에 사용합니다.
 
 ## 시연 영상
 
-⏳ **[채워야 함]** GUI 최종본 완료 후 녹화 · 유튜브 링크 삽입 예정
+[![사내 지식 RAG·Text2SQL MCP 챗봇 시연 영상](https://img.youtube.com/vi/8LOiReSEG5Q/maxresdefault.jpg)](https://youtu.be/8LOiReSEG5Q)
+
+**▶️ 이미지를 클릭하면 유튜브에서 시연 영상이 재생됩니다**
 
 ---
 
@@ -71,10 +73,10 @@ Evidence Eval이 채택한 근거만 최종 답변에 사용합니다.
     <td align="center"><b>이호원</b></td>
   </tr>
   <tr>
-    <td align="center"><b>PM · RAG Sales</b></td>
-    <td align="center"><b>Backend</b></td>
-    <td align="center"><b>RAG PDF </b></td>
-    <td align="center"><b>RAG Purchasing</b></td>
+    <td align="center"><b>Front-End</b></td>
+    <td align="center"><b>PM · AWS · Django</b></td>
+    <td align="center"><b>RAG-Test · WebSearching</b></td>
+    <td align="center"><b>ERP-Chatbot</b></td>
   </tr>
   <tr>
     <td align="center"><b>https://github.com/greenmdw</b></td>
@@ -237,7 +239,6 @@ FastAPI(`:8002`)에 요청을 나눠 보냅니다.
 - **Django**: 사용자 UI, 계정/세션/로그인, Django Admin
 - **FastAPI**: 채팅 API, LangGraph 오케스트레이션, 답변 캐시(프로세스 내 메모리), MCP Client
 - **MCP Tool 서비스**: 문서 검색(FAISS)과 구매·판매 Text2SQL을 같은 프로세스 안에서 호출
-  (현재 전송 방식은 `InProcessMCPPort`이며, 원격 MCP transport는 아직 연결되지 않음)
 
 새 경로를 Nginx에 추가할 때는 반드시 `deploy/nginx/local.conf`의 catch-all
 (`location ^~ /api/ { return 404; }`)보다 먼저 매치되는 구체적인 `location` 블록을 등록해야
@@ -596,7 +597,7 @@ upstream 주소일 뿐, 정상 사용자 접속 경로가 아닙니다.
 ### AWS 네트워크 구성도
 
 <div align="center">
-  <img src="docs/assets/aws_network.svg" alt="AWS 네트워크 구성도" width="100%">
+  <img src="docs/assets/aws 구성도.png" alt="AWS 네트워크 구성도" width="100%">
 </div>
 
 - **애플리케이션(Nginx `:443`)은 인터넷에 직접 노출되지 않습니다.** 인터넷에 공개된 건
@@ -707,8 +708,6 @@ docs/                 아키텍처, 인터페이스, 소유권, 테스트 문서
 - Django는 account DB만 소유하며 채팅, MCP, 업무 DB를 호출하지 않습니다.
 - Data MCP 조회는 허용된 View에 대한 읽기 전용 쿼리만 수행합니다.
 - ETL과 문서 인덱싱은 채팅 요청 경로에서 실행하지 않습니다.
-- 원격 MCP transport(`DOCUMENT_MCP_URL`/`DATA_MCP_URL`)는 아직 연결되지 않았고, 현재는
-  `InProcessMCPPort`로 같은 프로세스 안에서 Tool을 호출합니다.
 
 ---
 
